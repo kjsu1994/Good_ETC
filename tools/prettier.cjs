@@ -17,6 +17,7 @@ const files = [
   "game/index.html",
   "game/style.css",
   "game/game.js",
+  "pyluncher/README.md",
 ].map((file) => path.join(rootDir, file));
 
 const result = spawnSync("npx", ["--yes", "prettier@3.6.2", mode, ...files], {

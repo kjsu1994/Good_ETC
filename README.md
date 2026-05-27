@@ -107,6 +107,22 @@ Windows 방화벽에서 TCP `7000` 포트가 막혀 있으면 접속할 수 없�
 
 Windows PC에서 같은 LAN 사용자를 받으려면 서버 프로세스가 Windows 네트워크 인터페이스에 열려 있어야 합니다. WSL에서 서버를 실행했는데 외부 PC가 접속하지 못하면 Windows Python 또는 향후 EXE 런처로 실행하거나 WSL 포트 전달 설정을 확인하세요.
 
+### Windows 단일 EXE 런처
+
+`pyluncher/`에는 `home.html`과 `game/`을 단일 Windows EXE로 묶는 Python 런처가 있습니다. 빌드된 EXE를 실행하면 로컬 서버가 시작되고 브라우저에서 `home.html`이 열립니다.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\pyluncher\build.ps1
+```
+
+빌드 결과:
+
+```text
+pyluncher/dist/GoodETC_Launcher.exe
+```
+
+EXE는 기본적으로 `0.0.0.0:7000`에 서버를 열므로 같은 LAN 사용자도 방화벽 허용 후 접속할 수 있습니다.
+
 ## Docker 서비스
 
 | 서비스       | 포트                     | 용도                                                                                                       |
@@ -180,6 +196,12 @@ Windows PC에서 같은 LAN 사용자를 받으려면 서버 프로세스가 Win
 │   ├── game.js
 │   ├── server.py
 │   └── README.md
+├── pyluncher/                 # home.html과 game/을 단일 Windows EXE로 묶는 런처
+│   ├── launcher.py
+│   ├── build.ps1
+│   ├── README.md
+│   └── dist/
+│       └── GoodETC_Launcher.exe
 ├── docker-compose.yml          # Nginx, MinIO, Oracle XE 실행 구성
 ├── package.json                # 포맷/검증 스크립트
 ├── tools/

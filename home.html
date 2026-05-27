@@ -3655,7 +3655,7 @@
         (t("gameOpenServer").onclick = () => {
           try {
             gameOpenUrl(
-              "http://" + gameHostValue() + ":" + gamePortValue() + "/",
+              "http://" + gameHostValue() + ":" + gamePortValue() + "/game/",
             );
           } catch (e) {
             t("gameStatus").innerText = e.message;

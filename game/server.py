@@ -74,7 +74,11 @@ class Bullet:
 
 
 class ArenaServer:
-    def __init__(self) -> None:
+    def __init__(
+        self, game_root: Path | str = ROOT, home_path: Path | str | None = None
+    ) -> None:
+        self.game_root = Path(game_root).resolve()
+        self.home_path = Path(home_path).resolve() if home_path else None
         self.clients: dict[str, Client] = {}
         self.bullets: list[Bullet] = []
         self.next_client_id = 1
@@ -122,10 +126,8 @@ class ArenaServer:
     ) -> None:
         parsed = urlparse(request_path)
         path = unquote(parsed.path)
-        if path in ("", "/"):
-            path = "/index.html"
-        file_path = (ROOT / path.lstrip("/")).resolve()
-        if ROOT not in file_path.parents and file_path != ROOT:
+        file_path = self.resolve_static_path(path)
+        if not file_path:
             await self.write_response(writer, 403, b"Forbidden", "text/plain")
             return
         if not file_path.is_file():
@@ -135,6 +137,30 @@ class ArenaServer:
         body = b"" if method.upper() == "HEAD" else file_path.read_bytes()
         content_type = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
         await self.write_response(writer, 200, body, content_type)
+
+    def resolve_static_path(self, path: str) -> Path | None:
+        if self.home_path and path in ("", "/", "/home.html"):
+            return self.home_path
+
+        if path in ("", "/"):
+            relative = "index.html"
+        elif path in ("/game", "/game/"):
+            relative = "index.html"
+        elif path.startswith("/game/"):
+            relative = path.removeprefix("/game/") or "index.html"
+        else:
+            relative = path.lstrip("/")
+
+        file_path = (self.game_root / relative).resolve()
+        blocked = {".py", ".pyc", ".pyo"}
+        if (
+            self.game_root not in file_path.parents
+            and file_path != self.game_root
+            or file_path.suffix.lower() in blocked
+            or "__pycache__" in file_path.parts
+        ):
+            return None
+        return file_path
 
     async def write_response(
         self,

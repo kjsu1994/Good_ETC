@@ -4,3 +4,5 @@ oracle-data/
 __pycache__/
 *.pyc
 firewall_inbound.bat
+pyluncher/build/
+pyluncher/*.spec
