@@ -1926,6 +1926,11 @@
           서버를 실행했는데 외부 PC가 접속하지 못하면 Windows Python/향후 EXE로
           실행하거나 WSL 포트 전달 설정을 확인하세요.
         </div>
+        <div>
+          EXE로 실행한 경우에는 실행과 동시에 방이 만들어집니다. 이 패널에서
+          <code>방 입장</code>을 누르면 같은 EXE 안에서 시작된 게임 서버로
+          접속합니다.
+        </div>
       </div>
       <div class="c2c">
         <div>
@@ -1943,9 +1948,9 @@
       </div>
       <div class="c1j">
         <button type="button" id="gameOpenServer">
-          <i class="fas fa-play"></i> 서버 주소 열기</button
+          <i class="fas fa-play"></i> 방 입장</button
         ><button class="ck" type="button" id="gameOpenLocal">
-          <i class="fas fa-folder-open"></i> 로컬 클라이언트 열기
+          <i class="fas fa-folder-open"></i> 파일 클라이언트 입장
         </button>
       </div>
       <div class="c2c">
@@ -3638,14 +3643,22 @@
     function gameOpenUrl(e) {
       window.open(e, "_blank", "noopener");
     }
+    function gameLauncherParams() {
+      const e = new URLSearchParams(window.location.search);
+      return {
+        host: gameCleanBatValue(e.get("gameHost") || e.get("host"), ""),
+        port: gameCleanBatValue(e.get("gamePort") || e.get("port"), ""),
+      };
+    }
     function gameInitPanel() {
       const e = t("gameHost"),
         n = t("gamePort"),
         i = t("gameRemoteIp"),
-        o = t("gameRuleName");
-      ((e.value = window.location.hostname || "localhost"),
-        (n.value = n.value || "7000"),
-        (o.value = o.value || "LAN_ARENA_7000"),
+        o = t("gameRuleName"),
+        a = gameLauncherParams();
+      ((e.value = a.host || window.location.hostname || "localhost"),
+        (n.value = a.port || n.value || "7000"),
+        (o.value = o.value || "LAN_ARENA_" + n.value),
         [e, n, i, o].forEach((e) => {
           e.oninput = () => {
             n.value && (o.value = o.value || "LAN_ARENA_" + n.value);

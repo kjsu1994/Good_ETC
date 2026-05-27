@@ -33,6 +33,12 @@ APP_WIDTH = 1280
 APP_HEIGHT = 900
 
 
+def safe_print(message: str, *, error: bool = False) -> None:
+    stream = sys.stderr if error else sys.stdout
+    if stream:
+        print(message, file=stream)
+
+
 def local_ip() -> str:
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
@@ -49,6 +55,9 @@ class LauncherServer:
         self.host = host
         self.preferred_port = port
         self.port = port
+        self.root = APP_ROOT
+        self.home_path = self.root / "home.html"
+        self.game_root = self.root / "game"
         self.ready = threading.Event()
         self.error: BaseException | None = None
         self.loop: asyncio.AbstractEventLoop | None = None
@@ -56,12 +65,19 @@ class LauncherServer:
         self.thread = threading.Thread(target=self._thread_main, daemon=True)
 
     @property
-    def local_url(self) -> str:
-        return f"http://localhost:{self.port}/home.html"
+    def game_url(self) -> str:
+        return f"http://localhost:{self.port}/game/"
 
     @property
     def lan_url(self) -> str:
-        return f"http://{local_ip()}:{self.port}/home.html"
+        return f"http://{local_ip()}:{self.port}/game/"
+
+    @property
+    def home_view_url(self) -> str:
+        return (
+            self.home_path.as_uri()
+            + f"?gameHost=localhost&gamePort={self.port}&launcher=exe"
+        )
 
     def start(self) -> None:
         self.thread.start()
@@ -83,18 +99,14 @@ class LauncherServer:
             self.ready.set()
 
     async def _run(self) -> None:
-        root = APP_ROOT
-        home_path = root / "home.html"
-        game_root = root / "game"
-
-        if not home_path.is_file():
-            raise FileNotFoundError(f"home.html not found: {home_path}")
-        if not (game_root / "index.html").is_file():
-            raise FileNotFoundError(f"game/index.html not found: {game_root}")
+        if not self.home_path.is_file():
+            raise FileNotFoundError(f"home.html not found: {self.home_path}")
+        if not (self.game_root / "index.html").is_file():
+            raise FileNotFoundError(f"game/index.html not found: {self.game_root}")
 
         self.loop = asyncio.get_running_loop()
         self.stop_event = asyncio.Event()
-        arena = ArenaServer(game_root=game_root, home_path=home_path)
+        arena = ArenaServer(game_root=self.game_root, home_path=self.home_path)
         server = await self._start_http_server(arena)
         loop_task = asyncio.create_task(arena.game_loop())
 
@@ -136,7 +148,7 @@ def run_pywebview(server: LauncherServer) -> None:
 
     webview.create_window(
         APP_TITLE,
-        server.local_url,
+        server.home_view_url,
         width=APP_WIDTH,
         height=APP_HEIGHT,
         resizable=True,
@@ -186,19 +198,20 @@ def main() -> None:
     server = LauncherServer(args.host, args.port)
     try:
         server.start()
-        print("Good ETC launcher is running.")
-        print(f"Local: {server.local_url}")
-        print(f"LAN:   {server.lan_url}")
+        safe_print("Good ETC launcher is running.")
+        safe_print(f"Home:  {server.home_view_url}")
+        safe_print(f"Game:  {server.game_url}")
+        safe_print(f"LAN:   {server.lan_url}")
 
         if args.no_window:
             run_until_stopped()
         elif args.browser:
-            webbrowser.open(server.local_url)
+            webbrowser.open(server.home_view_url)
             run_until_stopped()
         else:
             run_pywebview(server)
     except OSError as exc:
-        print(f"Failed to start launcher: {exc}", file=sys.stderr)
+        safe_print(f"Failed to start launcher: {exc}", error=True)
         raise SystemExit(1)
     finally:
         server.stop()
