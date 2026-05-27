@@ -6,8 +6,10 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
+import shutil
 import socket
 import sys
+import tempfile
 import threading
 import time
 import webbrowser
@@ -58,6 +60,7 @@ class LauncherServer:
         self.root = APP_ROOT
         self.home_path = self.root / "home.html"
         self.game_root = self.root / "game"
+        self.runtime_home_path: Path | None = None
         self.ready = threading.Event()
         self.error: BaseException | None = None
         self.loop: asyncio.AbstractEventLoop | None = None
@@ -74,10 +77,7 @@ class LauncherServer:
 
     @property
     def home_view_url(self) -> str:
-        return (
-            self.home_path.as_uri()
-            + f"?gameHost=localhost&gamePort={self.port}&launcher=exe"
-        )
+        return str(self.runtime_home_path or self.home_path)
 
     def start(self) -> None:
         self.thread.start()
@@ -90,6 +90,7 @@ class LauncherServer:
         if self.loop and self.stop_event:
             self.loop.call_soon_threadsafe(self.stop_event.set)
         self.thread.join(timeout=5)
+        self.cleanup_home_view()
 
     def _thread_main(self) -> None:
         try:
@@ -97,6 +98,32 @@ class LauncherServer:
         except BaseException as exc:
             self.error = exc
             self.ready.set()
+
+    def prepare_home_view(self) -> None:
+        config = (
+            "<script>"
+            "window.GOOD_ETC_LAUNCHER_CONFIG="
+            f'{{gameHost:"localhost",gamePort:"{self.port}",launcher:"exe"}};'
+            "</script>"
+        )
+        html = self.home_path.read_text(encoding="utf-8")
+        if "window.GOOD_ETC_LAUNCHER_CONFIG=" not in html:
+            if "<head>" in html:
+                html = html.replace("<head>", "<head>" + config, 1)
+            else:
+                html = html.replace("<html lang=\"ko\">", "<html lang=\"ko\">" + config, 1)
+
+        runtime_dir = Path(tempfile.mkdtemp(prefix="good_etc_launcher_"))
+        self.runtime_home_path = runtime_dir / "home.html"
+        self.runtime_home_path.write_text(html, encoding="utf-8")
+
+    def cleanup_home_view(self) -> None:
+        if not self.runtime_home_path:
+            return
+        runtime_dir = self.runtime_home_path.parent
+        if runtime_dir.name.startswith("good_etc_launcher_"):
+            shutil.rmtree(runtime_dir, ignore_errors=True)
+        self.runtime_home_path = None
 
     async def _run(self) -> None:
         if not self.home_path.is_file():
@@ -109,6 +136,7 @@ class LauncherServer:
         arena = ArenaServer(game_root=self.game_root, home_path=self.home_path)
         server = await self._start_http_server(arena)
         loop_task = asyncio.create_task(arena.game_loop())
+        self.prepare_home_view()
 
         self.ready.set()
         try:

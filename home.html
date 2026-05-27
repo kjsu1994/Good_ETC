@@ -3644,10 +3644,18 @@
       window.open(e, "_blank", "noopener");
     }
     function gameLauncherParams() {
-      const e = new URLSearchParams(window.location.search);
+      const n = window.GOOD_ETC_LAUNCHER_CONFIG || {},
+        e = new URLSearchParams(window.location.search);
       return {
-        host: gameCleanBatValue(e.get("gameHost") || e.get("host"), ""),
-        port: gameCleanBatValue(e.get("gamePort") || e.get("port"), ""),
+        host: gameCleanBatValue(
+          n.gameHost || e.get("gameHost") || e.get("host"),
+          "",
+        ),
+        port: gameCleanBatValue(
+          n.gamePort || e.get("gamePort") || e.get("port"),
+          "",
+        ),
+        launcher: gameCleanBatValue(n.launcher || e.get("launcher"), ""),
       };
     }
     function gameInitPanel() {
@@ -3676,6 +3684,12 @@
         }),
         (t("gameOpenLocal").onclick = () => {
           try {
+            if ("exe" === gameLauncherParams().launcher) {
+              gameOpenUrl(
+                "http://" + gameHostValue() + ":" + gamePortValue() + "/game/",
+              );
+              return;
+            }
             const e = new URL("game/index.html", window.location.href);
             (e.searchParams.set("host", gameHostValue()),
               e.searchParams.set("port", gamePortValue()),
