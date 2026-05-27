@@ -408,6 +408,21 @@
       border-radius: 5px;
       background: rgba(0, 0, 0, 0.1);
     }
+    .feature-help {
+      margin: 0 0 12px;
+    }
+    .feature-help-button {
+      width: 36px;
+      height: 36px;
+      padding: 0;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .feature-help-row {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 8px;
+    }
     .cs {
       max-height: 420px;
       overflow: auto;
@@ -742,6 +757,23 @@
       opacity: 0.75;
       margin: 6px 0 0;
     }
+    .c1t {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .c1t h3 {
+      margin: 0;
+      min-width: 0;
+    }
+    .c1t-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
     .cb {
       width: min(100%, var(--w));
       display: grid;
@@ -911,6 +943,11 @@
       gap: 12px;
       margin-bottom: 25px;
     }
+    .todo-entry-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 150px 120px auto;
+      align-items: center;
+    }
     .c25 {
       flex: 1;
       padding: 14px 20px;
@@ -946,8 +983,21 @@
       background: rgba(0, 0, 0, 0.02);
       word-break: break-word;
     }
-    .todo-text {
+    .todo-item.priority-high,
+    .todo-item.priority-urgent {
+      border-left: 4px solid #ef4444;
+    }
+    .todo-item.overdue:not(.completed) {
+      background: rgba(239, 68, 68, 0.12);
+    }
+    .todo-item.due-today:not(.completed) {
+      background: rgba(249, 115, 22, 0.12);
+    }
+    .todo-main {
       flex: 1;
+      min-width: 0;
+    }
+    .todo-text {
       font-size: 1rem;
       font-weight: 500;
       min-width: 0;
@@ -956,6 +1006,44 @@
       text-decoration: line-through;
       opacity: 0.5;
       font-weight: 400;
+    }
+    .todo-meta,
+    .todo-controls {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 5px;
+    }
+    .todo-pill {
+      border: 1px solid var(--b);
+      border-radius: 999px;
+      padding: 3px 8px;
+      background: rgba(0, 0, 0, 0.04);
+      font-size: 0.75rem;
+      font-weight: 800;
+      opacity: 0.86;
+    }
+    .todo-pill.priority-high,
+    .todo-pill.priority-urgent,
+    .todo-pill.overdue {
+      color: #ef4444;
+    }
+    .todo-pill.due-today {
+      color: #f97316;
+    }
+    .todo-select,
+    .todo-date {
+      min-height: 34px;
+      border: 1px solid var(--b);
+      border-radius: 10px;
+      background: rgba(0, 0, 0, 0.03);
+      color: var(--t);
+      padding: 6px 8px;
+      outline: 0;
+    }
+    .todo-date {
+      width: 142px;
     }
     .todo-checkbox {
       width: 20px;
@@ -1039,6 +1127,25 @@
       padding: 10px 15px;
       font-size: 0.95rem;
       font-weight: 600;
+    }
+    .memo-search-hits {
+      display: grid;
+      gap: 6px;
+      margin: -4px 0 12px;
+    }
+    .memo-hit {
+      justify-content: flex-start;
+      text-align: left;
+      transform: none;
+    }
+    .memo-hit-title {
+      font-weight: 900;
+    }
+    .memo-hit-snippet {
+      display: block;
+      font-size: 0.78rem;
+      opacity: 0.76;
+      margin-top: 2px;
     }
     textarea#memo {
       width: 100%;
@@ -1204,6 +1311,12 @@
     .conversion-cell b {
       display: block;
       margin-bottom: 6px;
+    }
+    .text-tool-output {
+      min-height: 180px;
+    }
+    .text-tool-output table {
+      min-width: 100%;
     }
     .c12 {
       position: relative;
@@ -1434,6 +1547,16 @@
         grid-template-columns: 1fr;
         display: flex;
         flex-direction: column;
+      }
+      .todo-entry-grid {
+        grid-template-columns: 1fr;
+      }
+      .todo-controls {
+        width: 100%;
+      }
+      .todo-select,
+      .todo-date {
+        flex: 1;
       }
       .c1i,
       .c2b button {
@@ -1715,7 +1838,9 @@
           <code>redmine 1234</code>, <code>#1234</code>,
           <code>google CORS error</code>, <code>naver 세종 날씨</code>,
           <code>todo 서버 확인</code>, <code>memo 회의록</code>,
-          <code>192.168.1.74:8080</code>
+          <code>uuid</code>, <code>base64 hello</code>,
+          <code>b64d aGVsbG8=</code>, <code>urlencode a=b</code>,
+          <code>timestamp</code>, <code>192.168.1.74:8080</code>
         </div>
         <div>
           정해진 규칙에 맞으면 실행하고, 모르는 입력은 Google 검색으로
@@ -1758,6 +1883,9 @@
       </button>
       <button class="c1y" id="diffToggle" title="텍스트 비교 (Diff)">
         <i class="fas fa-columns"></i>
+      </button>
+      <button class="c1y" id="textToolToggle" title="텍스트 유틸">
+        <i class="fas fa-font"></i>
       </button>
       <button class="c1y" id="logToggle" title="로그 워크벤치">
         <i class="fas fa-bug"></i>
@@ -1967,6 +2095,83 @@
         텍스트를 입력하면 비교 결과가 표시됩니다.
       </div>
     </div>
+    <div class="c28 cx" id="textToolPanel">
+      <div class="c1t">
+        <h3><i class="fas fa-font"></i> 텍스트 유틸</h3>
+        <div class="c1t-actions">
+          <button
+            class="ck cl"
+            type="button"
+            data-help-target="textToolHelp"
+            title="사용 방법"
+          >
+            <i class="fas fa-question"></i>
+          </button>
+          <button class="ck" type="button" id="textToolClear">
+            <i class="fas fa-eraser"></i>
+          </button>
+        </div>
+      </div>
+      <div class="c1e feature-help" id="textToolHelp">
+        <div>
+          Base64, URL 인코딩/디코딩, JWT 디코드, CSV/TSV 표 보기를 한 곳에서
+          처리합니다.
+        </div>
+        <div>
+          JWT는 서명 검증 없이 Header/Payload만 읽습니다. CSV/TSV는 첫 줄을
+          헤더로 표시합니다.
+        </div>
+      </div>
+      <div class="c1k">
+        <label
+          ><input
+            type="radio"
+            value="base64Encode"
+            name="textToolMode"
+            checked
+          />
+          Base64 인코딩</label
+        >
+        <label
+          ><input type="radio" value="base64Decode" name="textToolMode" />
+          Base64 디코딩</label
+        >
+        <label
+          ><input type="radio" value="urlEncode" name="textToolMode" /> URL
+          인코딩</label
+        >
+        <label
+          ><input type="radio" value="urlDecode" name="textToolMode" /> URL
+          디코딩</label
+        >
+        <label
+          ><input type="radio" value="jwtDecode" name="textToolMode" /> JWT
+          디코드</label
+        >
+        <label
+          ><input type="radio" value="csvTable" name="textToolMode" /> CSV/TSV
+          보기</label
+        >
+      </div>
+      <textarea
+        id="textToolInput"
+        placeholder="변환할 텍스트를 입력하세요."
+        class="c1c cw"
+      ></textarea>
+      <div class="c1j">
+        <button type="button" id="textToolRun">
+          <i class="fas fa-play"></i> 실행</button
+        ><button class="ck" type="button" id="textToolCopy">
+          <i class="fas fa-copy"></i> 결과 복사</button
+        ><button class="ck" type="button" id="textToolDownload">
+          <i class="fas fa-download"></i> 다운로드
+        </button>
+      </div>
+      <div class="c1h" id="textToolStats"></div>
+      <div class="c1x co text-tool-output" id="textToolOutput">
+        텍스트를 입력하고 실행하세요.
+      </div>
+    </div>
     <div class="c28 cx" id="logPanel">
       <div class="c1t">
         <h3><i class="fas fa-bug"></i> 로그 워크벤치</h3>
@@ -2162,17 +2367,44 @@
         </div>
       </div>
       <div class="cu">
+        <div class="feature-help-row">
+          <button
+            class="ck cl feature-help-button"
+            type="button"
+            data-help-target="todoHelp"
+            title="사용 방법"
+          >
+            <i class="fas fa-question"></i>
+          </button>
+        </div>
+        <div class="c1e feature-help" id="todoHelp">
+          <div>
+            할 일을 입력하고 마감일과 우선순위를 선택한 뒤 Enter 또는 + 버튼으로
+            추가합니다.
+          </div>
+          <div>
+            목록 안의 날짜와 우선순위는 바로 수정할 수 있습니다. 지난 마감일은
+            붉게, 오늘 마감은 주황색으로 표시됩니다.
+          </div>
+        </div>
         <div class="c1">
           <div class="ch" id="ch"></div>
           <div class="cc" id="x0">0%</div>
         </div>
-        <div class="cm">
+        <div class="cm todo-entry-grid">
           <input
             id="x2m"
             class="c25"
             placeholder="할 일 입력하고 Enter..."
             autocomplete="off"
           />
+          <input id="todoDue" class="c25" type="date" title="마감일" />
+          <select id="todoPriority" class="c25" title="우선순위">
+            <option value="normal">보통</option>
+            <option value="high">높음</option>
+            <option value="urgent">긴급</option>
+            <option value="low">낮음</option>
+          </select>
           <button class="c1i" data-a="X"><i class="fas fa-plus"></i></button>
         </div>
         <ul class="c2d" id="x2q"></ul>
@@ -2186,6 +2418,26 @@
         </div>
       </div>
       <div class="cu">
+        <div class="feature-help-row">
+          <button
+            class="ck cl feature-help-button"
+            type="button"
+            data-help-target="memoHelp"
+            title="사용 방법"
+          >
+            <i class="fas fa-question"></i>
+          </button>
+        </div>
+        <div class="c1e feature-help" id="memoHelp">
+          <div>
+            검색창은 메모 제목과 내용을 함께 찾습니다. 검색 결과를 클릭하면 해당
+            메모로 바로 이동합니다.
+          </div>
+          <div>
+            내용은 자동 저장되며, 다운로드는 현재 메모만, 백업은 전체 메모를
+            JSON으로 저장합니다.
+          </div>
+        </div>
         <div class="c1t">
           <div class="cf">
             <button data-a="Y"><i class="fas fa-plus"></i> 새 메모</button>
@@ -2207,9 +2459,10 @@
             type="search"
             id="x2c"
             class="c1u"
-            placeholder="제목 검색..."
+            placeholder="제목/내용 검색..."
           />
         </div>
+        <div class="memo-search-hits" id="memoSearchHits"></div>
         <div class="c22">
           <button class="ck" data-a="d">
             <i class="fas fa-check-square"></i> 체크리스트
@@ -2708,7 +2961,7 @@
                 t.includes("todos") &&
                   Array.isArray(e.items.todos) &&
                   (s.setItem(STORAGE_KEYS.todos, c(e.items.todos)),
-                  (D = e.items.todos),
+                  (D = e.items.todos.map(todoClean).filter((e) => e.text)),
                   q()),
                 t.includes("memos") &&
                   e.items.memos &&
@@ -2735,15 +2988,61 @@
         })(e.target.files[0])));
     // Todo list.
     const O = STORAGE_KEYS.todos;
-    let D = r(s.getItem(O) || "[]");
+    const todoPriorities = {
+      low: { label: "낮음" },
+      normal: { label: "보통" },
+      high: { label: "높음" },
+      urgent: { label: "긴급" },
+    };
+    function todoToday() {
+      const e = new Date();
+      return `${e.getFullYear()}-${String(e.getMonth() + 1).padStart(2, "0")}-${String(e.getDate()).padStart(2, "0")}`;
+    }
+    function todoClean(e) {
+      const t = todoPriorities[e?.priority] ? e.priority : "normal";
+      return {
+        id: Number(e?.id) || Date.now() + Math.random(),
+        text: String(e?.text || "").trim(),
+        completed: !!e?.completed,
+        due: /^\d{4}-\d{2}-\d{2}$/.test(e?.due || "") ? e.due : "",
+        priority: t,
+      };
+    }
+    function todoPriorityOptions(e) {
+      return Object.entries(todoPriorities)
+        .map(
+          ([t, n]) =>
+            `<option value="${t}" ${t === e ? "selected" : ""}>${n.label}</option>`,
+        )
+        .join("");
+    }
+    function todoDueState(e) {
+      if (!e?.due || e.completed) return "";
+      const t = todoToday();
+      return e.due < t ? "overdue" : e.due === t ? "due-today" : "";
+    }
+    let D = r(s.getItem(O) || "[]")
+      .map(todoClean)
+      .filter((e) => e.text);
     function U() {
       (s.setItem(O, c(D)), q());
     }
     function R() {
-      const e = t("x2m");
+      const e = t("x2m"),
+        n = t("todoDue"),
+        i = t("todoPriority");
       e.value.trim() &&
-        (D.push({ id: Date.now(), text: e.value.trim(), completed: !1 }),
+        (D.push(
+          todoClean({
+            id: Date.now(),
+            text: e.value.trim(),
+            completed: !1,
+            due: n.value,
+            priority: i.value,
+          }),
+        ),
         (e.value = ""),
+        (i.value = "normal"),
         U());
     }
     function q() {
@@ -2755,9 +3054,14 @@
         (t("x0").innerText = a + "% (" + n + "/" + i + ")"),
         (e.innerHTML = ""),
         D.forEach((t) => {
+          const i = todoDueState(t),
+            a = todoPriorities[t.priority] || todoPriorities.normal;
           const n = o("li");
           ((n.className = "todo-item"),
-            (n.innerHTML = `<input type="checkbox" class="todo-checkbox" ${t.completed ? "checked" : ""} data-tt="${t.id}">\n                                <span class="todo-text ${t.completed ? "completed" : ""}">${t.text}</span>\n                                <i class="fas fa-trash-alt todo-delete" data-td="${t.id}"></i>`),
+            n.classList.add("priority-" + t.priority),
+            i && n.classList.add(i),
+            t.completed && n.classList.add("completed"),
+            (n.innerHTML = `<input type="checkbox" class="todo-checkbox" ${t.completed ? "checked" : ""} data-tt="${t.id}">\n                                <div class="todo-main"><span class="todo-text ${t.completed ? "completed" : ""}">${Me(t.text)}</span><div class="todo-meta"><span class="todo-pill priority-${t.priority}">${a.label}</span>${t.due ? `<span class="todo-pill ${i}">${t.due}</span>` : '<span class="todo-pill">마감일 없음</span>'}</div></div><div class="todo-controls"><select class="todo-select" data-tp="${t.id}" title="우선순위">${todoPriorityOptions(t.priority)}</select><input class="todo-date" type="date" data-tdue="${t.id}" value="${Me(t.due)}" title="마감일"></div>\n                                <i class="fas fa-trash-alt todo-delete" data-td="${t.id}"></i>`),
             e.appendChild(n));
         }));
     }
@@ -2781,7 +3085,16 @@
     ((F.onclick = () => {
       (P.classList.toggle("show"), F.classList.toggle("active"));
     }),
-      ["charCode", "json", "date", "regex", "diff", "log", "chat"].forEach(
+      [
+        "charCode",
+        "json",
+        "date",
+        "regex",
+        "diff",
+        "textTool",
+        "log",
+        "chat",
+      ].forEach(
         (e) =>
           (t(e + "Toggle").onclick = () => {
             X(t(e + "Panel").classList.contains("open") ? "" : e);
@@ -2998,18 +3311,54 @@
       const e = ue.value;
       fe.innerText = `${e.length}자 | ${e.split("\n").length}줄`;
     }
+    function memoMatches(e, t) {
+      const n = t.toLowerCase();
+      return (
+        String(e.title || "")
+          .toLowerCase()
+          .includes(n) ||
+        String(e.content || "")
+          .toLowerCase()
+          .includes(n)
+      );
+    }
+    function memoSnippet(e, t) {
+      const n = String(e.content || e.title || ""),
+        i = n.toLowerCase().indexOf(t.toLowerCase()),
+        o = i < 0 ? 0 : Math.max(0, i - 30),
+        a = n
+          .slice(o, o + 90)
+          .replace(/\s+/g, " ")
+          .trim();
+      return (o > 0 ? "..." : "") + (a || "내용 없음");
+    }
     function pe(e = "") {
+      const n = e.trim(),
+        i = n ? le.filter((e) => memoMatches(e, n)) : le,
+        memoOptions = i.some((e) => e.id === de)
+          ? i
+          : [le.find((e) => e.id === de), ...i].filter(Boolean),
+        a = t("memoSearchHits");
       ((me.innerHTML = ""),
-        (e
-          ? le.filter((t) => t.title.toLowerCase().includes(e.toLowerCase()))
-          : le
-        ).forEach((e) => {
+        memoOptions.forEach((e) => {
           const t = o("option");
           ((t.value = e.id),
             (t.textContent = e.title),
             (t.selected = e.id === de),
             me.appendChild(t));
-        }));
+        }),
+        a &&
+          (a.innerHTML = n
+            ? i.length
+              ? i
+                  .slice(0, 6)
+                  .map(
+                    (e) =>
+                      `<button type="button" class="ck memo-hit" data-memo-id="${Me(e.id)}"><span><span class="memo-hit-title">${Me(e.title)}</span><span class="memo-hit-snippet">${Me(memoSnippet(e, n))}</span></span></button>`,
+                  )
+                  .join("")
+              : '<div class="c1o">검색 결과가 없습니다.</div>'
+            : ""));
     }
     function ge() {
       const e = le.find((e) => e.id === de) || le[0];
@@ -3044,7 +3393,10 @@
           ((le = le.filter((e) => e.id !== de)), (de = le[0].id), we());
     }
     function we() {
-      (s.setItem(re, c(le)), s.setItem(ce, de), pe(), ge());
+      (s.setItem(re, c(le)),
+        s.setItem(ce, de),
+        pe(t("x2c")?.value || ""),
+        ge());
     }
     function ke() {
       confirm("내용을 비울까요?") &&
@@ -3099,12 +3451,17 @@
         ((e.content = ue.value),
         s.setItem(re, c(le)),
         he(),
+        t("x2c")?.value && pe(t("x2c").value),
         (t("x1y").innerText = "상태: 저장됨"));
     }),
       (me.onchange = (e) => {
         ((de = e.target.value), ge(), s.setItem(ce, de));
       }),
       (t("x2c").oninput = (e) => pe(e.target.value)),
+      (t("memoSearchHits").onclick = (e) => {
+        const n = e.target.closest("[data-memo-id]");
+        n && ((de = n.dataset.memoId), ge(), s.setItem(ce, de));
+      }),
       0 === le.length &&
         le.push({ id: "memo_default", title: "기본 메모", content: "" }),
       we());
@@ -3847,6 +4204,129 @@
           t("x1w").innerText = "오류";
         }
     }
+    function encodeBase64Text(e) {
+      const t = new TextEncoder().encode(e);
+      let n = "";
+      return (t.forEach((e) => (n += String.fromCharCode(e))), btoa(n));
+    }
+    function decodeBase64Text(e) {
+      const t = e.trim().replace(/-/g, "+").replace(/_/g, "/"),
+        n = t + "=".repeat((4 - (t.length % 4)) % 4),
+        i = atob(n),
+        o = Uint8Array.from(i, (e) => e.charCodeAt(0));
+      return new TextDecoder().decode(o);
+    }
+    function parseDelimitedText(e) {
+      const t = e.includes("\t") ? "\t" : ",";
+      let n = [],
+        i = [],
+        o = "",
+        a = !1;
+      for (let s = 0; s < e.length; s++) {
+        const r = e[s],
+          c = e[s + 1];
+        if ('"' === r) {
+          if (a && '"' === c) {
+            ((o += '"'), s++);
+          } else a = !a;
+        } else
+          r === t && !a
+            ? (i.push(o), (o = ""))
+            : ("\n" !== r && "\r" !== r) || a
+              ? (o += r)
+              : ("\r" === r && "\n" === c && s++,
+                i.push(o),
+                n.push(i),
+                (i = []),
+                (o = ""));
+      }
+      return (
+        i.push(o),
+        (n = n.concat([i])).filter((e) => e.length > 1 || e[0])
+      );
+    }
+    function renderDelimitedTable(e) {
+      const t = parseDelimitedText(e);
+      if (!t.length) return "표시할 행이 없습니다.";
+      return `<table class="cy"><tbody>${t
+        .map(
+          (e, t) =>
+            `<tr>${e.map((e) => `<${t ? "td" : "th"}>${Me(e)}</${t ? "td" : "th"}>`).join("")}</tr>`,
+        )
+        .join("")}</tbody></table>`;
+    }
+    function decodeJwtParts(e) {
+      const t = e.trim().split(".");
+      if (t.length < 2)
+        throw new Error("JWT는 header.payload.signature 형식이어야 합니다.");
+      return c(
+        {
+          header: r(decodeBase64Text(t[0])),
+          payload: r(decodeBase64Text(t[1])),
+          signature: t[2] || "",
+        },
+        null,
+        2,
+      );
+    }
+    let textToolPlainOutput = "";
+    function runTextTool() {
+      const e = t("textToolInput").value,
+        n = De("textToolMode", "base64Encode"),
+        i = t("textToolOutput");
+      try {
+        if ("base64Encode" === n) textToolPlainOutput = encodeBase64Text(e);
+        else if ("base64Decode" === n)
+          textToolPlainOutput = decodeBase64Text(e);
+        else if ("urlEncode" === n) textToolPlainOutput = encodeURIComponent(e);
+        else if ("urlDecode" === n) textToolPlainOutput = decodeURIComponent(e);
+        else if ("jwtDecode" === n) textToolPlainOutput = decodeJwtParts(e);
+        else if ("csvTable" === n) {
+          const n = parseDelimitedText(e);
+          ((textToolPlainOutput = n.map((e) => e.join("\t")).join("\n")),
+            (i.innerHTML = renderDelimitedTable(e)),
+            Ie("textToolStats", [
+              ["행", n.length],
+              ["열", n[0]?.length || 0],
+              ["문자", e.length],
+            ]));
+          return;
+        }
+        ((i.innerText = textToolPlainOutput || "결과가 없습니다."),
+          Ie("textToolStats", [
+            ["문자", e.length],
+            ["결과", textToolPlainOutput.length],
+          ]));
+      } catch (e) {
+        ((textToolPlainOutput = ""),
+          (i.innerText = "오류: " + e.message),
+          Ie("textToolStats", [["오류", e.message]]));
+      }
+    }
+    (n("[data-help-target]").forEach((e) => {
+      e.onclick = (n) => {
+        (n.preventDefault(),
+          n.stopPropagation(),
+          t(e.dataset.helpTarget)?.classList.toggle("show"));
+      };
+    }),
+      n('input[name="textToolMode"]').forEach(
+        (e) => (e.onchange = runTextTool),
+      ),
+      (t("textToolRun").onclick = runTextTool),
+      (t("textToolCopy").onclick = () =>
+        Ce(textToolPlainOutput || t("textToolOutput").innerText)),
+      (t("textToolDownload").onclick = () =>
+        He(
+          "text_tool_result.txt",
+          textToolPlainOutput || t("textToolOutput").innerText,
+        )),
+      (t("textToolClear").onclick = () => {
+        ((t("textToolInput").value = ""),
+          (textToolPlainOutput = ""),
+          (t("textToolOutput").innerText = "텍스트를 입력하고 실행하세요."),
+          Ie("textToolStats", [["상태", "대기"]]));
+      }));
     (Ne(ELEMENT_IDS.logInput, STORAGE_KEYS.analysisLogInput, () => {
       (ot(), at(), ct());
     }),
@@ -4135,6 +4615,14 @@
       정규식: "regex",
       date: "date",
       날짜: "date",
+      text: "textTool",
+      텍스트: "textTool",
+      util: "textTool",
+      utility: "textTool",
+      base64: "textTool",
+      url: "textTool",
+      jwt: "textTool",
+      csv: "textTool",
       hex: "charCode",
       문자: "charCode",
       chat: "chat",
@@ -4154,6 +4642,16 @@
     }
     function Dt(e, t, n, i, o) {
       return { icon: e, title: t, desc: n, keyText: i, run: o };
+    }
+    function copyCommandValue(e, t) {
+      try {
+        const n = "function" == typeof t ? t() : t;
+        Ce(n)
+          .then(() => alert(e + " 복사됨\n\n" + String(n).slice(0, 180)))
+          .catch((t) => alert(e + " 복사 실패: " + t.message));
+      } catch (t) {
+        alert(e + " 실패: " + t.message);
+      }
     }
     function Ut(e) {
       const n = e.trim(),
@@ -4230,6 +4728,68 @@
                   t("section-memo")?.classList.remove("collapsed"),
                   ue.focus());
               })(n),
+            ),
+          );
+        }
+        if (/^(?:uuid|guid)$/i.test(n))
+          o.push(
+            Dt("fa-fingerprint", "UUID 생성", "클립보드로 복사", "uuid", () =>
+              copyCommandValue("UUID", () =>
+                crypto.randomUUID
+                  ? crypto.randomUUID()
+                  : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
+                      /[xy]/g,
+                      (e) => {
+                        const t = (16 * Math.random()) | 0;
+                        return ("x" === e ? t : (3 & t) | 8).toString(16);
+                      },
+                    ),
+              ),
+            ),
+          );
+        if (/^(?:timestamp|now)$/i.test(n))
+          o.push(
+            Dt(
+              "fa-clock",
+              "현재 시간 복사",
+              "ms / ISO / 로컬 시간",
+              "time",
+              () =>
+                copyCommandValue("현재 시간", () => {
+                  const e = new Date();
+                  return `${e.getTime()}\n${e.toISOString()}\n${e.toLocaleString()}`;
+                }),
+            ),
+          );
+        if ((e = n.match(/^(?:b64|base64(?!\s+decode))\s+([\s\S]+)$/i))) {
+          const t = e[1];
+          o.push(
+            Dt("fa-font", "Base64 인코딩", t, "b64", () =>
+              copyCommandValue("Base64", () => encodeBase64Text(t)),
+            ),
+          );
+        }
+        if ((e = n.match(/^(?:base64d|b64d|base64\s+decode)\s+([\s\S]+)$/i))) {
+          const t = e[1];
+          o.push(
+            Dt("fa-font", "Base64 디코딩", t, "b64d", () =>
+              copyCommandValue("Base64 디코드", () => decodeBase64Text(t)),
+            ),
+          );
+        }
+        if ((e = n.match(/^(?:urlencode|url\s+encode)\s+([\s\S]+)$/i))) {
+          const t = e[1];
+          o.push(
+            Dt("fa-link", "URL 인코딩", t, "urlenc", () =>
+              copyCommandValue("URL 인코딩", () => encodeURIComponent(t)),
+            ),
+          );
+        }
+        if ((e = n.match(/^(?:urldecode|url\s+decode)\s+([\s\S]+)$/i))) {
+          const t = e[1];
+          o.push(
+            Dt("fa-link", "URL 디코딩", t, "urldec", () =>
+              copyCommandValue("URL 디코딩", () => decodeURIComponent(t)),
             ),
           );
         }
@@ -4448,6 +5008,20 @@
                 )),
                   U());
               })(Number(e.target.dataset.tt));
+            if (e.target.matches("[data-tp]"))
+              return void (function (e, t) {
+                ((D = D.map((n) =>
+                  n.id === e ? todoClean({ ...n, priority: t }) : n,
+                )),
+                  U());
+              })(Number(e.target.dataset.tp), e.target.value);
+            if (e.target.matches("[data-tdue]"))
+              return void (function (e, t) {
+                ((D = D.map((n) =>
+                  n.id === e ? todoClean({ ...n, due: t }) : n,
+                )),
+                  U());
+              })(Number(e.target.dataset.tdue), e.target.value);
             const t = n[e.target.dataset.c];
             t && t(e.target);
           }));
