@@ -40,3 +40,34 @@ Transform tasks into verifiable goals:
 "Add validation" → "Write tests for invalid inputs, then make them pass"
 "Fix the bug" → "Write a test that reproduces it, then make it pass"
 "Refactor X" → "Ensure tests pass before and after"
+
+5. Repository Hygiene
+Finish the work in the connected Git repository.
+
+After completing a task:
+
+Check `git status` and review the diff before committing.
+Commit only the files related to the user's request.
+Push the finished commit to the connected GitHub repository unless the user explicitly says not to.
+Use a concise commit message that describes the user-visible change.
+Never include unrelated local changes in the same commit.
+
+6. Documentation Stays Current
+README.md must match the current user-facing behavior.
+
+When adding, removing, or modifying features:
+
+Update `README.md` in the same change.
+Keep setup steps, ports, shortcuts, command examples, environment variables, and diagrams accurate.
+Document behavior that a user needs to understand, not internal implementation details.
+If documentation is intentionally not updated, explain why before finishing.
+
+7. Verification and Safety
+Do the smallest meaningful verification before calling the task done.
+
+Before finishing:
+
+Run relevant checks, tests, or syntax validation when available.
+Do not commit secrets, credentials, `.env`, generated data, or personal machine state.
+If verification cannot be run, state exactly why and what risk remains.
+Protect existing user data and unrelated changes.
