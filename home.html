@@ -3641,7 +3641,25 @@
       );
     }
     function gameOpenUrl(e) {
+      if ("exe" === gameLauncherParams().launcher) {
+        window.location.href = e;
+        return;
+      }
       window.open(e, "_blank", "noopener");
+    }
+    function gameServerClientUrl() {
+      const e = new URL(
+        "http://" +
+          gameHostValue() +
+          ":" +
+          gamePortValue() +
+          "/game/index.html",
+      );
+      return (
+        e.searchParams.set("host", gameHostValue()),
+        e.searchParams.set("port", gamePortValue()),
+        e.toString()
+      );
     }
     function gameLauncherParams() {
       const n = window.GOOD_ETC_LAUNCHER_CONFIG || {},
@@ -3675,9 +3693,7 @@
         }),
         (t("gameOpenServer").onclick = () => {
           try {
-            gameOpenUrl(
-              "http://" + gameHostValue() + ":" + gamePortValue() + "/game/",
-            );
+            gameOpenUrl(gameServerClientUrl());
           } catch (e) {
             t("gameStatus").innerText = e.message;
           }
@@ -3685,9 +3701,7 @@
         (t("gameOpenLocal").onclick = () => {
           try {
             if ("exe" === gameLauncherParams().launcher) {
-              gameOpenUrl(
-                "http://" + gameHostValue() + ":" + gamePortValue() + "/game/",
-              );
+              gameOpenUrl(gameServerClientUrl());
               return;
             }
             const e = new URL("game/index.html", window.location.href);
