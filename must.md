@@ -49,7 +49,7 @@ After completing a task:
 Check `git status` and review the diff before committing.
 Commit only the files related to the user's request.
 Push the finished commit to the connected GitHub repository unless the user explicitly says not to.
-Use a concise commit message that describes the user-visible change.
+Use a concise Korean commit message that describes the user-visible change.
 Never include unrelated local changes in the same commit.
 
 6. Documentation Stays Current
@@ -71,3 +71,14 @@ Run relevant checks, tests, or syntax validation when available.
 Do not commit secrets, credentials, `.env`, generated data, or personal machine state.
 If verification cannot be run, state exactly why and what risk remains.
 Protect existing user data and unrelated changes.
+
+8. Single-EXE User Experience
+All future user-facing features must work from the standalone EXE.
+
+When adding or changing features:
+
+Assume the end user may only download and run `GoodETC_Launcher.exe`.
+Do not require users to manually copy extra HTML, JS, CSS, Python, or asset files.
+If a feature needs runtime files, servers, ports, or generated resources, bundle them into the EXE or have the EXE create them automatically.
+The EXE must keep the dashboard and feature entry points working without visible command windows.
+When a feature depends on LAN access, document the required port/firewall behavior and verify the EXE path, not only the source-file path.

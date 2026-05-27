@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import os
 import shutil
 import socket
@@ -69,7 +70,7 @@ class LauncherServer:
 
     @property
     def game_url(self) -> str:
-        return f"http://localhost:{self.port}/game/"
+        return f"http://127.0.0.1:{self.port}/game/index.html"
 
     @property
     def lan_url(self) -> str:
@@ -100,10 +101,16 @@ class LauncherServer:
             self.ready.set()
 
     def prepare_home_view(self) -> None:
+        launcher_config = {
+            "gameHost": "127.0.0.1",
+            "gamePort": str(self.port),
+            "gameUrl": self.game_url,
+            "launcher": "exe",
+        }
         config = (
             "<script>"
             "window.GOOD_ETC_LAUNCHER_CONFIG="
-            f'{{gameHost:"localhost",gamePort:"{self.port}",launcher:"exe"}};'
+            f"{json.dumps(launcher_config, separators=(',', ':'))};"
             "</script>"
         )
         html = self.home_path.read_text(encoding="utf-8")

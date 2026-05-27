@@ -3648,13 +3648,15 @@
       window.open(e, "_blank", "noopener");
     }
     function gameServerClientUrl() {
-      const e = new URL(
-        "http://" +
-          gameHostValue() +
-          ":" +
-          gamePortValue() +
-          "/game/index.html",
-      );
+      const n = gameLauncherParams(),
+        i =
+          n.gameUrl ||
+          "http://" +
+            gameHostValue() +
+            ":" +
+            gamePortValue() +
+            "/game/index.html",
+        e = new URL(i);
       return (
         e.searchParams.set("host", gameHostValue()),
         e.searchParams.set("port", gamePortValue()),
@@ -3673,6 +3675,7 @@
           n.gamePort || e.get("gamePort") || e.get("port"),
           "",
         ),
+        gameUrl: gameCleanBatValue(n.gameUrl || e.get("gameUrl"), ""),
         launcher: gameCleanBatValue(n.launcher || e.get("launcher"), ""),
       };
     }
