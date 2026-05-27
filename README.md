@@ -4,8 +4,9 @@
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square)
 ![Storage](https://img.shields.io/badge/Storage-Browser%20localStorage-6B7280?style=flat-square)
 ![Ollama](https://img.shields.io/badge/Ollama-Chat%20Ready-111827?style=flat-square)
+![LAN](https://img.shields.io/badge/LAN-Arena%20Game-53E2A8?style=flat-square)
 
-브라우저에서 바로 쓰는 개인 업무 대시보드입니다. 즐겨찾기, 할 일, 메모, 로그 분석, JSON/XML 보기, 문자/HEX 분석, 텍스트 유틸, Diff, 정규식 테스트, Ollama 챗봇을 `home.html` 하나에 모아 둔 도구 모음입니다.
+브라우저에서 바로 쓰는 개인 업무 대시보드입니다. 즐겨찾기, 할 일, 메모, 로그 분석, JSON/XML 보기, 문자/HEX 분석, 텍스트 유틸, Diff, 정규식 테스트, Ollama 챗봇, 같은 LAN에서 즐기는 탑다운 아레나 게임을 함께 제공합니다.
 
 ## 화면 구성
 
@@ -16,6 +17,7 @@ flowchart LR
     A --> D[Memo]
     A --> E[도구 패널]
     A --> F[UI 설정]
+    A --> G[LAN Arena]
 
     E --> E1[Ollama 챗봇]
     E --> E2[문자/HEX 분석]
@@ -25,6 +27,9 @@ flowchart LR
     E --> E6[텍스트 Diff]
     E --> E7[텍스트 유틸]
     E --> E8[로그 워크벤치]
+    G --> G1[Canvas 게임 클라이언트]
+    G --> G2[Python WebSocket 서버]
+    G --> G3[방화벽 bat 생성]
 ```
 
 ## 주요 기능
@@ -44,6 +49,7 @@ flowchart LR
 | 도구 패널  | 텍스트 비교     | 원본/비교 텍스트의 차이를 Diff 형태로 확인하고 결과를 복사/다운로드합니다.                                       |
 | 도구 패널  | 텍스트 유틸     | Base64, URL 인코딩/디코딩, JWT 디코드, CSV/TSV 표 보기를 지원합니다.                                             |
 | 도구 패널  | 로그 워크벤치   | 로그 필터링, 패턴 집계, 타임라인 분석, 고유 줄 복사, 오류 해결 사전 적용을 제공합니다.                           |
+| 도구 패널  | LAN 아레나      | 같은 LAN 사용자가 접속하는 탑다운 실시간 아레나 게임 실행과 방화벽 bat 생성을 지원합니다.                        |
 | UI 설정    | 개인화          | Light/Dark 테마, 글자 크기, 레이아웃, 섹션 표시/접기, 프리셋 저장, 설정 내보내기/가져오기를 지원합니다.          |
 
 ## 빠른 시작
@@ -75,6 +81,30 @@ MinIO와 Oracle XE까지 함께 쓰려면 전체 서비스를 실행합니다.
 docker compose up -d
 ```
 
+## LAN 아레나 게임
+
+게임은 `game/` 폴더의 HTML/CSS/JS 클라이언트와 Python WebSocket 서버로 구성됩니다. 별도 Python 패키지 설치 없이 표준 라이브러리만 사용합니다.
+
+호스트 PC에서 서버를 실행합니다.
+
+```bash
+python game/server.py --host 0.0.0.0 --port 7000
+```
+
+호스트는 아래 주소로 게임을 엽니다.
+
+```text
+http://localhost:7000/
+```
+
+같은 LAN 사용자는 호스트 PC의 IP로 접속합니다.
+
+```text
+http://HOST_IP:7000/
+```
+
+Windows 방화벽에서 TCP `7000` 포트가 막혀 있으면 접속할 수 없습니다. `home.html`의 LAN 아레나 패널에서 접속을 허용할 원격 IP와 포트를 입력하면 관리자 권한으로 실행할 `.bat` 내용을 생성하거나 다운로드할 수 있습니다. 브라우저 보안상 `home.html`은 방화벽 규칙을 직접 적용하지 않습니다.
+
 ## Docker 서비스
 
 | 서비스       | 포트                     | 용도                                                                                                       |
@@ -101,18 +131,18 @@ docker compose up -d
 
 `Ctrl + K`를 누른 뒤 아래처럼 입력할 수 있습니다.
 
-| 입력 예시                                                           | 동작                                   |
-| ------------------------------------------------------------------- | -------------------------------------- |
-| `https://example.com`                                               | URL을 새 탭으로 엽니다.                |
-| `192.168.1.10:8080`                                                 | IP 주소를 `http://`로 열어 봅니다.     |
-| `#1234` 또는 `redmine 1234`                                         | Redmine 이슈 페이지로 이동합니다.      |
-| `google docker compose` 또는 `g docker compose`                     | Google 검색을 실행합니다.              |
-| `naver 오라클 XE` 또는 `n 오라클 XE`                                | Naver 검색을 실행합니다.               |
-| `todo 보고서 작성`                                                  | 오늘 할 일에 항목을 추가합니다.        |
-| `memo 회의록`                                                       | 새 메모를 만듭니다.                    |
-| `uuid`, `timestamp`                                                 | 값을 생성해 클립보드에 복사합니다.     |
-| `base64 hello`, `b64d aGVsbG8=`, `urlencode a=b`, `urldecode a%3Db` | 텍스트를 변환해 클립보드에 복사합니다. |
-| `json`, `log`, `diff`, `regex`, `date`, `hex`, `text`, `chat`       | 해당 도구 패널을 바로 엽니다.          |
+| 입력 예시                                                             | 동작                                   |
+| --------------------------------------------------------------------- | -------------------------------------- |
+| `https://example.com`                                                 | URL을 새 탭으로 엽니다.                |
+| `192.168.1.10:8080`                                                   | IP 주소를 `http://`로 열어 봅니다.     |
+| `#1234` 또는 `redmine 1234`                                           | Redmine 이슈 페이지로 이동합니다.      |
+| `google docker compose` 또는 `g docker compose`                       | Google 검색을 실행합니다.              |
+| `naver 오라클 XE` 또는 `n 오라클 XE`                                  | Naver 검색을 실행합니다.               |
+| `todo 보고서 작성`                                                    | 오늘 할 일에 항목을 추가합니다.        |
+| `memo 회의록`                                                         | 새 메모를 만듭니다.                    |
+| `uuid`, `timestamp`                                                   | 값을 생성해 클립보드에 복사합니다.     |
+| `base64 hello`, `b64d aGVsbG8=`, `urlencode a=b`, `urldecode a%3Db`   | 텍스트를 변환해 클립보드에 복사합니다. |
+| `json`, `log`, `diff`, `regex`, `date`, `hex`, `text`, `game`, `chat` | 해당 도구 패널을 바로 엽니다.          |
 
 ## 단축키
 
@@ -142,6 +172,12 @@ docker compose up -d
 ```text
 .
 ├── home.html                  # 메인 대시보드 단일 페이지
+├── game/                      # LAN 아레나 게임 클라이언트와 Python 서버
+│   ├── index.html
+│   ├── style.css
+│   ├── game.js
+│   ├── server.py
+│   └── README.md
 ├── docker-compose.yml          # Nginx, MinIO, Oracle XE 실행 구성
 ├── package.json                # 포맷/검증 스크립트
 ├── tools/
@@ -170,8 +206,9 @@ npm run format
 
 리팩터링 원칙:
 
-- `home.html`은 현재 단일 파일 구조를 유지합니다.
-- 사용자가 실행할 때 필요한 파일은 `home.html` 하나여야 합니다. `package.json`과 `tools/`는 개발/검증용 보조 파일입니다.
+- 대시보드 본체는 `home.html` 단일 파일 구조를 유지합니다.
+- LAN 아레나처럼 별도 런타임이 필요한 기능은 하위 폴더에 분리하되, `home.html`에서 실행 진입점을 제공합니다.
+- `package.json`과 `tools/`는 개발/검증용 보조 파일입니다.
 - 기존 DOM ID와 `localStorage` 키 값은 사용자 데이터 호환성을 위해 함부로 바꾸지 않습니다.
 - 새 저장 데이터가 필요하면 `STORAGE_KEYS`에 키를 먼저 추가하고, 사용자가 이해해야 하는 변경은 README에 함께 반영합니다.
 - `x2p`, `x12`처럼 짧은 ID를 직접 바꾸기보다 `ELEMENT_IDS` 같은 의미 있는 별칭을 먼저 추가합니다.
@@ -181,6 +218,8 @@ npm run format
 
 - 즐겨찾기 별칭을 등록하면 명령 팔레트에서 별칭만 입력해도 링크를 열 수 있습니다.
 - 각 기능의 `?` 버튼을 누르면 해당 기능의 입력 방식과 주의사항을 바로 확인할 수 있습니다.
+- LAN 아레나는 호스트가 `python game/server.py --host 0.0.0.0 --port 7000`을 실행한 뒤 같은 망 사용자가 접속하는 방식입니다.
+- 게임 접속이 안 되면 호스트 IP, 포트, Windows 방화벽 인바운드 규칙을 먼저 확인하세요.
 - TODO는 마감일과 우선순위를 저장하며, 지난 마감일과 오늘 마감 항목을 색으로 구분합니다.
 - 메모 검색은 제목뿐 아니라 메모 내용까지 함께 찾습니다.
 - HEX 분석기의 필드 분리에서 `*`는 남은 바이트 전체를 의미합니다.
@@ -190,7 +229,7 @@ npm run format
 
 ## 운영 참고
 
-- `home.html`은 단일 정적 파일이라 별도 빌드 과정 없이 Nginx, 파일 서버, 브라우저 직접 열기 방식으로 사용할 수 있습니다.
-- GitHub ZIP 전체를 내려받아도 되지만, 사용자 실행에는 `home.html`만 있으면 됩니다.
+- 대시보드 본체인 `home.html`은 단일 정적 파일이라 별도 빌드 과정 없이 Nginx, 파일 서버, 브라우저 직접 열기 방식으로 사용할 수 있습니다.
+- GitHub ZIP 전체를 내려받으면 LAN 아레나를 포함한 전체 기능을 사용할 수 있습니다. 대시보드만 필요하면 `home.html`만 열어도 됩니다.
 - 기본 즐겨찾기에는 내부망 주소가 포함되어 있으므로 사용 환경에 맞게 수정해서 쓰는 것을 권장합니다.
 - 개인 데이터는 서버가 아니라 브라우저에 저장됩니다. PC 교체나 브라우저 초기화 전에는 설정과 메모를 내보내거나 백업하세요.

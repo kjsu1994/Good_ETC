@@ -13,6 +13,10 @@ const files = [
   "tools/validate-home.cjs",
   "tools/prettier.cjs",
   "package.json",
+  "game/README.md",
+  "game/index.html",
+  "game/style.css",
+  "game/game.js",
 ].map((file) => path.join(rootDir, file));
 
 const result = spawnSync("npx", ["--yes", "prettier@3.6.2", mode, ...files], {

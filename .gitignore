@@ -1,3 +1,6 @@
 oracle-data/
 .env
 *.log
+__pycache__/
+*.pyc
+firewall_inbound.bat

@@ -1890,9 +1890,89 @@
       <button class="c1y" id="logToggle" title="로그 워크벤치">
         <i class="fas fa-bug"></i>
       </button>
+      <button class="c1y" id="gameToggle" title="LAN 아레나 게임">
+        <i class="fas fa-gamepad"></i>
+      </button>
       <button class="c1y" id="chatToggle" title="Ollama 챗봇">
         <i class="fas fa-comments"></i>
       </button>
+    </div>
+    <div class="c28 cx" id="gamePanel">
+      <div class="c1t">
+        <h3><i class="fas fa-gamepad"></i> LAN 아레나</h3>
+        <div class="c1t-actions">
+          <button
+            class="ck cl"
+            type="button"
+            data-help-target="gameHelp"
+            title="사용 방법"
+          >
+            <i class="fas fa-question"></i>
+          </button>
+        </div>
+      </div>
+      <div class="c1e feature-help" id="gameHelp">
+        <div>
+          호스트 PC에서
+          <code>python game/server.py --host 0.0.0.0 --port 7000</code>을 실행한
+          뒤, 같은 LAN 사용자는 호스트 IP와 포트로 접속합니다.
+        </div>
+        <div>
+          브라우저 보안상 home.html은 방화벽을 직접 변경할 수 없습니다. 아래
+          입력값으로 생성한 bat 내용을 관리자 권한으로 실행하세요.
+        </div>
+      </div>
+      <div class="c2c">
+        <div>
+          <span class="c1g">호스트 IP</span>
+          <input
+            id="gameHost"
+            class="c26"
+            placeholder="예: 192.168.0.10 또는 localhost"
+          />
+        </div>
+        <div>
+          <span class="c1g">게임 포트</span>
+          <input id="gamePort" class="c26" inputmode="numeric" value="7000" />
+        </div>
+      </div>
+      <div class="c1j">
+        <button type="button" id="gameOpenServer">
+          <i class="fas fa-play"></i> 서버 주소 열기</button
+        ><button class="ck" type="button" id="gameOpenLocal">
+          <i class="fas fa-folder-open"></i> 로컬 클라이언트 열기
+        </button>
+      </div>
+      <div class="c2c">
+        <div>
+          <span class="c1g">허용할 원격 IP</span>
+          <input
+            id="gameRemoteIp"
+            class="c26"
+            placeholder="비우면 localsubnet"
+          />
+        </div>
+        <div>
+          <span class="c1g">방화벽 규칙명</span>
+          <input id="gameRuleName" class="c26" value="LAN_ARENA_7000" />
+        </div>
+      </div>
+      <textarea
+        id="gameFirewallCommand"
+        class="c1c cw"
+        readonly
+        spellcheck="false"
+      ></textarea>
+      <div class="c1j">
+        <button class="ck" type="button" id="gameCopyFirewall">
+          <i class="fas fa-copy"></i> bat 내용 복사</button
+        ><button class="ck" type="button" id="gameDownloadFirewall">
+          <i class="fas fa-download"></i> bat 다운로드
+        </button>
+      </div>
+      <div class="c1o" id="gameStatus">
+        서버 실행 후 방화벽에서 TCP 7000 포트를 허용해야 LAN 접속이 가능합니다.
+      </div>
     </div>
     <div class="c28 cp" id="chatPanel">
       <div class="c1t">
@@ -3093,6 +3173,7 @@
         "diff",
         "textTool",
         "log",
+        "game",
         "chat",
       ].forEach(
         (e) =>
@@ -3496,6 +3577,117 @@
         i.click(),
         URL.revokeObjectURL(i.href));
     }
+    function gameCleanBatValue(e, t) {
+      return String(e || t || "")
+        .replace(/["\r\n]/g, "")
+        .trim();
+    }
+    function gamePortValue() {
+      const e = Number(String(t("gamePort").value || "").trim());
+      if (!Number.isInteger(e) || e < 1 || e > 65535)
+        throw new Error("포트는 1~65535 사이의 숫자여야 합니다.");
+      return String(e);
+    }
+    function gameFirewallScript() {
+      const e = gamePortValue(),
+        n = gameCleanBatValue(t("gameRuleName").value, "LAN_ARENA_" + e),
+        i = gameCleanBatValue(t("gameRemoteIp").value, "localsubnet");
+      return [
+        "@echo off",
+        "set RULE_NAME=" + n,
+        "set PORT=" + e,
+        "set REMOTE_IP=" + (i || "localsubnet"),
+        "",
+        'netsh advfirewall firewall delete rule name="%RULE_NAME%"',
+        "",
+        "netsh advfirewall firewall add rule ^",
+        'name="%RULE_NAME%" ^',
+        "dir=in ^",
+        "action=allow ^",
+        "protocol=TCP ^",
+        "localport=%PORT% ^",
+        "remoteip=%REMOTE_IP%",
+        "",
+        "pause",
+        "",
+      ].join("\r\n");
+    }
+    function gameSyncFirewallCommand() {
+      try {
+        ((t("gameFirewallCommand").value = gameFirewallScript()),
+          (t("gameStatus").innerText =
+            "bat 내용을 관리자 권한으로 실행하면 지정 IP/포트의 인바운드가 허용됩니다."));
+      } catch (e) {
+        ((t("gameFirewallCommand").value = ""),
+          (t("gameStatus").innerText = e.message));
+      }
+    }
+    function gameHostValue() {
+      return (
+        gameCleanBatValue(t("gameHost").value, "localhost")
+          .replace(/^(?:https?|wss?):\/\//i, "")
+          .split("/")[0]
+          .replace(/:\d+$/, "") || "localhost"
+      );
+    }
+    function gameOpenUrl(e) {
+      window.open(e, "_blank", "noopener");
+    }
+    function gameInitPanel() {
+      const e = t("gameHost"),
+        n = t("gamePort"),
+        i = t("gameRemoteIp"),
+        o = t("gameRuleName");
+      ((e.value = window.location.hostname || "localhost"),
+        (n.value = n.value || "7000"),
+        (o.value = o.value || "LAN_ARENA_7000"),
+        [e, n, i, o].forEach((e) => {
+          e.oninput = () => {
+            n.value && (o.value = o.value || "LAN_ARENA_" + n.value);
+            gameSyncFirewallCommand();
+          };
+        }),
+        (t("gameOpenServer").onclick = () => {
+          try {
+            gameOpenUrl(
+              "http://" + gameHostValue() + ":" + gamePortValue() + "/",
+            );
+          } catch (e) {
+            t("gameStatus").innerText = e.message;
+          }
+        }),
+        (t("gameOpenLocal").onclick = () => {
+          try {
+            const e = new URL("game/index.html", window.location.href);
+            (e.searchParams.set("host", gameHostValue()),
+              e.searchParams.set("port", gamePortValue()),
+              gameOpenUrl(e.toString()));
+          } catch (e) {
+            t("gameStatus").innerText = e.message;
+          }
+        }),
+        (t("gameCopyFirewall").onclick = () =>
+          Ce(gameFirewallScript())
+            .then(() => {
+              t("gameStatus").innerText =
+                "bat 내용이 클립보드에 복사되었습니다.";
+            })
+            .catch((e) => {
+              t("gameStatus").innerText = "복사 실패: " + e.message;
+            })),
+        (t("gameDownloadFirewall").onclick = () => {
+          try {
+            He(
+              "firewall_inbound_lan_arena_" + gamePortValue() + ".bat",
+              gameFirewallScript(),
+            );
+          } catch (e) {
+            t("gameStatus").innerText = e.message;
+          }
+        }),
+        gameSyncFirewallCommand());
+    }
+    gameInitPanel();
     function Ae(e, t) {
       s.setItem(e, t);
     }
@@ -4623,6 +4815,10 @@
       url: "textTool",
       jwt: "textTool",
       csv: "textTool",
+      game: "game",
+      lan: "game",
+      arena: "game",
+      게임: "game",
       hex: "charCode",
       문자: "charCode",
       chat: "chat",
@@ -4817,6 +5013,9 @@
           ),
           Dt("fa-bug", "로그 워크벤치 열기", "log 입력", "log", () =>
             Ot("log"),
+          ),
+          Dt("fa-gamepad", "LAN 아레나 열기", "game 입력", "game", () =>
+            Ot("game"),
           ),
           Dt(
             "fa-file-invoice",
