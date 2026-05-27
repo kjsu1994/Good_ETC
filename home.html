@@ -2248,6 +2248,8 @@
       r = JSON.parse,
       c = JSON.stringify,
       l = "Sejong";
+
+    // Shared storage keys and DOM ID aliases. Keep values stable for user data.
     const STORAGE_KEYS = Object.freeze({
       legacyTheme: "theme",
       uiPrefs: "ui_prefs_v1",
@@ -2286,6 +2288,8 @@
       structuredInput: "x2i",
       structuredSearch: "x9",
     });
+
+    // Clock and weather.
     function d() {
       const e = new Date();
       t("clock").innerText =
@@ -2308,6 +2312,8 @@
           t("xl").innerText = "날씨 연동 실패";
         }
       })());
+
+    // UI settings, section visibility, and backup/import.
     const u = STORAGE_KEYS.uiPrefs,
       m = STORAGE_KEYS.uiSectionHidden,
       f = STORAGE_KEYS.uiCustomPreset,
@@ -2727,6 +2733,7 @@
           }),
             n.readAsText(e));
         })(e.target.files[0])));
+    // Todo list.
     const O = STORAGE_KEYS.todos;
     let D = r(s.getItem(O) || "[]");
     function U() {
@@ -2758,6 +2765,7 @@
       "Enter" === e.key && R();
     }),
       q());
+    // Tool panel shell and Ollama chat.
     const F = t("masterToolToggle"),
       P = t("x2n"),
       K = i(".c2e");
@@ -2880,6 +2888,7 @@
       "Enter" === e.key && e.ctrlKey && (e.preventDefault(), te());
     }),
       ee());
+    // Section ordering and memo editor.
     const ie = t("x1t");
     function oe(e, t) {
       (t < 0 &&
@@ -3099,6 +3108,7 @@
       0 === le.length &&
         le.push({ id: "memo_default", title: "기본 메모", content: "" }),
       we());
+    // Shared tool helpers and analysis tools.
     let Ee = null;
     function Ie(e, n) {
       t(e).innerHTML = n
@@ -3870,12 +3880,13 @@
       (t("x2h").oninput = Lt),
       (t("x1i").oninput = $t),
       (t("x1x").oninput = $t));
+    // Favorite links.
     const _t = t("xn"),
       St = t("x1c"),
       Tt = t("xo"),
       Mt = t("x1p");
     let Et = 0;
-    const It = [
+    const defaultFavoriteLinks = [
       ["groupware", "그룹웨어", "https://imtplus.hanbiro.net", "fa-home"],
       ["ctfmon", "CTFMON", "https://ctfmon.shop", "fa-envelope"],
       ["inflearn", "인프런", "https://www.inflearn.com/", "fa-user-graduate"],
@@ -3902,12 +3913,12 @@
       ],
       ["sms", "문자전송", "https://messageme.co.kr/", "fa-sms"],
     ];
-    let Ct = {},
+    let favoriteLinkLookup = {},
       linkAction = "";
-    const linkStore = STORAGE_KEYS.favoriteLinks;
+    const favoriteLinkStore = STORAGE_KEYS.favoriteLinks;
     let linkEditing = "";
-    function linkDefaults() {
-      return It.map(([e, t, n, i]) => ({
+    function getDefaultFavoriteLinks() {
+      return defaultFavoriteLinks.map(([e, t, n, i]) => ({
         id: e,
         key: e,
         title: t,
@@ -3915,7 +3926,7 @@
         icon: i,
       }));
     }
-    function linkClean(e) {
+    function normalizeFavoriteLink(e) {
       return {
         id: String(
           e.id || "link_" + Date.now() + Math.random().toString(16).slice(2),
@@ -3926,19 +3937,19 @@
         icon: String(e.icon || "fa-link").trim() || "fa-link",
       };
     }
-    function linkLoad() {
+    function loadFavoriteLinks() {
       try {
-        const e = s.getItem(linkStore);
-        return (null === e ? linkDefaults() : r(e))
-          .map(linkClean)
+        const e = s.getItem(favoriteLinkStore);
+        return (null === e ? getDefaultFavoriteLinks() : r(e))
+          .map(normalizeFavoriteLink)
           .filter((e) => e.title && e.url);
       } catch (e) {
-        return linkDefaults();
+        return getDefaultFavoriteLinks();
       }
     }
-    let linkItems = linkLoad();
-    function linkSaveAll() {
-      s.setItem(linkStore, c(linkItems));
+    let linkItems = loadFavoriteLinks();
+    function saveFavoriteLinks() {
+      s.setItem(favoriteLinkStore, c(linkItems));
     }
     function linkSetStatus(e) {
       const n = t("favStatus");
@@ -3948,10 +3959,10 @@
       ((linkAction = e || ""),
         t("favEditMode").classList.toggle("active", "edit" === linkAction),
         t("favDeleteMode").classList.toggle("active", "delete" === linkAction),
-        linkRender());
+        renderFavoriteLinks());
     }
-    function linkRender() {
-      ((Ct = Object.fromEntries(
+    function renderFavoriteLinks() {
+      ((favoriteLinkLookup = Object.fromEntries(
         linkItems.flatMap((e) => [
           [e.key || e.title.toLowerCase(), e.url],
           [e.title.toLowerCase(), e.url],
@@ -3991,7 +4002,7 @@
       "fa-user-graduate",
       "fa-microchip",
     ];
-    function linkBuildIconMenu() {
+    function renderFavoriteIconMenu() {
       t("favIconMenu").innerHTML = linkIcons
         .map(
           (e) =>
@@ -4047,7 +4058,7 @@
       n &&
         confirm(`즐겨찾기 "${n.title}"을 삭제할까요?`) &&
         ((linkItems = linkItems.filter((t) => t.id !== e)),
-        linkSaveAll(),
+        saveFavoriteLinks(),
         linkSetMode(""),
         linkResetForm());
     }
@@ -4070,12 +4081,12 @@
           key: i,
           icon: o,
         });
-      (linkSaveAll(),
+      (saveFavoriteLinks(),
         linkSetMode(""),
         linkResetForm(),
         linkSetStatus("저장했습니다."));
     }
-    (linkBuildIconMenu(),
+    (renderFavoriteIconMenu(),
       (t("favIconToggle").onclick = (e) => {
         e.stopPropagation();
         const n = t("favIconMenu").classList.toggle("show");
@@ -4112,7 +4123,8 @@
             ? linkEdit(n.dataset.linkId)
             : linkDelete(n.dataset.linkId));
       }),
-      linkRender());
+      renderFavoriteLinks());
+    // Command palette and keyboard shortcuts.
     const jt = {
       json: "json",
       xml: "json",
@@ -4222,8 +4234,12 @@
           );
         }
         const a = i.split(/\s+/)[0];
-        (Ct[a] &&
-          o.push(Dt("fa-link", "링크 열기", a, "link", () => At(Ct[a]))),
+        (favoriteLinkLookup[a] &&
+          o.push(
+            Dt("fa-link", "링크 열기", a, "link", () =>
+              At(favoriteLinkLookup[a]),
+            ),
+          ),
           jt[a] &&
             o.push(Dt("fa-tools", "도구 열기", a, "tool", () => Ot(jt[a]))),
           (o.length && /^(?:google|g|naver|n)\s+/i.test(n)) ||
@@ -4247,7 +4263,7 @@
             "Redmine 열기",
             "redmine 또는 #이슈번호",
             "redmine",
-            () => At(Ct.redmine),
+            () => At(favoriteLinkLookup.redmine),
           ),
           Dt("fa-search", "Google 검색", "검색어를 바로 입력", "search", () =>
             At(Nt(St.value.trim() || "검색")),
