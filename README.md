@@ -109,7 +109,7 @@ Windows PC에서 같은 LAN 사용자를 받으려면 서버 프로세스가 Win
 
 ### Windows 단일 EXE 런처
 
-`pyluncher/`에는 `home.html`과 `game/`을 단일 Windows EXE로 묶는 Python 런처가 있습니다. 빌드된 EXE를 실행하면 로컬 서버가 시작되고 브라우저에서 `home.html`이 열립니다.
+`pyluncher/`에는 `home.html`과 `game/`을 단일 Windows EXE로 묶는 Python 런처가 있습니다. 빌드된 EXE를 실행하면 로컬 서버가 백그라운드에서 시작되고 pywebview 창에서 `home.html`이 열립니다.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\pyluncher\build.ps1
@@ -121,7 +121,7 @@ powershell -ExecutionPolicy Bypass -File .\pyluncher\build.ps1
 pyluncher/dist/GoodETC_Launcher.exe
 ```
 
-EXE는 기본적으로 `0.0.0.0:7000`에 서버를 열므로 같은 LAN 사용자도 방화벽 허용 후 접속할 수 있습니다.
+EXE는 기본적으로 `0.0.0.0:7000`에 서버를 열고 콘솔창 없이 앱 창 하나만 표시합니다. 같은 LAN 사용자도 방화벽 허용 후 접속할 수 있습니다.
 
 ## Docker 서비스
 
