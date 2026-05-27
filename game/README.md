@@ -25,3 +25,7 @@ http://HOST_IP:7000/
 방화벽에서 TCP `7000` 포트가 허용되어야 합니다. `home.html`의 게임
 패널에서 접속을 허용할 IP와 포트를 입력하면 Windows `netsh` 명령 또는
 `.bat` 내용을 생성할 수 있습니다.
+
+WSL에서 서버를 실행하는 경우 Windows 외부의 LAN 사용자가 바로 접속하지 못할
+수 있습니다. 그때는 Windows Python 또는 향후 EXE 런처로 서버를 실행하거나 WSL
+포트 전달 설정을 확인하세요.
