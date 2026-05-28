@@ -121,7 +121,7 @@ powershell -ExecutionPolicy Bypass -File .\pyluncher\build.ps1
 pyluncher/dist/GoodETC_Launcher.exe
 ```
 
-EXE는 기본적으로 `0.0.0.0:7000`에 게임 서버를 열고 콘솔창 없이 앱 창 하나만 표시합니다. EXE가 실제 사용 포트를 `home.html`에 전달하므로 게임 패널의 `방 입장` 버튼을 누르면 바로 접속됩니다. 같은 LAN 사용자도 방화벽 허용 후 게임 주소로 접속할 수 있습니다.
+EXE는 기본적으로 `0.0.0.0:7000`에 게임 서버를 열고 콘솔창 없이 앱 창 하나만 표시합니다. 대시보드는 런처의 로컬 HTTP 주소 `http://127.0.0.1:<port>/home.html`에서 열리고, 게임 패널의 `방 입장` 버튼은 같은 서버의 `game/` 클라이언트로 접속합니다. 같은 LAN 사용자도 방화벽 허용 후 게임 주소로 접속할 수 있습니다.
 
 ## Docker 서비스
 

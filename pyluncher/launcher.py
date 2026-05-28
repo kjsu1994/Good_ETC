@@ -78,7 +78,9 @@ class LauncherServer:
 
     @property
     def home_view_url(self) -> str:
-        return str(self.runtime_home_path or self.home_path)
+        if self.runtime_home_path:
+            return f"http://127.0.0.1:{self.port}/home.html"
+        return str(self.home_path)
 
     def start(self) -> None:
         self.thread.start()
@@ -142,8 +144,9 @@ class LauncherServer:
         self.stop_event = asyncio.Event()
         arena = ArenaServer(game_root=self.game_root, home_path=self.home_path)
         server = await self._start_http_server(arena)
-        loop_task = asyncio.create_task(arena.game_loop())
         self.prepare_home_view()
+        arena.home_path = self.runtime_home_path or self.home_path
+        loop_task = asyncio.create_task(arena.game_loop())
 
         self.ready.set()
         try:
