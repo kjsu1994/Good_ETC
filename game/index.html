@@ -4,19 +4,34 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>LAN Arena</title>
-    <link rel="stylesheet" href="./style.css" />
+    <link rel="stylesheet" href="./style.css?v=20260528a" />
   </head>
   <body>
     <main class="arena-shell">
       <canvas id="gameCanvas" aria-label="LAN Arena game field"></canvas>
 
-      <section class="hud hud-left" aria-label="connection controls">
+      <section
+        class="hud hud-left"
+        id="connectionPanel"
+        aria-label="connection controls"
+      >
         <div class="brand">
           <span class="brand-mark"></span>
           <div>
             <h1>LAN Arena</h1>
             <p id="connectionState">Disconnected</p>
           </div>
+          <button
+            id="hudToggle"
+            class="hud-toggle"
+            type="button"
+            aria-label="Toggle connection panel"
+            aria-expanded="true"
+          >
+            <span></span>
+            <span></span>
+            <span></span>
+          </button>
         </div>
         <form id="connectForm" class="connect-form">
           <label>
@@ -60,6 +75,6 @@
       </div>
     </main>
 
-    <script src="./game.js"></script>
+    <script src="./game.js?v=20260528a"></script>
   </body>
 </html>

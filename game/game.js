@@ -5,7 +5,9 @@ const playerNameInput = document.getElementById("playerName");
 const serverUrlInput = document.getElementById("serverUrl");
 const connectButton = document.getElementById("connectButton");
 const disconnectButton = document.getElementById("disconnectButton");
+const connectionPanel = document.getElementById("connectionPanel");
 const connectionState = document.getElementById("connectionState");
+const hudToggle = document.getElementById("hudToggle");
 const scoreboard = document.getElementById("scoreboard");
 const centerMessage = document.getElementById("centerMessage");
 
@@ -50,6 +52,11 @@ function setStatus(text, isActive = false) {
 function setCenterMessage(text) {
   centerMessage.textContent = text;
   centerMessage.classList.toggle("hidden", !text);
+}
+
+function setConnectionPanelCollapsed(isCollapsed) {
+  connectionPanel.classList.toggle("collapsed", isCollapsed);
+  hudToggle.setAttribute("aria-expanded", String(!isCollapsed));
 }
 
 function resizeCanvas() {
@@ -121,16 +128,20 @@ function connect() {
   localStorage.setItem("lan_arena_url", url);
 
   if (socket) socket.close();
-  socket = new WebSocket(url);
+  const activeSocket = new WebSocket(url);
+  socket = activeSocket;
   setStatus("Connecting...", true);
   setCenterMessage("Connecting to LAN arena...");
 
-  socket.addEventListener("open", () => {
+  activeSocket.addEventListener("open", () => {
+    if (socket !== activeSocket) return;
     setStatus("Connected", true);
-    socket.send(JSON.stringify({ type: "join", name }));
+    setConnectionPanelCollapsed(true);
+    activeSocket.send(JSON.stringify({ type: "join", name }));
   });
 
-  socket.addEventListener("message", (event) => {
+  activeSocket.addEventListener("message", (event) => {
+    if (socket !== activeSocket) return;
     const message = JSON.parse(event.data);
     if (message.type === "welcome") {
       playerId = message.id;
@@ -147,14 +158,19 @@ function connect() {
     }
   });
 
-  socket.addEventListener("close", () => {
+  activeSocket.addEventListener("close", () => {
+    if (socket !== activeSocket) return;
+    socket = null;
     setStatus("Disconnected", false);
+    setConnectionPanelCollapsed(false);
     playerId = "";
     setCenterMessage("Disconnected. Check server address and firewall.");
   });
 
-  socket.addEventListener("error", () => {
+  activeSocket.addEventListener("error", () => {
+    if (socket !== activeSocket) return;
     setStatus("Connection error", false);
+    setConnectionPanelCollapsed(false);
     setCenterMessage("Connection failed. Check server address and firewall.");
   });
 }
@@ -284,6 +300,10 @@ connectForm.addEventListener("submit", (event) => {
 
 disconnectButton.addEventListener("click", disconnect);
 
+hudToggle.addEventListener("click", () => {
+  setConnectionPanelCollapsed(!connectionPanel.classList.contains("collapsed"));
+});
+
 window.addEventListener("keydown", (event) => {
   const key = event.key.toLowerCase();
   if ([" ", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(key)) {
@@ -322,5 +342,42 @@ renderScoreboard();
 draw();
 
 if (launchParams.get("auto") === "1") {
-  setTimeout(connect, 50);
+  startAutoConnect();
+}
+
+function startAutoConnect() {
+  const maxAttempts = 4;
+  let attempts = 0;
+  let retryTimer = 0;
+
+  function hasPendingConnection() {
+    return (
+      socket &&
+      (socket.readyState === WebSocket.CONNECTING ||
+        socket.readyState === WebSocket.OPEN)
+    );
+  }
+
+  function schedule(delay) {
+    window.clearTimeout(retryTimer);
+    retryTimer = window.setTimeout(run, delay);
+  }
+
+  function run() {
+    if (playerId || attempts >= maxAttempts) return;
+    if (hasPendingConnection()) {
+      schedule(400);
+      return;
+    }
+    attempts += 1;
+    connect();
+    if (attempts < maxAttempts) schedule(900);
+  }
+
+  if (document.readyState === "complete") schedule(250);
+  else window.addEventListener("load", () => schedule(250), { once: true });
+
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) schedule(150);
+  });
 }

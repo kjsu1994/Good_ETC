@@ -109,6 +109,8 @@ Windows PC에서 같은 LAN 사용자를 받으려면 서버 프로세스가 Win
 
 일반 브라우저에서 `home.html`을 여는 경우 `방 입장`과 `파일 클라이언트 입장`은 모두 현재 대시보드와 같은 서버의 `game/index.html` 클라이언트를 열고, 입력한 호스트/포트를 WebSocket 접속 주소로 전달합니다. `방 입장`은 자동 접속까지 시도하므로 Docker Compose의 `game-server` 또는 별도 `python game/server.py` 서버가 실행 중이어야 합니다. EXE에서는 `방 입장`이 런처가 제공하는 게임 클라이언트로 연결됩니다.
 
+게임 클라이언트는 연결에 성공하면 좌상단 연결 패널을 자동으로 접어 게임 화면을 넓게 보여주고, 같은 위치의 토글 버튼으로 다시 펼칠 수 있습니다.
+
 ### Windows 단일 EXE 런처
 
 `pyluncher/`에는 `home.html`과 `game/`을 단일 Windows EXE로 묶는 Python 런처가 있습니다. 사용자는 `GoodETC_Launcher.exe` 하나만 실행하면 게임 서버를 만들고 pywebview 창에서 바로 입장할 수 있습니다.

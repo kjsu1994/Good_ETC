@@ -3711,6 +3711,7 @@
     function gameApplyClientParams(e, n) {
       (e.searchParams.set("host", gameHostValue()),
         e.searchParams.set("port", gamePortValue()),
+        e.searchParams.set("v", "20260528a"),
         n && e.searchParams.set("auto", "1"));
       return e.toString();
     }
