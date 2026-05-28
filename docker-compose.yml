@@ -1,7 +1,22 @@
 services:
+  game-server:
+    image: python:3.12-slim
+    container_name: lan_arena_game
+    working_dir: /app
+    command: python game/server.py --host 0.0.0.0 --port 7000
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+    ports:
+      - "7000:7000"
+    volumes:
+      - .:/app:ro
+    restart: always
+
   web-server:
     image: nginx:latest
     container_name: nginx_js
+    depends_on:
+      - game-server
     ports:
       - "8081:80"
     volumes:

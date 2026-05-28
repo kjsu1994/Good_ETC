@@ -15,6 +15,7 @@ import threading
 import time
 import webbrowser
 from pathlib import Path
+from urllib.parse import urlencode
 
 
 def resource_root() -> Path:
@@ -79,7 +80,15 @@ class LauncherServer:
     @property
     def home_view_url(self) -> str:
         if self.runtime_home_path:
-            return f"http://127.0.0.1:{self.port}/home.html"
+            params = urlencode(
+                {
+                    "launcher": "exe",
+                    "gameHost": "127.0.0.1",
+                    "gamePort": str(self.port),
+                    "gameUrl": self.game_url,
+                }
+            )
+            return f"http://127.0.0.1:{self.port}/home.html?{params}"
         return str(self.home_path)
 
     def start(self) -> None:

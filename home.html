@@ -3640,14 +3640,85 @@
           .replace(/:\d+$/, "") || "localhost"
       );
     }
+    function gameIsLauncherShell() {
+      return "exe" === gameLauncherParams().launcher || !!window.pywebview;
+    }
+    function gameCloseEmbedded() {
+      const e = document.getElementById("gameEmbedOverlay"),
+        n = document.getElementById("gameEmbedFrame");
+      (n && (n.src = "about:blank"), e && (e.style.display = "none"));
+    }
+    function gameEnsureEmbedded() {
+      let e = document.getElementById("gameEmbedOverlay");
+      if (e) return e;
+      const n = document.createElement("iframe"),
+        i = document.createElement("button");
+      return (
+        (e = document.createElement("div")),
+        (e.id = "gameEmbedOverlay"),
+        (n.id = "gameEmbedFrame"),
+        (n.title = "LAN 아레나"),
+        (n.tabIndex = 0),
+        n.setAttribute("allow", "fullscreen; autoplay"),
+        Object.assign(e.style, {
+          display: "none",
+          position: "fixed",
+          inset: "0",
+          zIndex: "4000",
+          background: "#07111f",
+        }),
+        Object.assign(n.style, {
+          width: "100%",
+          height: "100%",
+          border: "0",
+          display: "block",
+        }),
+        (i.type = "button"),
+        (i.title = "대시보드로 돌아가기"),
+        (i.innerHTML = '<i class="fas fa-times"></i>'),
+        Object.assign(i.style, {
+          position: "fixed",
+          top: "14px",
+          right: "14px",
+          zIndex: "4001",
+          width: "42px",
+          height: "42px",
+          borderRadius: "10px",
+          border: "1px solid rgba(255,255,255,.2)",
+          background: "rgba(13,24,42,.86)",
+          color: "#fff",
+          cursor: "pointer",
+        }),
+        (i.onclick = gameCloseEmbedded),
+        e.append(n, i),
+        document.body.appendChild(e),
+        e
+      );
+    }
+    function gameOpenEmbedded(e) {
+      const n = gameEnsureEmbedded(),
+        i = document.getElementById("gameEmbedFrame");
+      (i && (i.src = e), (n.style.display = "block"));
+      setTimeout(() => i && i.focus(), 80);
+    }
     function gameOpenUrl(e) {
-      if ("exe" === gameLauncherParams().launcher) {
-        window.location.href = e;
+      if (gameIsLauncherShell()) {
+        gameOpenEmbedded(e);
         return;
       }
       window.open(e, "_blank", "noopener");
     }
-    function gameServerClientUrl() {
+    function gameApplyClientParams(e, n) {
+      (e.searchParams.set("host", gameHostValue()),
+        e.searchParams.set("port", gamePortValue()),
+        n && e.searchParams.set("auto", "1"));
+      return e.toString();
+    }
+    function gameLocalClientUrl(e = !1) {
+      const n = new URL("game/index.html", window.location.href);
+      return gameApplyClientParams(n, e);
+    }
+    function gameServerClientUrl(o = !1) {
       const n = gameLauncherParams(),
         i =
           n.gameUrl ||
@@ -3657,11 +3728,7 @@
             gamePortValue() +
             "/game/index.html",
         e = new URL(i);
-      return (
-        e.searchParams.set("host", gameHostValue()),
-        e.searchParams.set("port", gamePortValue()),
-        e.toString()
-      );
+      return gameApplyClientParams(e, o);
     }
     function gameLauncherParams() {
       const n = window.GOOD_ETC_LAUNCHER_CONFIG || {},
@@ -3696,7 +3763,11 @@
         }),
         (t("gameOpenServer").onclick = () => {
           try {
-            gameOpenUrl(gameServerClientUrl());
+            gameOpenUrl(
+              "exe" === gameLauncherParams().launcher
+                ? gameServerClientUrl(!0)
+                : gameLocalClientUrl(!0),
+            );
           } catch (e) {
             t("gameStatus").innerText = e.message;
           }
@@ -3707,10 +3778,7 @@
               gameOpenUrl(gameServerClientUrl());
               return;
             }
-            const e = new URL("game/index.html", window.location.href);
-            (e.searchParams.set("host", gameHostValue()),
-              e.searchParams.set("port", gamePortValue()),
-              gameOpenUrl(e.toString()));
+            gameOpenUrl(gameLocalClientUrl());
           } catch (e) {
             t("gameStatus").innerText = e.message;
           }

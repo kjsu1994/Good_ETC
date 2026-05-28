@@ -139,8 +139,10 @@ class ArenaServer:
         await self.write_response(writer, 200, body, content_type)
 
     def resolve_static_path(self, path: str) -> Path | None:
-        if self.home_path and path in ("", "/", "/home.html"):
-            return self.home_path
+        if path == "/home.html":
+            home_path = self.home_path or self.game_root.parent / "home.html"
+            if home_path.is_file():
+                return home_path.resolve()
 
         if path in ("", "/"):
             relative = "index.html"

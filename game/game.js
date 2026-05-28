@@ -311,10 +311,16 @@ window.addEventListener("pointerup", () => {
   pointer.down = false;
 });
 
+const launchParams = new URLSearchParams(window.location.search);
+
 playerNameInput.value = localStorage.getItem("lan_arena_name") || "Player";
-serverUrlInput.value = new URLSearchParams(window.location.search).has("host")
+serverUrlInput.value = launchParams.has("host")
   ? getDefaultServerUrl()
   : localStorage.getItem("lan_arena_url") || getDefaultServerUrl();
 setStatus("Disconnected");
 renderScoreboard();
 draw();
+
+if (launchParams.get("auto") === "1") {
+  setTimeout(connect, 50);
+}
