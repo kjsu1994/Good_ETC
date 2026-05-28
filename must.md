@@ -44,9 +44,11 @@ Transform tasks into verifiable goals:
 5. Repository Hygiene
 Finish the work in the connected Git repository.
 
-After completing a task:
+After completing and verifying a task:
 
 Check `git status` and review the diff before committing.
+Do not commit or push immediately after edits. Commit only after relevant checks pass.
+If the change needs manual runtime confirmation, wait for the user's successful test confirmation before committing or pushing.
 Commit only the files related to the user's request.
 Push the finished commit to the connected GitHub repository unless the user explicitly says not to.
 Use a concise Korean commit message that describes the user-visible change.

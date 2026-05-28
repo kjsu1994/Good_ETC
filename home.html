@@ -1913,23 +1913,31 @@
       </div>
       <div class="c1e feature-help" id="gameHelp">
         <div>
-          호스트 PC에서
-          <code>python game/server.py --host 0.0.0.0 --port 7000</code>을 실행한
-          뒤, 같은 LAN 사용자는 호스트 IP와 포트로 접속합니다.
+          <strong>호스트</strong>는 방을 만드는 PC입니다. EXE로 실행하면 게임
+          서버가 자동으로 열리고, 브라우저/Docker로 사용할 때는
+          <code>docker compose up -d web-server</code> 또는
+          <code>python game/server.py --host 0.0.0.0 --port 7000</code>으로
+          서버를 먼저 실행하세요.
         </div>
         <div>
-          브라우저 보안상 home.html은 방화벽을 직접 변경할 수 없습니다. 아래
-          입력값으로 생성한 bat 내용을 관리자 권한으로 실행하세요.
+          예를 들어 내 PC가 <code>192.168.1.72</code>이고 다른 유저가
+          <code>192.168.1.73</code>이면, 내 PC에서 호스트 IP는
+          <code>192.168.1.72</code>, 게임 포트는 <code>7000</code>으로 둔 뒤
+          <code>호스트</code>를 누릅니다.
         </div>
         <div>
-          Windows 방화벽 규칙은 Windows에서 열린 포트에 적용됩니다. WSL에서
-          서버를 실행했는데 외부 PC가 접속하지 못하면 Windows Python/향후 EXE로
-          실행하거나 WSL 포트 전달 설정을 확인하세요.
+          다른 유저는 브라우저에서 <code>http://192.168.1.72:7000/</code>을
+          열거나, 대시보드를 쓰는 경우 호스트 IP에 <code>192.168.1.72</code>,
+          포트에 <code>7000</code>을 입력하고 <code>입장하기</code>를 누르면
+          됩니다. 다른 유저 자신의 IP인 <code>192.168.1.73</code>을 호스트 IP에
+          넣지 않습니다.
         </div>
         <div>
-          EXE로 실행한 경우에는 실행과 동시에 방이 만들어집니다. 이 패널에서
-          <code>방 입장</code>을 누르면 같은 EXE 안에서 시작된 게임 서버로
-          접속합니다.
+          접속이 안 되면 호스트 PC의 Windows 방화벽에서 TCP <code>7000</code>을
+          허용하세요. 아래 bat 생성 영역에서 허용할 원격 IP를
+          <code>192.168.1.73</code>으로 넣으면 해당 PC만 허용하고, 비워두면 같은
+          로컬망을 허용합니다. 생성한 bat는 호스트 PC에서 관리자 권한으로
+          실행해야 합니다.
         </div>
       </div>
       <div class="c2c">
@@ -1948,9 +1956,9 @@
       </div>
       <div class="c1j">
         <button type="button" id="gameOpenServer">
-          <i class="fas fa-play"></i> 방 입장</button
+          <i class="fas fa-play"></i> 호스트</button
         ><button class="ck" type="button" id="gameOpenLocal">
-          <i class="fas fa-folder-open"></i> 파일 클라이언트 입장
+          <i class="fas fa-folder-open"></i> 입장하기
         </button>
       </div>
       <div class="c2c">
