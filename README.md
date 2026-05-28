@@ -4,9 +4,9 @@
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square)
 ![Storage](https://img.shields.io/badge/Storage-Browser%20localStorage-6B7280?style=flat-square)
 ![Ollama](https://img.shields.io/badge/Ollama-Chat%20Ready-111827?style=flat-square)
-![LAN](https://img.shields.io/badge/LAN-Arena%20Game-53E2A8?style=flat-square)
+![Games](https://img.shields.io/badge/Games-Arena%20%2B%20Artillery-53E2A8?style=flat-square)
 
-브라우저에서 바로 쓰는 개인 업무 대시보드입니다. 즐겨찾기, 할 일, 메모, 로그 분석, JSON/XML 보기, 문자/HEX 분석, 텍스트 유틸, Diff, 정규식 테스트, Ollama 챗봇, 같은 LAN에서 즐기는 탑다운 아레나 게임을 함께 제공합니다.
+브라우저에서 바로 쓰는 개인 업무 대시보드입니다. 즐겨찾기, 할 일, 메모, 로그 분석, JSON/XML 보기, 문자/HEX 분석, 텍스트 유틸, Diff, 정규식 테스트, Ollama 챗봇, LAN 아레나와 포트리스풍 포격전 게임을 함께 제공합니다.
 
 ## 화면 구성
 
@@ -17,7 +17,7 @@ flowchart LR
     A --> D[Memo]
     A --> E[도구 패널]
     A --> F[UI 설정]
-    A --> G[LAN Arena]
+    A --> G[게임]
 
     E --> E1[Ollama 챗봇]
     E --> E2[문자/HEX 분석]
@@ -27,8 +27,8 @@ flowchart LR
     E --> E6[텍스트 Diff]
     E --> E7[텍스트 유틸]
     E --> E8[로그 워크벤치]
-    G --> G1[Canvas 게임 클라이언트]
-    G --> G2[Python WebSocket 서버]
+    G --> G1[LAN 아레나]
+    G --> G2[포트리스풍 포격전]
     G --> G3[방화벽 bat 생성]
 ```
 
@@ -49,7 +49,7 @@ flowchart LR
 | 도구 패널  | 텍스트 비교     | 원본/비교 텍스트의 차이를 Diff 형태로 확인하고 결과를 복사/다운로드합니다.                                       |
 | 도구 패널  | 텍스트 유틸     | Base64, URL 인코딩/디코딩, JWT 디코드, CSV/TSV 표 보기를 지원합니다.                                             |
 | 도구 패널  | 로그 워크벤치   | 로그 필터링, 패턴 집계, 타임라인 분석, 고유 줄 복사, 오류 해결 사전 적용을 제공합니다.                           |
-| 도구 패널  | LAN 아레나      | 같은 LAN 사용자가 접속하는 탑다운 실시간 아레나 게임 실행과 방화벽 bat 생성을 지원합니다.                        |
+| 도구 패널  | 게임            | LAN 아레나와 포트리스풍 포격전을 지원하며, 선택한 게임에 따라 호스트/입장하기 버튼이 해당 게임을 엽니다.         |
 | UI 설정    | 개인화          | Light/Dark 테마, 글자 크기, 레이아웃, 섹션 표시/접기, 프리셋 저장, 설정 내보내기/가져오기를 지원합니다.          |
 
 ## 빠른 시작
@@ -81,7 +81,11 @@ MinIO와 Oracle XE까지 함께 쓰려면 전체 서비스를 실행합니다.
 docker compose up -d
 ```
 
-## LAN 아레나 게임
+## 게임
+
+`home.html`의 게임 패널은 탭으로 게임을 선택합니다. `LAN 아레나`는 기존 LAN 실시간 게임이고, `포트리스`는 WebSocket 멀티 모드와 혼자하기 로컬 모드를 함께 제공합니다. 호스트 IP, 포트, 방화벽 bat 생성 영역은 게임 탭 아래에 공통으로 표시됩니다.
+
+### LAN 아레나
 
 게임은 `game/` 폴더의 HTML/CSS/JS 클라이언트와 Python WebSocket 서버로 구성됩니다. 별도 Python 패키지 설치 없이 표준 라이브러리만 사용합니다.
 
@@ -111,6 +115,12 @@ Windows PC에서 같은 LAN 사용자를 받으려면 서버 프로세스가 Win
 
 게임 클라이언트는 연결에 성공하면 좌상단 연결 패널을 자동으로 접어 게임 화면을 넓게 보여주고, 같은 위치의 토글 버튼으로 다시 펼칠 수 있습니다.
 
+### 포트리스풍 포격전
+
+`포트리스` 탭의 `포트리스 호스트`와 `포트리스 입장하기`는 `ws://호스트:포트/fortress` WebSocket에 접속하는 멀티 모드입니다. 호스트는 P1, 입장하기는 P2가 되어 각자 자신의 턴에만 조작합니다.
+
+`포트리스 혼자하기`는 서버 접속 없이 같은 PC에서 P1/P2를 번갈아 조작하는 로컬 모드입니다. `←/→`로 이동, `↑/↓`로 포각, `A/D`로 파워를 조절하고 `Space`로 발사합니다. 바람, 지형 파괴, 체력, `수리(1)`, `보호막(2)`, `강화탄(3)` 아이템을 지원하며, 원작 포트리스2 자산이나 고유 캐릭터는 사용하지 않습니다.
+
 ### Windows 단일 EXE 런처
 
 `pyluncher/`에는 `home.html`과 `game/`을 단일 Windows EXE로 묶는 Python 런처가 있습니다. 사용자는 `GoodETC_Launcher.exe` 하나만 실행하면 게임 서버를 만들고 pywebview 창에서 바로 입장할 수 있습니다.
@@ -125,14 +135,14 @@ powershell -ExecutionPolicy Bypass -File .\pyluncher\build.ps1
 pyluncher/dist/GoodETC_Launcher.exe
 ```
 
-EXE는 기본적으로 `0.0.0.0:7000`에 게임 서버를 열고 콘솔창 없이 앱 창 하나만 표시합니다. 대시보드는 런처의 로컬 HTTP 주소 `http://127.0.0.1:<port>/home.html`에서 열리고, 게임 패널의 `호스트`/`입장하기` 버튼은 EXE 창 안의 내장 게임 화면으로 접속합니다. 같은 LAN 사용자도 방화벽 허용 후 게임 주소로 접속할 수 있습니다.
+EXE는 기본적으로 `0.0.0.0:7000`에 LAN 아레나와 포트리스 멀티용 게임 서버를 열고 콘솔창 없이 앱 창 하나만 표시합니다. 대시보드는 런처의 로컬 HTTP 주소 `http://127.0.0.1:<port>/home.html`에서 열리고, 게임 패널의 `호스트`/`입장하기` 버튼은 현재 선택된 게임의 내장 화면으로 접속합니다. 같은 LAN 사용자도 방화벽 허용 후 게임 주소로 접속할 수 있습니다.
 
 ## Docker 서비스
 
 | 서비스        | 포트                     | 용도                                                                                                       |
 | ------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------- |
 | `web-server`  | `8081:80`                | `home.html`과 정적 게임 클라이언트를 Nginx로 서빙합니다.                                                   |
-| `game-server` | `7000:7000`              | LAN 아레나 HTTP/WebSocket 서버를 실행합니다. `web-server` 실행 시 함께 시작됩니다.                         |
+| `game-server` | `7000:7000`              | LAN 아레나와 포트리스 멀티용 HTTP/WebSocket 서버를 실행합니다. `web-server` 실행 시 함께 시작됩니다.       |
 | `minio`       | `9000:9000`, `9001:9001` | S3 호환 오브젝트 스토리지와 콘솔을 제공합니다.                                                             |
 | `oracle`      | `1522:1521`              | Oracle XE 21c 컨테이너입니다. 컨테이너 내부 접속 문자열은 `jdbc:oracle:thin:@//oracle:1521/XEPDB1` 입니다. |
 
@@ -195,10 +205,11 @@ EXE는 기본적으로 `0.0.0.0:7000`에 게임 서버를 열고 콘솔창 없�
 ```text
 .
 ├── home.html                  # 메인 대시보드 단일 페이지
-├── game/                      # LAN 아레나 게임 클라이언트와 Python 서버
+├── game/                      # 게임 클라이언트와 LAN 아레나 Python 서버
 │   ├── index.html
 │   ├── style.css
 │   ├── game.js
+│   ├── fortress.js
 │   ├── server.py
 │   └── README.md
 ├── pyluncher/                 # home.html과 game/을 단일 Windows EXE로 묶는 런처
@@ -236,7 +247,7 @@ npm run format
 리팩터링 원칙:
 
 - 대시보드 본체는 `home.html` 단일 파일 구조를 유지합니다.
-- LAN 아레나처럼 별도 런타임이 필요한 기능은 하위 폴더에 분리하되, `home.html`에서 실행 진입점을 제공합니다.
+- 게임처럼 별도 런타임이 필요한 기능은 하위 폴더에 분리하되, `home.html`에서 실행 진입점을 제공합니다.
 - `package.json`과 `tools/`는 개발/검증용 보조 파일입니다.
 - 기존 DOM ID와 `localStorage` 키 값은 사용자 데이터 호환성을 위해 함부로 바꾸지 않습니다.
 - 새 저장 데이터가 필요하면 `STORAGE_KEYS`에 키를 먼저 추가하고, 사용자가 이해해야 하는 변경은 README에 함께 반영합니다.
@@ -247,7 +258,7 @@ npm run format
 
 - 즐겨찾기 별칭을 등록하면 명령 팔레트에서 별칭만 입력해도 링크를 열 수 있습니다.
 - 각 기능의 `?` 버튼을 누르면 해당 기능의 입력 방식과 주의사항을 바로 확인할 수 있습니다.
-- LAN 아레나는 호스트가 `python game/server.py --host 0.0.0.0 --port 7000`을 실행한 뒤 같은 망 사용자가 접속하는 방식입니다.
+- LAN 아레나와 포트리스 멀티는 호스트가 `python game/server.py --host 0.0.0.0 --port 7000`을 실행한 뒤 같은 망 사용자가 접속하는 방식입니다.
 - 게임 접속이 안 되면 호스트 IP, 포트, Windows 방화벽 인바운드 규칙을 먼저 확인하세요.
 - TODO는 마감일과 우선순위를 저장하며, 지난 마감일과 오늘 마감 항목을 색으로 구분합니다.
 - 메모 검색은 제목뿐 아니라 메모 내용까지 함께 찾습니다.
@@ -259,6 +270,6 @@ npm run format
 ## 운영 참고
 
 - 대시보드 본체인 `home.html`은 단일 정적 파일이라 별도 빌드 과정 없이 Nginx, 파일 서버, 브라우저 직접 열기 방식으로 사용할 수 있습니다.
-- GitHub ZIP 전체를 내려받으면 LAN 아레나를 포함한 전체 기능을 사용할 수 있습니다. 대시보드만 필요하면 `home.html`만 열어도 됩니다.
+- GitHub ZIP 전체를 내려받으면 LAN 아레나와 포트리스풍 포격전을 포함한 전체 기능을 사용할 수 있습니다. 대시보드만 필요하면 `home.html`만 열어도 됩니다.
 - 기본 즐겨찾기에는 내부망 주소가 포함되어 있으므로 사용 환경에 맞게 수정해서 쓰는 것을 권장합니다.
 - 개인 데이터는 서버가 아니라 브라우저에 저장됩니다. PC 교체나 브라우저 초기화 전에는 설정과 메모를 내보내거나 백업하세요.

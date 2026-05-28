@@ -1,6 +1,6 @@
-# LAN Arena
+# 게임 서버
 
-`home.html`에서 실행하는 같은 LAN용 탑다운 아레나 게임입니다.
+`home.html`에서 실행하는 LAN 아레나와 포트리스 멀티 모드의 정적 파일 및 WebSocket 서버입니다.
 
 ## 실행
 
@@ -22,10 +22,6 @@ http://localhost:7000/
 http://HOST_IP:7000/
 ```
 
-방화벽에서 TCP `7000` 포트가 허용되어야 합니다. `home.html`의 게임
-패널에서 접속을 허용할 IP와 포트를 입력하면 Windows `netsh` 명령 또는
-`.bat` 내용을 생성할 수 있습니다.
+LAN 아레나는 `/ws`, 포트리스 멀티 모드는 `/fortress` WebSocket을 사용합니다. 방화벽에서 TCP `7000` 포트가 허용되어야 다른 PC가 접속할 수 있습니다.
 
-WSL에서 서버를 실행하는 경우 Windows 외부의 LAN 사용자가 바로 접속하지 못할
-수 있습니다. 그때는 Windows Python 또는 향후 EXE 런처로 서버를 실행하거나 WSL
-포트 전달 설정을 확인하세요.
+`포트리스 혼자하기`는 WebSocket 서버 없이 브라우저 안에서 로컬로 실행됩니다.

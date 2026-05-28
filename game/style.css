@@ -298,6 +298,160 @@ button:hover {
   display: none;
 }
 
+.fortress-shell {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: linear-gradient(
+    180deg,
+    #6ec6ff 0%,
+    #bfe9ff 46%,
+    #24321f 46%,
+    #182316 100%
+  );
+}
+
+.fortress-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: crosshair;
+}
+
+.fortress-panel {
+  top: 18px;
+  left: 18px;
+  width: min(380px, calc(100vw - 36px));
+  padding: 14px;
+  border-radius: 8px;
+  transition:
+    width 0.2s ease,
+    padding 0.2s ease;
+}
+
+.fortress-panel.collapsed {
+  width: 54px;
+  padding: 8px;
+}
+
+.fortress-panel h1 {
+  margin-bottom: 4px;
+}
+
+.fortress-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.fortress-brand > div {
+  min-width: 0;
+}
+
+.fortress-panel.collapsed .fortress-brand {
+  justify-content: center;
+  margin-bottom: 0;
+}
+
+.fortress-panel.collapsed .fortress-brand > div,
+.fortress-panel.collapsed .fortress-readout,
+.fortress-panel.collapsed .fortress-buttons,
+.fortress-panel.collapsed .fortress-items {
+  display: none;
+}
+
+.fortress-panel.collapsed .hud-toggle {
+  margin-left: 0;
+}
+
+.fortress-readout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.fortress-readout span {
+  display: block;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.fortress-readout strong {
+  display: block;
+  margin-top: 2px;
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.fortress-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.fortress-buttons button {
+  min-height: 40px;
+  padding: 8px 10px;
+}
+
+.fortress-items {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.fortress-items button {
+  min-height: 42px;
+  padding: 8px 7px;
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+.fortress-items button.active {
+  border-color: var(--accent);
+  background: rgba(83, 226, 168, 0.18);
+}
+
+.fortress-items button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.fortress-message {
+  right: 18px;
+  top: 18px;
+  width: min(300px, calc(100vw - 36px));
+  padding: 14px;
+  border-radius: 8px;
+}
+
+.fortress-message h2 {
+  margin-bottom: 8px;
+}
+
+.fortress-help {
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  max-width: calc(100vw - 36px);
+  padding: 10px 14px;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
 @media (max-width: 760px) {
   .hud-right {
     top: auto;
@@ -308,6 +462,23 @@ button:hover {
 
   .hud-bottom {
     font-size: 0.76rem;
+  }
+
+  .fortress-panel,
+  .fortress-message {
+    left: 12px;
+    right: 12px;
+    width: auto;
+  }
+
+  .fortress-panel.collapsed {
+    right: auto;
+    width: 54px;
+  }
+
+  .fortress-message {
+    top: auto;
+    bottom: 84px;
   }
 }
 

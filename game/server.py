@@ -16,7 +16,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 
 GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
@@ -41,6 +41,11 @@ COLORS = [
     "#55d6ff",
     "#ff8fd4",
 ]
+
+FORTRESS_WIDTH = 1400
+FORTRESS_HEIGHT = 760
+FORTRESS_GRAVITY = 300
+FORTRESS_TICK_RATE = 30
 
 
 @dataclass
@@ -73,6 +78,386 @@ class Bullet:
     ttl: float = BULLET_TTL
 
 
+@dataclass
+class FortressClient:
+    id: str
+    writer: asyncio.StreamWriter
+    slot: int = -1
+    write_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+
+
+class FortressMatch:
+    def __init__(self) -> None:
+        self.clients: dict[str, FortressClient] = {}
+        self.slots: list[str | None] = [None, None]
+        self.next_client_id = 1
+        self.terrain: list[int] = []
+        self.players: list[dict[str, Any]] = []
+        self.turn = 0
+        self.wind = 0
+        self.projectile: dict[str, Any] | None = None
+        self.explosion: dict[str, Any] | None = None
+        self.game_over = False
+        self.status = ""
+        self.turn_delay_at = 0.0
+        self.reset()
+
+    def create_client(self, writer: asyncio.StreamWriter) -> FortressClient:
+        client = FortressClient(id=f"f{self.next_client_id}", writer=writer)
+        self.next_client_id += 1
+        return client
+
+    def add_client(self, client: FortressClient, role: str) -> None:
+        self.clients[client.id] = client
+        if role == "host":
+            self.reset()
+            self.assign_slot(client, 0)
+            return
+        if self.slots[1] is None:
+            self.assign_slot(client, 1)
+
+    def assign_slot(self, client: FortressClient, slot: int) -> None:
+        previous = self.slots[slot]
+        if previous and previous in self.clients:
+            self.clients[previous].slot = -1
+        self.slots[slot] = client.id
+        client.slot = slot
+
+    def remove_client(self, client: FortressClient) -> None:
+        for index, client_id in enumerate(self.slots):
+            if client_id == client.id:
+                self.slots[index] = None
+        self.clients.pop(client.id, None)
+        if not self.ready():
+            self.projectile = None
+            self.turn_delay_at = 0.0
+
+    def ready(self) -> bool:
+        return all(self.slots)
+
+    def reset(self) -> None:
+        self.players = [
+            self.create_player("P1", "#53e2a8", 170, 45, 8, 82),
+            self.create_player("P2", "#ffbc54", 1230, 135, 98, 172),
+        ]
+        self.build_terrain()
+        self.place_players()
+        self.turn = 0
+        self.wind = self.random_wind()
+        self.projectile = None
+        self.explosion = None
+        self.game_over = False
+        self.turn_delay_at = 0.0
+        self.status = "P1 턴. 이동, 포각, 파워를 조절하세요."
+
+    def create_player(
+        self,
+        name: str,
+        color: str,
+        x: int,
+        angle: int,
+        min_angle: int,
+        max_angle: int,
+    ) -> dict[str, Any]:
+        return {
+            "name": name,
+            "color": color,
+            "x": x,
+            "y": 0,
+            "angle": angle,
+            "minAngle": min_angle,
+            "maxAngle": max_angle,
+            "power": 60,
+            "health": 100,
+            "shield": False,
+            "activeItem": "",
+            "items": {"repair": 1, "shield": 1, "power": 1},
+        }
+
+    def random_wind(self) -> int:
+        return round((random.random() * 2 - 1) * 70)
+
+    def build_terrain(self) -> None:
+        self.terrain = []
+        for x in range(FORTRESS_WIDTH + 1):
+            y = (
+                535
+                + math.sin(x / 105) * 48
+                + math.sin(x / 47) * 21
+                + math.sin(x / 230) * 34
+            )
+            self.terrain.append(self.clamp(round(y), 390, 660))
+        for _ in range(4):
+            for x in range(1, len(self.terrain) - 1):
+                self.terrain[x] = round(
+                    (self.terrain[x - 1] + self.terrain[x] * 2 + self.terrain[x + 1])
+                    / 4
+                )
+
+    def terrain_at(self, x: float) -> int:
+        return self.terrain[self.clamp(round(x), 0, FORTRESS_WIDTH)]
+
+    def place_players(self) -> None:
+        for player in self.players:
+            player["y"] = self.terrain_at(player["x"]) - 18
+
+    def current_player(self) -> dict[str, Any]:
+        return self.players[self.turn]
+
+    def handle_message(self, client: FortressClient, raw: str) -> None:
+        try:
+            message = json.loads(raw)
+        except json.JSONDecodeError:
+            return
+        if message.get("type") != "fortress_action":
+            return
+        self.handle_action(client, message)
+
+    def handle_action(self, client: FortressClient, message: dict[str, Any]) -> None:
+        action = str(message.get("action") or "")
+        if action == "reset" and client.slot in (0, 1):
+            self.reset()
+            return
+        if (
+            client.slot != self.turn
+            or not self.ready()
+            or self.game_over
+            or self.projectile
+            or self.turn_delay_at
+        ):
+            return
+        if action == "move":
+            self.move_player(self.safe_float(message.get("delta"), 0))
+        elif action == "angle":
+            self.adjust_angle(self.safe_float(message.get("delta"), 0))
+        elif action == "power":
+            self.adjust_power(self.safe_float(message.get("delta"), 0))
+        elif action == "fire":
+            self.fire()
+        elif action == "item":
+            self.use_item(str(message.get("item") or ""))
+
+    def move_player(self, delta: float) -> None:
+        player = self.current_player()
+        other = self.players[1 - self.turn]
+        delta = self.clamp(delta, -20, 20)
+        next_x = self.clamp(player["x"] + delta, 50, FORTRESS_WIDTH - 50)
+        if abs(next_x - other["x"]) < 72:
+            return
+        player["x"] = next_x
+        player["y"] = self.terrain_at(player["x"]) - 18
+
+    def adjust_angle(self, delta: float) -> None:
+        player = self.current_player()
+        player["angle"] = self.clamp(
+            player["angle"] + delta,
+            player["minAngle"],
+            player["maxAngle"],
+        )
+
+    def adjust_power(self, delta: float) -> None:
+        player = self.current_player()
+        player["power"] = self.clamp(player["power"] + delta, 20, 100)
+
+    def use_item(self, item: str) -> None:
+        player = self.current_player()
+        items = player["items"]
+        if item not in items or items[item] <= 0:
+            return
+        if item == "repair":
+            items["repair"] -= 1
+            player["health"] = min(100, player["health"] + 25)
+            self.status = f"{player['name']} 체력 25 회복."
+            self.finish_turn_soon()
+            return
+        if item == "shield":
+            items["shield"] -= 1
+            player["shield"] = True
+            self.status = f"{player['name']} 보호막 사용."
+            self.finish_turn_soon()
+            return
+        player["activeItem"] = "" if player["activeItem"] == "power" else "power"
+        self.status = (
+            f"{player['name']} 강화탄 장전."
+            if player["activeItem"]
+            else f"{player['name']} 강화탄 취소."
+        )
+
+    def fire(self) -> None:
+        player = self.current_player()
+        radians = (player["angle"] * math.pi) / 180
+        speed = 145 + player["power"] * 5.1
+        power_shot = player["activeItem"] == "power" and player["items"]["power"] > 0
+        if power_shot:
+            player["items"]["power"] -= 1
+        player["activeItem"] = ""
+        self.projectile = {
+            "owner": self.turn,
+            "x": player["x"] + math.cos(radians) * 31,
+            "y": player["y"] - 21 - math.sin(radians) * 31,
+            "vx": math.cos(radians) * speed,
+            "vy": -math.sin(radians) * speed,
+            "radius": 72 if power_shot else 52,
+            "damage": 48 if power_shot else 34,
+            "age": 0.0,
+        }
+        self.status = f"{player['name']} 발사."
+
+    def finish_turn_soon(self) -> None:
+        self.turn_delay_at = time.monotonic() + 0.65
+
+    def next_turn(self) -> None:
+        self.current_player()["activeItem"] = ""
+        self.turn = 1 - self.turn
+        self.wind = self.random_wind()
+        self.turn_delay_at = 0.0
+        self.status = f"{self.current_player()['name']} 턴. 이동, 포각, 파워를 조절하세요."
+
+    def update(self, dt: float, now: float) -> None:
+        if self.turn_delay_at and now >= self.turn_delay_at and not self.projectile:
+            self.next_turn()
+        if self.ready():
+            self.update_projectile(dt)
+        if self.explosion:
+            self.explosion["age"] += dt
+            if self.explosion["age"] > 0.55:
+                self.explosion = None
+
+    def update_projectile(self, dt: float) -> None:
+        shot = self.projectile
+        if not shot:
+            return
+        shot["age"] += dt
+        shot["vx"] += self.wind * 0.22 * dt
+        shot["vy"] += FORTRESS_GRAVITY * dt
+        shot["x"] += shot["vx"] * dt
+        shot["y"] += shot["vy"] * dt
+
+        for index, player in enumerate(self.players):
+            if index == shot["owner"] and shot["age"] < 0.18:
+                continue
+            if math.hypot(shot["x"] - player["x"], shot["y"] - player["y"]) <= 24:
+                self.explode(shot["x"], shot["y"])
+                return
+
+        if shot["x"] < 0 or shot["x"] > FORTRESS_WIDTH or shot["y"] > FORTRESS_HEIGHT:
+            self.explode(
+                self.clamp(shot["x"], 0, FORTRESS_WIDTH),
+                self.clamp(shot["y"], 0, FORTRESS_HEIGHT),
+            )
+            return
+
+        if shot["y"] >= self.terrain_at(shot["x"]):
+            self.explode(shot["x"], shot["y"])
+
+    def explode(self, x: float, y: float) -> None:
+        shot = self.projectile
+        if not shot:
+            return
+        self.projectile = None
+        self.explosion = {"x": x, "y": y, "radius": shot["radius"], "age": 0.0}
+        self.carve_terrain(x, y, shot["radius"])
+        self.apply_explosion_damage(x, y, shot["radius"], shot["damage"])
+        self.place_players()
+        if not self.game_over:
+            self.finish_turn_soon()
+
+    def carve_terrain(self, cx: float, cy: float, radius: float) -> None:
+        start = self.clamp(math.floor(cx - radius), 0, FORTRESS_WIDTH)
+        end = self.clamp(math.ceil(cx + radius), 0, FORTRESS_WIDTH)
+        for x in range(start, end + 1):
+            dx = x - cx
+            depth = math.sqrt(max(0, radius * radius - dx * dx)) * 0.72
+            self.terrain[x] = self.clamp(
+                max(self.terrain[x], round(cy + depth)),
+                0,
+                FORTRESS_HEIGHT - 30,
+            )
+
+    def apply_explosion_damage(
+        self, cx: float, cy: float, radius: float, max_damage: float
+    ) -> None:
+        hits: list[str] = []
+        for player in self.players:
+            distance = math.hypot(player["x"] - cx, player["y"] - cy)
+            if distance > radius + 24:
+                continue
+            damage = round(max_damage * (1 - min(distance, radius) / radius))
+            damage = max(8, damage)
+            if player["shield"]:
+                damage = math.ceil(damage * 0.45)
+                player["shield"] = False
+            player["health"] = max(0, player["health"] - damage)
+            hits.append(f"{player['name']} -{damage}")
+
+        self.status = ", ".join(hits) if hits else "빗나감."
+        loser = next((player for player in self.players if player["health"] <= 0), None)
+        if loser:
+            self.game_over = True
+            winner = next(player for player in self.players if player is not loser)
+            self.status = f"{winner['name']} 승리. R 키로 다시 시작."
+
+    def status_text(self) -> str:
+        if not self.ready():
+            return "상대를 기다리는 중입니다."
+        return self.status
+
+    def state(self) -> dict[str, Any]:
+        return {
+            "type": "fortress_state",
+            "world": {"width": FORTRESS_WIDTH, "height": FORTRESS_HEIGHT},
+            "terrain": self.terrain,
+            "players": [
+                {
+                    **player,
+                    "connected": self.slots[index] is not None,
+                    "x": round(player["x"], 2),
+                    "y": round(player["y"], 2),
+                    "angle": round(player["angle"], 2),
+                    "power": round(player["power"], 2),
+                    "items": dict(player["items"]),
+                }
+                for index, player in enumerate(self.players)
+            ],
+            "turn": self.turn,
+            "wind": self.wind,
+            "projectile": self.visible_projectile(),
+            "explosion": self.visible_explosion(),
+            "gameOver": self.game_over,
+            "ready": self.ready(),
+            "status": self.status_text(),
+        }
+
+    def visible_projectile(self) -> dict[str, Any] | None:
+        if not self.projectile:
+            return None
+        return {
+            "x": round(self.projectile["x"], 2),
+            "y": round(self.projectile["y"], 2),
+            "radius": self.projectile["radius"],
+        }
+
+    def visible_explosion(self) -> dict[str, Any] | None:
+        if not self.explosion:
+            return None
+        return {
+            "x": round(self.explosion["x"], 2),
+            "y": round(self.explosion["y"], 2),
+            "radius": self.explosion["radius"],
+            "age": round(self.explosion["age"], 3),
+        }
+
+    def safe_float(self, value: Any, fallback: float) -> float:
+        try:
+            result = float(value)
+        except (TypeError, ValueError):
+            return fallback
+        return result if math.isfinite(result) else fallback
+
+    def clamp(self, value: float, minimum: float, maximum: float) -> Any:
+        return max(minimum, min(maximum, value))
+
+
 class ArenaServer:
     def __init__(
         self, game_root: Path | str = ROOT, home_path: Path | str | None = None
@@ -83,6 +468,7 @@ class ArenaServer:
         self.bullets: list[Bullet] = []
         self.next_client_id = 1
         self.next_bullet_id = 1
+        self.fortress = FortressMatch()
         self.running = True
 
     async def handle_connection(
@@ -103,7 +489,11 @@ class ArenaServer:
 
         method, path, _ = request_line
         if headers.get("upgrade", "").lower() == "websocket":
-            await self.handle_websocket(reader, writer, headers)
+            parsed = urlparse(path)
+            if parsed.path == "/fortress":
+                await self.handle_fortress_websocket(reader, writer, headers, parsed.query)
+            else:
+                await self.handle_websocket(reader, writer, headers)
             return
 
         await self.serve_static(writer, method, path)
@@ -229,6 +619,56 @@ class ArenaServer:
             except OSError:
                 pass
 
+    async def handle_fortress_websocket(
+        self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+        headers: dict[str, str],
+        query: str,
+    ) -> None:
+        key = headers.get("sec-websocket-key")
+        if not key:
+            writer.close()
+            await writer.wait_closed()
+            return
+
+        accept = base64.b64encode(hashlib.sha1((key + GUID).encode()).digest()).decode()
+        writer.write(
+            (
+                "HTTP/1.1 101 Switching Protocols\r\n"
+                "Upgrade: websocket\r\n"
+                "Connection: Upgrade\r\n"
+                f"Sec-WebSocket-Accept: {accept}\r\n\r\n"
+            ).encode("ascii")
+        )
+        await writer.drain()
+
+        values = parse_qs(query)
+        role = values.get("role", ["client"])[0]
+        client = self.fortress.create_client(writer)
+        self.fortress.add_client(client, role)
+        await self.send_json(
+            writer,
+            {"type": "fortress_welcome", "id": client.id, "slot": client.slot},
+            client.write_lock,
+        )
+
+        try:
+            while self.running:
+                message = await self.read_ws_message(reader)
+                if message is None:
+                    break
+                self.fortress.handle_message(client, message)
+        except (asyncio.IncompleteReadError, ConnectionError, OSError, UnicodeDecodeError):
+            pass
+        finally:
+            self.fortress.remove_client(client)
+            writer.close()
+            try:
+                await writer.wait_closed()
+            except OSError:
+                pass
+
     def create_client(self, writer: asyncio.StreamWriter) -> Client:
         client_id = f"p{self.next_client_id}"
         self.next_client_id += 1
@@ -331,7 +771,9 @@ class ArenaServer:
             last = now
             self.update_players(dt, now)
             self.update_bullets(dt)
+            self.fortress.update(dt, now)
             await self.broadcast_state()
+            await self.broadcast_fortress_state()
             await asyncio.sleep(1 / TICK_RATE)
 
     def update_players(self, dt: float, now: float) -> None:
@@ -464,6 +906,21 @@ class ArenaServer:
                 stale.append(client.id)
         for client_id in stale:
             self.clients.pop(client_id, None)
+
+    async def broadcast_fortress_state(self) -> None:
+        if not self.fortress.clients:
+            return
+        state = self.fortress.state()
+        stale: list[str] = []
+        for client in list(self.fortress.clients.values()):
+            try:
+                await self.send_json(client.writer, {**state, "slot": client.slot}, client.write_lock)
+            except (ConnectionError, OSError):
+                stale.append(client.id)
+        for client_id in stale:
+            client = self.fortress.clients.get(client_id)
+            if client:
+                self.fortress.remove_client(client)
 
 
 async def main() -> None:

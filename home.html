@@ -255,6 +255,15 @@
       color: #fff;
       border-color: transparent;
     }
+    .game-tabs {
+      margin-bottom: 12px;
+    }
+    .game-pane {
+      display: none;
+    }
+    .game-pane.active {
+      display: block;
+    }
     .c1z button {
       width: 34px;
       height: 34px;
@@ -1890,7 +1899,7 @@
       <button class="c1y" id="logToggle" title="로그 워크벤치">
         <i class="fas fa-bug"></i>
       </button>
-      <button class="c1y" id="gameToggle" title="LAN 아레나 게임">
+      <button class="c1y" id="gameToggle" title="게임">
         <i class="fas fa-gamepad"></i>
       </button>
       <button class="c1y" id="chatToggle" title="Ollama 챗봇">
@@ -1899,9 +1908,10 @@
     </div>
     <div class="c28 cx" id="gamePanel">
       <div class="c1t">
-        <h3><i class="fas fa-gamepad"></i> LAN 아레나</h3>
+        <h3><i class="fas fa-gamepad"></i> 게임</h3>
         <div class="c1t-actions">
           <button
+            id="gameHelpButton"
             class="ck cl"
             type="button"
             data-help-target="gameHelp"
@@ -1911,33 +1921,74 @@
           </button>
         </div>
       </div>
-      <div class="c1e feature-help" id="gameHelp">
-        <div>
-          <strong>호스트</strong>는 방을 만드는 PC입니다. EXE로 실행하면 게임
-          서버가 자동으로 열리고, 브라우저/Docker로 사용할 때는
-          <code>docker compose up -d web-server</code> 또는
-          <code>python game/server.py --host 0.0.0.0 --port 7000</code>으로
-          서버를 먼저 실행하세요.
+      <div class="c29 game-tabs" role="tablist" aria-label="게임 선택">
+        <button
+          type="button"
+          class="active"
+          id="gameTabArena"
+          data-game-tab="arena"
+        >
+          LAN 아레나
+        </button>
+        <button
+          type="button"
+          class="ck"
+          id="gameTabFortress"
+          data-game-tab="fortress"
+        >
+          포트리스
+        </button>
+      </div>
+      <div class="game-pane active" id="gameArenaPane" data-game-pane="arena">
+        <div class="c1e feature-help" id="gameHelp">
+          <div>
+            <strong>호스트</strong>는 방을 만드는 PC입니다. EXE로 실행하면 게임
+            서버가 자동으로 열리고, 브라우저/Docker로 사용할 때는
+            <code>docker compose up -d web-server</code> 또는
+            <code>python game/server.py --host 0.0.0.0 --port 7000</code>으로
+            서버를 먼저 실행하세요.
+          </div>
+          <div>
+            예를 들어 내 PC가 <code>192.168.1.72</code>이고 다른 유저가
+            <code>192.168.1.73</code>이면, 내 PC에서 호스트 IP는
+            <code>192.168.1.72</code>, 게임 포트는 <code>7000</code>으로 둔 뒤
+            <code>호스트</code>를 누릅니다.
+          </div>
+          <div>
+            다른 유저는 브라우저에서 <code>http://192.168.1.72:7000/</code>을
+            열거나, 대시보드를 쓰는 경우 호스트 IP에 <code>192.168.1.72</code>,
+            포트에 <code>7000</code>을 입력하고 <code>입장하기</code>를 누르면
+            됩니다. 다른 유저 자신의 IP인 <code>192.168.1.73</code>을 호스트
+            IP에 넣지 않습니다.
+          </div>
+          <div>
+            접속이 안 되면 호스트 PC의 Windows 방화벽에서 TCP
+            <code>7000</code>을 허용하세요. 아래 bat 생성 영역에서 허용할 원격
+            IP를 <code>192.168.1.73</code>으로 넣으면 해당 PC만 허용하고,
+            비워두면 같은 로컬망을 허용합니다. 생성한 bat는 호스트 PC에서 관리자
+            권한으로 실행해야 합니다.
+          </div>
         </div>
-        <div>
-          예를 들어 내 PC가 <code>192.168.1.72</code>이고 다른 유저가
-          <code>192.168.1.73</code>이면, 내 PC에서 호스트 IP는
-          <code>192.168.1.72</code>, 게임 포트는 <code>7000</code>으로 둔 뒤
-          <code>호스트</code>를 누릅니다.
-        </div>
-        <div>
-          다른 유저는 브라우저에서 <code>http://192.168.1.72:7000/</code>을
-          열거나, 대시보드를 쓰는 경우 호스트 IP에 <code>192.168.1.72</code>,
-          포트에 <code>7000</code>을 입력하고 <code>입장하기</code>를 누르면
-          됩니다. 다른 유저 자신의 IP인 <code>192.168.1.73</code>을 호스트 IP에
-          넣지 않습니다.
-        </div>
-        <div>
-          접속이 안 되면 호스트 PC의 Windows 방화벽에서 TCP <code>7000</code>을
-          허용하세요. 아래 bat 생성 영역에서 허용할 원격 IP를
-          <code>192.168.1.73</code>으로 넣으면 해당 PC만 허용하고, 비워두면 같은
-          로컬망을 허용합니다. 생성한 bat는 호스트 PC에서 관리자 권한으로
-          실행해야 합니다.
+      </div>
+      <div class="game-pane" id="gameFortressPane" data-game-pane="fortress">
+        <div class="c1e feature-help" id="fortressHelp">
+          <div>
+            <strong>포트리스</strong> 탭에서는 아래 <code>호스트</code>와
+            <code>입장하기</code> 버튼이 WebSocket 멀티 모드 포트리스 화면을
+            엽니다. <code>포트리스 혼자하기</code>는 서버 접속 없이 같은 PC에서
+            번갈아 플레이하는 로컬 모드입니다.
+          </div>
+          <div>
+            <code>←/→</code>는 이동, <code>↑/↓</code>는 포각, <code>A/D</code>는
+            파워, <code>Space</code>는 발사입니다. 바람은 턴마다 바뀌며, 포탄
+            폭발은 지형을 깎고 폭발 반경 안의 상대에게 피해를 줍니다.
+          </div>
+          <div>
+            아이템은 <code>1/2/3</code> 키 또는 화면 버튼으로 사용합니다.
+            <code>수리(1)</code>는 체력을 회복하고, <code>보호막(2)</code>은
+            다음 피해를 줄이며, <code>강화탄(3)</code>은 다음 포탄을 더 강하게
+            만듭니다.
+          </div>
         </div>
       </div>
       <div class="c2c">
@@ -1959,6 +2010,9 @@
           <i class="fas fa-play"></i> 호스트</button
         ><button class="ck" type="button" id="gameOpenLocal">
           <i class="fas fa-folder-open"></i> 입장하기
+        </button>
+        <button class="ck" type="button" id="gameOpenSolo">
+          <i class="fas fa-user"></i> 포트리스 혼자하기
         </button>
       </div>
       <div class="c2c">
@@ -3632,9 +3686,12 @@
     }
     function gameSyncFirewallCommand() {
       try {
+        const e =
+          "fortress" === gameActiveTab
+            ? "포트리스 호스트/입장하기는 WebSocket 멀티 모드, 포트리스 혼자하기는 로컬 모드입니다."
+            : "bat 내용을 관리자 권한으로 실행하면 지정 IP/포트의 인바운드가 허용됩니다.";
         ((t("gameFirewallCommand").value = gameFirewallScript()),
-          (t("gameStatus").innerText =
-            "bat 내용을 관리자 권한으로 실행하면 지정 IP/포트의 인바운드가 허용됩니다."));
+          (t("gameStatus").innerText = e));
       } catch (e) {
         ((t("gameFirewallCommand").value = ""),
           (t("gameStatus").innerText = e.message));
@@ -3648,6 +3705,8 @@
           .replace(/:\d+$/, "") || "localhost"
       );
     }
+    const GAME_ASSET_VERSION = "20260528c";
+    let gameActiveTab = "arena";
     function gameIsLauncherShell() {
       return "exe" === gameLauncherParams().launcher || !!window.pywebview;
     }
@@ -3665,7 +3724,7 @@
         (e = document.createElement("div")),
         (e.id = "gameEmbedOverlay"),
         (n.id = "gameEmbedFrame"),
-        (n.title = "LAN 아레나"),
+        (n.title = "게임 화면"),
         (n.tabIndex = 0),
         n.setAttribute("allow", "fullscreen; autoplay"),
         Object.assign(e.style, {
@@ -3719,7 +3778,7 @@
     function gameApplyClientParams(e, n) {
       (e.searchParams.set("host", gameHostValue()),
         e.searchParams.set("port", gamePortValue()),
-        e.searchParams.set("v", "20260528a"),
+        e.searchParams.set("v", GAME_ASSET_VERSION),
         n && e.searchParams.set("auto", "1"));
       return e.toString();
     }
@@ -3738,6 +3797,84 @@
             "/game/index.html",
         e = new URL(i);
       return gameApplyClientParams(e, o);
+    }
+    function gameFortressClientUrl(e = "client") {
+      const n = new URL("game/index.html", window.location.href);
+      (n.searchParams.set("game", "fortress"),
+        n.searchParams.set("mode", "multi"),
+        n.searchParams.set("role", e));
+      return gameApplyClientParams(n, "host" === e);
+    }
+    function gameFortressServerUrl(o = "client") {
+      const n = gameLauncherParams(),
+        i =
+          n.gameUrl ||
+          "http://" +
+            gameHostValue() +
+            ":" +
+            gamePortValue() +
+            "/game/index.html",
+        e = new URL(i);
+      (e.searchParams.set("game", "fortress"), e.searchParams.set("role", o));
+      e.searchParams.set("mode", "multi");
+      return gameApplyClientParams(e, "host" === o);
+    }
+    function gameFortressSoloUrl() {
+      const e = new URL("game/index.html", window.location.href);
+      (e.searchParams.set("game", "fortress"),
+        e.searchParams.set("mode", "local"));
+      return gameApplyClientParams(e, !1);
+    }
+    function gameSelectedHostUrl() {
+      return "fortress" === gameActiveTab
+        ? "exe" === gameLauncherParams().launcher
+          ? gameFortressServerUrl("host")
+          : gameFortressClientUrl("host")
+        : "exe" === gameLauncherParams().launcher
+          ? gameServerClientUrl(!0)
+          : gameLocalClientUrl(!0);
+    }
+    function gameSelectedJoinUrl() {
+      return "fortress" === gameActiveTab
+        ? "exe" === gameLauncherParams().launcher
+          ? gameFortressServerUrl("client")
+          : gameFortressClientUrl("client")
+        : "exe" === gameLauncherParams().launcher
+          ? gameServerClientUrl()
+          : gameLocalClientUrl();
+    }
+    function gameSyncGameButtons() {
+      if ("fortress" === gameActiveTab) {
+        t("gameOpenServer").innerHTML =
+          '<i class="fas fa-play"></i> 포트리스 호스트';
+        t("gameOpenLocal").innerHTML =
+          '<i class="fas fa-folder-open"></i> 포트리스 입장하기';
+        t("gameOpenSolo").style.display = "";
+        return;
+      }
+      ((t("gameOpenServer").innerHTML = '<i class="fas fa-play"></i> 호스트'),
+        (t("gameOpenLocal").innerHTML =
+          '<i class="fas fa-folder-open"></i> 입장하기'),
+        (t("gameOpenSolo").style.display = "none"));
+    }
+    function gameSetActiveTab(e) {
+      gameActiveTab = "fortress" === e ? "fortress" : "arena";
+      (n("[data-game-tab]").forEach((t) => {
+        t.classList.toggle("active", t.dataset.gameTab === gameActiveTab);
+      }),
+        n("[data-game-pane]").forEach((t) => {
+          const n = t.dataset.gamePane === gameActiveTab;
+          (t.classList.toggle("active", n),
+            n ||
+              t
+                .querySelectorAll(".feature-help.show")
+                .forEach((e) => e.classList.remove("show")));
+        }));
+      const i = t("gameHelpButton");
+      i &&
+        (i.dataset.helpTarget =
+          "fortress" === gameActiveTab ? "fortressHelp" : "gameHelp");
+      (gameSyncGameButtons(), gameSyncFirewallCommand());
     }
     function gameLauncherParams() {
       const n = window.GOOD_ETC_LAUNCHER_CONFIG || {},
@@ -3770,24 +3907,26 @@
             gameSyncFirewallCommand();
           };
         }),
+        document.querySelectorAll("[data-game-tab]").forEach((e) => {
+          e.onclick = () => gameSetActiveTab(e.dataset.gameTab || "arena");
+        }),
         (t("gameOpenServer").onclick = () => {
           try {
-            gameOpenUrl(
-              "exe" === gameLauncherParams().launcher
-                ? gameServerClientUrl(!0)
-                : gameLocalClientUrl(!0),
-            );
+            gameOpenUrl(gameSelectedHostUrl());
           } catch (e) {
             t("gameStatus").innerText = e.message;
           }
         }),
         (t("gameOpenLocal").onclick = () => {
           try {
-            if ("exe" === gameLauncherParams().launcher) {
-              gameOpenUrl(gameServerClientUrl());
-              return;
-            }
-            gameOpenUrl(gameLocalClientUrl());
+            gameOpenUrl(gameSelectedJoinUrl());
+          } catch (e) {
+            t("gameStatus").innerText = e.message;
+          }
+        }),
+        (t("gameOpenSolo").onclick = () => {
+          try {
+            gameOpenUrl(gameFortressSoloUrl());
           } catch (e) {
             t("gameStatus").innerText = e.message;
           }
@@ -3811,6 +3950,7 @@
             t("gameStatus").innerText = e.message;
           }
         }),
+        gameSetActiveTab("arena"),
         gameSyncFirewallCommand());
     }
     gameInitPanel();
@@ -5140,9 +5280,7 @@
           Dt("fa-bug", "로그 워크벤치 열기", "log 입력", "log", () =>
             Ot("log"),
           ),
-          Dt("fa-gamepad", "LAN 아레나 열기", "game 입력", "game", () =>
-            Ot("game"),
-          ),
+          Dt("fa-gamepad", "게임 열기", "game 입력", "game", () => Ot("game")),
           Dt(
             "fa-file-invoice",
             "Redmine 열기",
