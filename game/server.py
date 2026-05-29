@@ -135,6 +135,27 @@ class FortressClient:
     write_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 
+@dataclass
+class HubClient:
+    id: str
+    writer: asyncio.StreamWriter
+    name: str = "Guest"
+    room_id: str = ""
+    peer: str = ""
+    connected_at: float = field(default_factory=time.time)
+    write_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+
+
+@dataclass
+class HubRoom:
+    id: str
+    name: str
+    feature: str
+    pin: str = ""
+    host_id: str = ""
+    created_at: float = field(default_factory=time.time)
+
+
 class FortressMatch:
     def __init__(self) -> None:
         self.clients: dict[str, FortressClient] = {}
@@ -641,6 +662,9 @@ class ArenaServer:
         self.next_client_id = 1
         self.next_bullet_id = 1
         self.fortress = FortressMatch()
+        self.hub_clients: dict[str, HubClient] = {}
+        self.hub_rooms: dict[str, HubRoom] = {}
+        self.next_hub_client_id = 1
         self.running = True
 
     async def handle_connection(
@@ -664,6 +688,8 @@ class ArenaServer:
             parsed = urlparse(path)
             if parsed.path == "/fortress":
                 await self.handle_fortress_websocket(reader, writer, headers, parsed.query)
+            elif parsed.path == "/hub":
+                await self.handle_hub_websocket(reader, writer, headers)
             else:
                 await self.handle_websocket(reader, writer, headers)
             return
@@ -839,6 +865,319 @@ class ArenaServer:
             try:
                 await writer.wait_closed()
             except OSError:
+                pass
+
+    async def handle_hub_websocket(
+        self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+        headers: dict[str, str],
+    ) -> None:
+        key = headers.get("sec-websocket-key")
+        if not key:
+            writer.close()
+            await writer.wait_closed()
+            return
+
+        accept = base64.b64encode(hashlib.sha1((key + GUID).encode()).digest()).decode()
+        writer.write(
+            (
+                "HTTP/1.1 101 Switching Protocols\r\n"
+                "Upgrade: websocket\r\n"
+                "Connection: Upgrade\r\n"
+                f"Sec-WebSocket-Accept: {accept}\r\n\r\n"
+            ).encode("ascii")
+        )
+        await writer.drain()
+
+        client = self.create_hub_client(writer)
+        self.hub_clients[client.id] = client
+        await self.send_json(
+            writer,
+            {
+                "type": "hub_welcome",
+                "id": client.id,
+                "serverTime": round(time.time(), 3),
+            },
+            client.write_lock,
+        )
+        await self.send_hub_info(client)
+        await self.send_hub_room_list(client)
+
+        try:
+            while self.running:
+                message = await self.read_ws_message(reader)
+                if message is None:
+                    break
+                await self.handle_hub_message(client, message)
+        except (asyncio.IncompleteReadError, ConnectionError, OSError, UnicodeDecodeError):
+            pass
+        finally:
+            await self.remove_hub_client(client)
+            writer.close()
+            try:
+                await writer.wait_closed()
+            except OSError:
+                pass
+
+    def create_hub_client(self, writer: asyncio.StreamWriter) -> HubClient:
+        client_id = f"h{self.next_hub_client_id}"
+        self.next_hub_client_id += 1
+        peer_info = writer.get_extra_info("peername")
+        peer = str(peer_info[0]) if peer_info else ""
+        return HubClient(id=client_id, writer=writer, peer=peer)
+
+    async def handle_hub_message(self, client: HubClient, raw: str) -> None:
+        try:
+            message = json.loads(raw)
+        except json.JSONDecodeError:
+            return
+
+        kind = str(message.get("type") or "")
+        if kind == "hello":
+            client.name = self.clean_hub_name(message.get("name"))
+            await self.send_hub_info(client)
+            if client.room_id:
+                await self.broadcast_hub_presence(client.room_id)
+            return
+
+        if kind == "room_list":
+            await self.send_hub_room_list(client)
+            return
+
+        if kind == "create_room":
+            await self.create_hub_room(client, message)
+            return
+
+        if kind == "join_room":
+            await self.join_hub_room(
+                client,
+                str(message.get("roomId") or "").strip().upper(),
+                str(message.get("pin") or "").strip()[:24],
+            )
+            return
+
+        if kind == "leave_room":
+            await self.leave_hub_room(client)
+            return
+
+        if kind == "ping":
+            await self.send_json(
+                client.writer,
+                {
+                    "type": "pong",
+                    "sentAt": message.get("sentAt"),
+                    "serverTime": round(time.time(), 3),
+                },
+                client.write_lock,
+            )
+            return
+
+        if kind in {"file_offer", "file_chunk", "file_done", "file_cancel"}:
+            await self.relay_hub_room_message(client, message)
+
+    async def create_hub_room(
+        self, client: HubClient, message: dict[str, Any]
+    ) -> None:
+        feature = str(message.get("feature") or "drop").strip().lower()[:24]
+        if feature not in {"drop", "lobby", "game", "todo", "memo"}:
+            feature = "drop"
+        room = HubRoom(
+            id=self.make_hub_room_id(),
+            name=str(message.get("name") or "LAN Room").strip()[:40] or "LAN Room",
+            feature=feature,
+            pin=str(message.get("pin") or "").strip()[:24],
+            host_id=client.id,
+        )
+        self.hub_rooms[room.id] = room
+        await self.join_hub_room(client, room.id, room.pin, is_new=True)
+        await self.broadcast_hub_room_list()
+
+    async def join_hub_room(
+        self,
+        client: HubClient,
+        room_id: str,
+        pin: str = "",
+        is_new: bool = False,
+    ) -> None:
+        room = self.hub_rooms.get(room_id)
+        if not room:
+            await self.send_hub_error(client, "Room not found.")
+            return
+        if room.pin and room.pin != pin:
+            await self.send_hub_error(client, "PIN does not match.")
+            return
+
+        if client.room_id and client.room_id != room.id:
+            await self.leave_hub_room(client, notify=False)
+        client.room_id = room.id
+        await self.send_json(
+            client.writer,
+            {
+                "type": "room_joined",
+                "room": self.hub_room_payload(room),
+                "isNew": is_new,
+                "participants": self.hub_participants(room.id),
+            },
+            client.write_lock,
+        )
+        await self.broadcast_hub_presence(room.id)
+
+    async def leave_hub_room(
+        self, client: HubClient, notify: bool = True
+    ) -> None:
+        room_id = client.room_id
+        if not room_id:
+            return
+        client.room_id = ""
+        if notify:
+            await self.send_json(
+                client.writer,
+                {"type": "room_left", "roomId": room_id},
+                client.write_lock,
+            )
+        if not any(peer.room_id == room_id for peer in self.hub_clients.values()):
+            self.hub_rooms.pop(room_id, None)
+            await self.broadcast_hub_room_list()
+            return
+        await self.broadcast_hub_presence(room_id)
+
+    async def remove_hub_client(self, client: HubClient) -> None:
+        room_id = client.room_id
+        self.hub_clients.pop(client.id, None)
+        if room_id:
+            if not any(peer.room_id == room_id for peer in self.hub_clients.values()):
+                self.hub_rooms.pop(room_id, None)
+                await self.broadcast_hub_room_list()
+            else:
+                await self.broadcast_hub_presence(room_id)
+
+    async def relay_hub_room_message(
+        self, client: HubClient, message: dict[str, Any]
+    ) -> None:
+        room_id = client.room_id
+        if not room_id or room_id not in self.hub_rooms:
+            await self.send_hub_error(client, "Join a room first.")
+            return
+        allowed = {
+            "type",
+            "transferId",
+            "fileName",
+            "fileSize",
+            "fileType",
+            "chunkIndex",
+            "totalChunks",
+            "data",
+            "size",
+        }
+        payload = {key: message.get(key) for key in allowed if key in message}
+        payload.update(
+            {
+                "senderId": client.id,
+                "senderName": client.name,
+                "roomId": room_id,
+            }
+        )
+        await self.broadcast_hub_room(room_id, payload, exclude=client.id)
+
+    def clean_hub_name(self, value: Any) -> str:
+        return str(value or "Guest").strip()[:24] or "Guest"
+
+    def make_hub_room_id(self) -> str:
+        alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+        while True:
+            room_id = "".join(random.choice(alphabet) for _ in range(5))
+            if room_id not in self.hub_rooms:
+                return room_id
+
+    def hub_room_payload(self, room: HubRoom) -> dict[str, Any]:
+        return {
+            "id": room.id,
+            "name": room.name,
+            "feature": room.feature,
+            "locked": bool(room.pin),
+            "hostId": room.host_id,
+            "count": sum(
+                1 for client in self.hub_clients.values() if client.room_id == room.id
+            ),
+            "createdAt": round(room.created_at, 3),
+        }
+
+    def hub_participants(self, room_id: str) -> list[dict[str, Any]]:
+        return [
+            {
+                "id": client.id,
+                "name": client.name,
+                "peer": client.peer,
+                "connectedAt": round(client.connected_at, 3),
+            }
+            for client in self.hub_clients.values()
+            if client.room_id == room_id
+        ]
+
+    async def send_hub_info(self, client: HubClient) -> None:
+        await self.send_json(
+            client.writer,
+            {
+                "type": "hub_info",
+                "id": client.id,
+                "name": client.name,
+                "peer": client.peer,
+                "serverTime": round(time.time(), 3),
+            },
+            client.write_lock,
+        )
+
+    async def send_hub_room_list(self, client: HubClient) -> None:
+        await self.send_json(
+            client.writer,
+            {
+                "type": "room_list",
+                "rooms": [self.hub_room_payload(room) for room in self.hub_rooms.values()],
+            },
+            client.write_lock,
+        )
+
+    async def send_hub_error(self, client: HubClient, message: str) -> None:
+        await self.send_json(
+            client.writer,
+            {"type": "hub_error", "message": message},
+            client.write_lock,
+        )
+
+    async def broadcast_hub_room_list(self) -> None:
+        payload = {
+            "type": "room_list",
+            "rooms": [self.hub_room_payload(room) for room in self.hub_rooms.values()],
+        }
+        for client in list(self.hub_clients.values()):
+            try:
+                await self.send_json(client.writer, payload, client.write_lock)
+            except (ConnectionError, OSError):
+                pass
+
+    async def broadcast_hub_presence(self, room_id: str) -> None:
+        await self.broadcast_hub_room(
+            room_id,
+            {
+                "type": "presence",
+                "roomId": room_id,
+                "participants": self.hub_participants(room_id),
+            },
+        )
+
+    async def broadcast_hub_room(
+        self,
+        room_id: str,
+        payload: dict[str, Any],
+        exclude: str | None = None,
+    ) -> None:
+        for peer in list(self.hub_clients.values()):
+            if peer.room_id != room_id or peer.id == exclude:
+                continue
+            try:
+                await self.send_json(peer.writer, payload, peer.write_lock)
+            except (ConnectionError, OSError):
                 pass
 
     def create_client(self, writer: asyncio.StreamWriter) -> Client:

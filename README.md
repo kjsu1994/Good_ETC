@@ -281,3 +281,11 @@ npm run format
 - If the launcher had to use `7001`, `7002`, or another port, use that actual port instead of `7000`.
 - The Arena and Fortress game screens include a collapsible connection info panel with the current page URL, WebSocket target, active port, and LAN share URL.
 - A URL that starts with `http://127.0.0.1:8081/...` only works on the PC that is opening it. For another PC, use the host PC LAN IP in the page address or use the in-game LAN share URL.
+
+## LAN Center and LAN Drop
+
+- The left tool dock has a separate network icon group for socket-based LAN tools.
+- LAN Center connects to the existing app server through `ws://HOST_IP:PORT/hub`, shows the current share URL, open rooms, participants, and connection diagnostics.
+- LAN Drop uses the same `/hub` socket and does not require another port. Create or join a room, then drag files into the drop area.
+- File transfers are relayed in memory through WebSocket chunks and are limited to 100MB per file for the first version. People in the same room receive files automatically and can download them from the receive list.
+- Drop rooms use a generated PIN by default. The invite URL includes the room and PIN for LAN convenience.

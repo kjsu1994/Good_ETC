@@ -34,3 +34,7 @@ LAN 아레나는 `/ws`, 포트리스 멀티 모드는 `/fortress` WebSocket을 �
 - Fortress multiplayer join uses `http://192.168.1.154:7000/game/index.html?game=fortress&mode=multi&role=client&host=192.168.1.154&port=7000`.
 - The game screen has a collapsible connection info panel that shows the current page URL, WebSocket target, active port, and a LAN share URL for another PC.
 - The Windows launcher may use `7001`, `7002`, and so on if `7000` is busy. Use the port shown in the dashboard or in the in-game connection panel.
+
+## Hub socket
+
+The server also exposes `/hub` for LAN Center and LAN Drop. It reuses the same HTTP/WebSocket port as the games, so no extra socket port is required. LAN Drop relays file chunks between browsers in the same room and currently limits each file to 100MB.

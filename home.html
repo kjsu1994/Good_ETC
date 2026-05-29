@@ -264,6 +264,99 @@
     .game-pane.active {
       display: block;
     }
+    .lan-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .lan-grid .wide {
+      grid-column: 1 / -1;
+    }
+    .lan-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .lan-toolbar button {
+      flex: 1;
+      min-height: 38px;
+      justify-content: center;
+    }
+    .lan-status,
+    .lan-list,
+    .lan-drop-zone,
+    .lan-transfer-list {
+      border: 1px solid var(--b);
+      border-radius: 14px;
+      background: rgba(0, 0, 0, 0.04);
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+    .lan-status {
+      font-size: 0.84rem;
+      line-height: 1.6;
+      word-break: break-word;
+    }
+    .lan-list {
+      display: grid;
+      gap: 8px;
+      max-height: 220px;
+      overflow: auto;
+    }
+    .lan-room,
+    .lan-peer,
+    .lan-transfer {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 10px;
+      border: 1px solid var(--b);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.06);
+      font-size: 0.82rem;
+      word-break: break-word;
+    }
+    .lan-room button,
+    .lan-transfer button {
+      min-height: 32px;
+      padding: 6px 9px;
+    }
+    .lan-drop-zone {
+      min-height: 132px;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      border-style: dashed;
+      cursor: pointer;
+      transition:
+        border-color 0.2s,
+        background 0.2s;
+    }
+    .lan-drop-zone.dragging {
+      border-color: var(--a);
+      background: rgba(76, 175, 80, 0.12);
+    }
+    .lan-drop-zone strong {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 0.98rem;
+    }
+    .lan-progress {
+      grid-column: 1 / -1;
+      height: 7px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: rgba(0, 0, 0, 0.12);
+    }
+    .lan-progress span {
+      display: block;
+      height: 100%;
+      width: 0;
+      background: var(--a);
+    }
     .c1z button {
       width: 34px;
       height: 34px;
@@ -1514,6 +1607,9 @@
         max-height: 120px;
         overflow: auto;
       }
+      .lan-grid {
+        grid-template-columns: 1fr;
+      }
       .c1y,
       .c2f {
         width: 48px;
@@ -1905,6 +2001,83 @@
       <button class="c1y" id="chatToggle" title="Ollama 챗봇">
         <i class="fas fa-comments"></i>
       </button>
+    </div>
+    <button
+      class="c1y"
+      type="button"
+      id="lanMasterToggle"
+      title="LAN 소켓 도구"
+    >
+      <i class="fas fa-network-wired"></i>
+    </button>
+    <div class="c27" id="lanToolMenu">
+      <button class="c1y" id="lanCenterToggle" title="LAN 센터">
+        <i class="fas fa-network-wired"></i>
+      </button>
+      <button class="c1y" id="lanDropToggle" title="LAN Drop">
+        <i class="fas fa-cloud-upload-alt"></i>
+      </button>
+    </div>
+    <div class="c28 cx" id="lanCenterPanel">
+      <div class="c1t">
+        <h3><i class="fas fa-network-wired"></i> LAN 센터</h3>
+      </div>
+      <div class="lan-grid">
+        <input id="lanName" class="c26" placeholder="내 이름" />
+        <input id="lanHost" class="c26" placeholder="호스트 IP" />
+        <input id="lanPort" class="c26" inputmode="numeric" value="7000" />
+        <input id="lanShareUrl" class="c26" readonly />
+      </div>
+      <div class="lan-toolbar">
+        <button type="button" id="lanConnect">
+          <i class="fas fa-plug"></i> 연결
+        </button>
+        <button type="button" class="ck" id="lanDisconnect">
+          <i class="fas fa-unlink"></i> 해제
+        </button>
+        <button type="button" class="ck" id="lanCopyShare">
+          <i class="fas fa-copy"></i> 주소 복사
+        </button>
+      </div>
+      <div class="lan-status" id="lanStatus"></div>
+      <h4>방 목록</h4>
+      <div class="lan-list" id="lanRoomList"></div>
+      <h4>참가자</h4>
+      <div class="lan-list" id="lanPeerList"></div>
+    </div>
+    <div class="c28 cx" id="lanDropPanel">
+      <div class="c1t">
+        <h3><i class="fas fa-cloud-upload-alt"></i> LAN Drop</h3>
+      </div>
+      <div class="lan-grid">
+        <input id="dropRoomName" class="c26" placeholder="방 이름" />
+        <input id="dropRoomPin" class="c26" placeholder="PIN 선택 입력" />
+        <input id="dropRoomId" class="c26" placeholder="방 코드" />
+        <input id="dropShareUrl" class="c26" readonly />
+      </div>
+      <div class="lan-toolbar">
+        <button type="button" id="dropCreateRoom">
+          <i class="fas fa-plus"></i> 공유 시작
+        </button>
+        <button type="button" class="ck" id="dropJoinRoom">
+          <i class="fas fa-sign-in-alt"></i> 참여
+        </button>
+        <button type="button" class="ck" id="dropCopyShare">
+          <i class="fas fa-copy"></i> 초대 복사
+        </button>
+      </div>
+      <div class="lan-status" id="dropStatus"></div>
+      <div class="lan-drop-zone" id="dropZone">
+        <div>
+          <strong>파일을 여기에 드롭</strong>
+          <span>같은 방 참가자에게 자동 전송됩니다. 파일당 최대 100MB.</span>
+        </div>
+      </div>
+      <input type="file" id="dropFileInput" class="c1d" multiple />
+      <h4>전송</h4>
+      <div class="lan-transfer-list" id="dropSendList"></div>
+      <h4>수신</h4>
+      <div class="lan-transfer-list" id="dropReceiveList"></div>
     </div>
     <div class="c28 cx" id="gamePanel">
       <div class="c1t">
@@ -2673,6 +2846,8 @@
       memoNotes: "smart_memo_notes_v32",
       memoActive: "smart_memo_active_v32",
       ollamaChatMessages: "ollama_chat_messages_v1",
+      lanName: "lan_socket_name_v1",
+      lanLastRoom: "lan_socket_last_room_v1",
       favoriteLinks: "favorite_links_v1",
       analysisErrorKnowledgeBase: "analysis_error_kb_v1",
       analysisLogInput: "analysis_log_input",
@@ -3231,19 +3406,31 @@
     // Tool panel shell and Ollama chat.
     const F = t("masterToolToggle"),
       P = t("x2n"),
+      lanMenuToggle = t("lanMasterToggle"),
+      lanToolMenu = t("lanToolMenu"),
       K = i(".c2e");
     function X(e) {
       (n(".c28").forEach((t) =>
         t.classList.toggle("open", t.id === e + "Panel"),
       ),
-        "chat" === e && ee());
+        "chat" === e && ee(),
+        ["lanCenter", "lanDrop"].includes(e) && lanEnsureHub(),
+        "lanDrop" === e && lanRefreshDropShare());
     }
     function B() {
-      (X(""), P.classList.remove("show"), F.classList.remove("active"));
+      (X(""),
+        P.classList.remove("show"),
+        F.classList.remove("active"),
+        lanToolMenu.classList.remove("show"),
+        lanMenuToggle.classList.remove("active"));
     }
     ((F.onclick = () => {
       (P.classList.toggle("show"), F.classList.toggle("active"));
     }),
+      (lanMenuToggle.onclick = () => {
+        (lanToolMenu.classList.toggle("show"),
+          lanMenuToggle.classList.toggle("active"));
+      }),
       [
         "charCode",
         "json",
@@ -3252,6 +3439,8 @@
         "diff",
         "textTool",
         "log",
+        "lanCenter",
+        "lanDrop",
         "game",
         "chat",
       ].forEach(
@@ -4021,7 +4210,591 @@
         gameSetActiveTab("arena"),
         gameSyncFirewallCommand());
     }
-    gameInitPanel();
+    try {
+      gameInitPanel();
+    } catch (e) {
+      console.error("gameInitPanel failed", e);
+    }
+    const LAN_DROP_MAX_FILE_SIZE = 100 * 1024 * 1024;
+    const LAN_DROP_CHUNK_SIZE = 32 * 1024;
+    const lanState = {
+      socket: null,
+      clientId: "",
+      connected: !1,
+      room: null,
+      rooms: [],
+      peers: [],
+      pingAt: 0,
+      transfersIn: {},
+      transfersOut: {},
+      pendingJoin: null,
+      connectFailed: !1,
+    };
+    function lanParamDefaults() {
+      const e = gameLauncherParams();
+      return {
+        host:
+          e.host ||
+          ("file:" === window.location.protocol
+            ? "localhost"
+            : window.location.hostname || "localhost"),
+        port: e.port || window.location.port || t("gamePort")?.value || "7000",
+      };
+    }
+    function lanHostValue() {
+      return (
+        gameCleanBatValue(t("lanHost").value, "localhost")
+          .replace(/^(?:https?|wss?):\/\//i, "")
+          .split("/")[0]
+          .replace(/:\d+$/, "") || "localhost"
+      );
+    }
+    function lanPortValue() {
+      const e = Number(String(t("lanPort").value || "").trim());
+      if (!Number.isInteger(e) || e < 1 || e > 65535) {
+        throw new Error("LAN 포트는 1~65535 사이 숫자여야 합니다.");
+      }
+      return e;
+    }
+    function lanWsUrl() {
+      const e = window.location.protocol === "https:" ? "wss" : "ws";
+      return e + "://" + lanHostValue() + ":" + lanPortValue() + "/hub";
+    }
+    function lanHomeShareUrl(extra = {}) {
+      const e = new URL(
+        "http://" + lanHostValue() + ":" + lanPortValue() + "/home.html",
+      );
+      Object.entries(extra).forEach(([t, n]) => {
+        "" !== String(n || "") && e.searchParams.set(t, n);
+      });
+      return e.toString();
+    }
+    function lanSetStatus(e) {
+      const n = t("lanStatus");
+      n && (n.innerHTML = e);
+    }
+    function dropSetStatus(e) {
+      const n = t("dropStatus");
+      n && (n.innerHTML = e);
+    }
+    function lanSetConnectBusy(e) {
+      const n = t("lanConnect");
+      if (!n) return;
+      n.disabled = !!e;
+      n.innerHTML = e
+        ? '<i class="fas fa-circle-notch fa-spin"></i> 연결 중'
+        : '<i class="fas fa-plug"></i> 연결';
+    }
+    function lanSocketActive() {
+      return (
+        lanState.socket &&
+        [WebSocket.OPEN, WebSocket.CONNECTING].includes(
+          lanState.socket.readyState,
+        )
+      );
+    }
+    function lanDiagnosticsText() {
+      const e = [];
+      try {
+        const n = lanHostValue();
+        e.push("Hub: <code>" + Me(lanWsUrl()) + "</code>");
+        e.push("Share: <code>" + Me(t("lanShareUrl").value || "") + "</code>");
+        gameIsLoopbackHost(n) &&
+          e.push(
+            "<strong>Warning:</strong> localhost/127.x는 이 PC에서만 유효합니다. 다른 PC는 호스트 LAN IP를 사용해야 합니다.",
+          );
+        gameIsLoopbackHost(window.location.hostname) &&
+          e.push(
+            "<strong>Warning:</strong> 현재 페이지가 localhost/127.x로 열렸습니다. 다른 PC에는 LAN Share URL을 전달하세요.",
+          );
+      } catch (n) {
+        e.push("<strong>설정 오류:</strong> " + Me(n.message));
+      }
+      if (lanState.pingAt) {
+        e.push(
+          "Ping: <code>" +
+            Math.max(0, Date.now() - lanState.pingAt) +
+            "ms</code>",
+        );
+      }
+      return e.join("<br>");
+    }
+    function lanRefreshShareUrls() {
+      try {
+        t("lanShareUrl").value = lanHomeShareUrl({ tool: "lan" });
+        lanRefreshDropShare();
+        if (t("lanStatus")) {
+          lanSetStatus(
+            (lanState.connected ? "연결됨" : "연결 대기") +
+              "<br>" +
+              lanDiagnosticsText(),
+          );
+        }
+      } catch (e) {
+        t("lanShareUrl").value = "";
+        lanSetStatus("주소 생성 실패: " + Me(e.message));
+      }
+    }
+    function lanRefreshDropShare() {
+      try {
+        const e =
+          lanState.room?.id || t("dropRoomId").value.trim().toUpperCase();
+        t("dropShareUrl").value = e
+          ? lanHomeShareUrl({
+              tool: "drop",
+              room: e,
+              pin: t("dropRoomPin").value.trim(),
+            })
+          : lanHomeShareUrl({ tool: "drop" });
+      } catch (e) {
+        t("dropShareUrl").value = "";
+        dropSetStatus("초대 주소 생성 실패: " + Me(e.message));
+      }
+    }
+    function lanEnsureHub() {
+      lanRefreshShareUrls();
+      if (lanSocketActive()) {
+        return;
+      }
+      lanSetStatus("연결 대기<br>" + lanDiagnosticsText());
+    }
+    function lanConnect(autoJoin = null) {
+      try {
+        if (lanSocketActive()) {
+          if (autoJoin) lanState.pendingJoin = autoJoin;
+          lanSetStatus(
+            (lanState.socket.readyState === WebSocket.CONNECTING
+              ? "이미 연결 시도 중"
+              : "이미 연결됨") +
+              "<br>" +
+              lanDiagnosticsText(),
+          );
+          return;
+        }
+        const e = lanWsUrl();
+        lanState.pendingJoin = autoJoin;
+        lanState.connectFailed = !1;
+        lanSetConnectBusy(!0);
+        lanSetStatus("연결 중: <code>" + Me(e) + "</code>");
+        dropSetStatus("LAN Hub 연결 중입니다.");
+        const n = new WebSocket(e);
+        lanState.socket = n;
+        n.addEventListener("open", () => {
+          lanState.connected = !0;
+          lanState.connectFailed = !1;
+          lanSetConnectBusy(!1);
+          s.setItem(STORAGE_KEYS.lanName, t("lanName").value.trim() || "Guest");
+          lanSend({
+            type: "hello",
+            name: t("lanName").value.trim() || "Guest",
+          });
+          lanSend({ type: "room_list" });
+          lanPing();
+          lanSetStatus("연결됨<br>" + lanDiagnosticsText());
+          dropSetStatus("연결됨. 방을 만들거나 참여하세요.");
+        });
+        n.addEventListener("message", (e) => lanHandleMessage(e.data));
+        n.addEventListener("close", () => {
+          lanSetConnectBusy(!1);
+          lanState.connected = !1;
+          lanState.clientId = "";
+          lanState.room = null;
+          lanState.peers = [];
+          lanState.socket === n && (lanState.socket = null);
+          lanSetStatus(
+            (lanState.connectFailed ? "연결 실패" : "연결 끊김") +
+              "<br>" +
+              lanDiagnosticsText(),
+          );
+          dropSetStatus(
+            lanState.connectFailed
+              ? "연결 실패. 호스트 IP, 포트, 방화벽을 확인하세요."
+              : "연결이 끊겼습니다.",
+          );
+          lanState.connectFailed = !1;
+          lanRenderRooms();
+          lanRenderPeers();
+        });
+        n.addEventListener("error", () => {
+          lanState.connectFailed = !0;
+          lanSetConnectBusy(!1);
+          lanSetStatus("연결 실패<br>" + lanDiagnosticsText());
+          dropSetStatus("연결 실패. 호스트 IP, 포트, 방화벽을 확인하세요.");
+        });
+      } catch (e) {
+        lanSetConnectBusy(!1);
+        lanSetStatus("연결 준비 실패: " + Me(e.message));
+        dropSetStatus("연결 준비 실패: " + Me(e.message));
+        console.error("lanConnect failed", e);
+      }
+    }
+    function lanDisconnect() {
+      lanSetConnectBusy(!1);
+      lanState.socket?.close();
+      lanState.socket = null;
+      lanState.connected = !1;
+      lanSetStatus("연결 해제<br>" + lanDiagnosticsText());
+    }
+    function lanSend(e) {
+      if (!lanState.socket || lanState.socket.readyState !== WebSocket.OPEN)
+        return !1;
+      lanState.socket.send(c(e));
+      return !0;
+    }
+    function lanPing() {
+      lanState.pingAt = Date.now();
+      lanSend({ type: "ping", sentAt: lanState.pingAt });
+    }
+    function lanHandleMessage(e) {
+      const n = r(e);
+      if ("hub_welcome" === n.type) {
+        lanState.clientId = n.id;
+        return;
+      }
+      if ("hub_info" === n.type) {
+        lanSetStatus("연결됨<br>" + lanDiagnosticsText());
+        lanJoinPendingRoom();
+        return;
+      }
+      if ("room_list" === n.type) {
+        lanState.rooms = Array.isArray(n.rooms) ? n.rooms : [];
+        lanRenderRooms();
+        return;
+      }
+      if ("room_joined" === n.type) {
+        lanState.room = n.room;
+        lanState.peers = n.participants || [];
+        t("dropRoomId").value = n.room.id;
+        s.setItem(STORAGE_KEYS.lanLastRoom, n.room.id);
+        lanRefreshDropShare();
+        dropSetStatus(
+          "방 참여 중: <code>" +
+            Me(n.room.name + " / " + n.room.id) +
+            "</code>",
+        );
+        lanRenderPeers();
+        lanSend({ type: "room_list" });
+        return;
+      }
+      if ("presence" === n.type) {
+        lanState.peers = n.participants || [];
+        lanRenderPeers();
+        return;
+      }
+      if ("pong" === n.type) {
+        lanSetStatus("연결됨<br>" + lanDiagnosticsText());
+        return;
+      }
+      if ("hub_error" === n.type) {
+        dropSetStatus(Me(n.message || "Hub error"));
+        lanSetStatus("오류: " + Me(n.message || "Hub error"));
+        return;
+      }
+      if ("file_offer" === n.type) dropReceiveOffer(n);
+      if ("file_chunk" === n.type) dropReceiveChunk(n);
+      if ("file_done" === n.type) dropReceiveDone(n);
+    }
+    function lanJoinPendingRoom() {
+      if (!lanState.pendingJoin) return;
+      const e = lanState.pendingJoin;
+      lanState.pendingJoin = null;
+      e.create ? dropCreateRoom() : dropJoinRoom(e.roomId, e.pin);
+    }
+    function lanRenderRooms() {
+      const e = t("lanRoomList");
+      e.innerHTML = "";
+      if (!lanState.rooms.length) {
+        e.textContent = "열린 LAN 방이 없습니다.";
+        return;
+      }
+      lanState.rooms.forEach((n) => {
+        const i = o("div");
+        i.className = "lan-room";
+        i.innerHTML =
+          "<span><strong>" +
+          Me(n.name) +
+          "</strong><br>" +
+          Me(n.feature) +
+          " · " +
+          Me(n.id) +
+          " · " +
+          (n.count || 0) +
+          "명" +
+          (n.locked ? " · PIN" : "") +
+          '</span><button type="button" class="ck">참여</button>';
+        i.querySelector("button").onclick = () => {
+          t("dropRoomId").value = n.id;
+          X("lanDrop");
+        };
+        e.appendChild(i);
+      });
+    }
+    function lanRenderPeers() {
+      const e = t("lanPeerList");
+      e.innerHTML = "";
+      if (!lanState.peers.length) {
+        e.textContent = "아직 같은 방 참가자가 없습니다.";
+        return;
+      }
+      lanState.peers.forEach((n) => {
+        const i = o("div");
+        i.className = "lan-peer";
+        i.innerHTML =
+          "<span><strong>" +
+          Me(n.name) +
+          "</strong><br>" +
+          Me(n.peer || "-") +
+          "</span><span>" +
+          (n.id === lanState.clientId ? "나" : "연결") +
+          "</span>";
+        e.appendChild(i);
+      });
+    }
+    function dropCreateRoom() {
+      if (!lanState.connected) {
+        lanConnect({ create: !0 });
+        return;
+      }
+      lanSend({
+        type: "create_room",
+        feature: "drop",
+        name: t("dropRoomName").value.trim() || "LAN Drop",
+        pin: t("dropRoomPin").value.trim(),
+      });
+    }
+    function dropJoinRoom(roomId = "", pin = "") {
+      const e = (roomId || t("dropRoomId").value).trim().toUpperCase(),
+        n = pin || t("dropRoomPin").value.trim();
+      if (!e) {
+        dropSetStatus("참여할 방 코드를 입력하세요.");
+        return;
+      }
+      if (!lanState.connected) {
+        lanConnect({ roomId: e, pin: n });
+        return;
+      }
+      lanSend({ type: "join_room", roomId: e, pin: n });
+    }
+    function dropTransferRow(e, n) {
+      const i = o("div");
+      i.className = "lan-transfer";
+      i.id = e;
+      i.innerHTML =
+        '<span class="lan-transfer-title"></span><span class="lan-transfer-meta"></span><div class="lan-progress"><span></span></div>';
+      n.appendChild(i);
+      return i;
+    }
+    function dropUpdateRow(e, n, i, a = "") {
+      const s = t(e);
+      if (!s) return;
+      s.querySelector(".lan-transfer-title").textContent = n;
+      s.querySelector(".lan-transfer-meta").textContent = i;
+      s.querySelector(".lan-progress span").style.width = a;
+    }
+    function dropRenderDownload(e) {
+      const n = t("dropReceiveList"),
+        i =
+          t("recv_" + e.transferId) ||
+          dropTransferRow("recv_" + e.transferId, n),
+        a = o("button");
+      a.type = "button";
+      a.className = "ck";
+      a.textContent = "다운로드";
+      a.onclick = () => {
+        const t = o("a");
+        t.href = e.url;
+        t.download = e.fileName;
+        t.click();
+      };
+      i.querySelector(".lan-transfer-title").textContent =
+        e.fileName + " · " + e.senderName;
+      i.querySelector(".lan-transfer-meta").innerHTML = "";
+      i.querySelector(".lan-transfer-meta").appendChild(a);
+      i.querySelector(".lan-progress span").style.width = "100%";
+    }
+    async function dropSendFiles(e) {
+      const n = Array.from(e || []);
+      if (!n.length) return;
+      if (!lanState.room) {
+        dropSetStatus("먼저 공유 시작 또는 참여로 방에 들어가세요.");
+        return;
+      }
+      for (const e of n) {
+        if (e.size > LAN_DROP_MAX_FILE_SIZE) {
+          dropSetStatus(
+            Me(e.name) + " 파일은 100MB를 초과해서 전송하지 않았습니다.",
+          );
+          continue;
+        }
+        await dropSendFile(e);
+      }
+    }
+    async function dropSendFile(e) {
+      const n = "tx_" + Date.now() + "_" + Math.random().toString(16).slice(2),
+        i = Math.ceil(e.size / LAN_DROP_CHUNK_SIZE) || 1,
+        a = dropTransferRow("send_" + n, t("dropSendList"));
+      lanSend({
+        type: "file_offer",
+        transferId: n,
+        fileName: e.name,
+        fileSize: e.size,
+        fileType: e.type || "application/octet-stream",
+        totalChunks: i,
+      });
+      for (let o = 0; o < i; o += 1) {
+        const s = e.slice(
+            o * LAN_DROP_CHUNK_SIZE,
+            (o + 1) * LAN_DROP_CHUNK_SIZE,
+          ),
+          r = await dropBlobToBase64(s);
+        lanSend({
+          type: "file_chunk",
+          transferId: n,
+          chunkIndex: o,
+          totalChunks: i,
+          data: r,
+          size: s.size,
+        });
+        await dropWaitForSocketBuffer();
+        dropUpdateRow(
+          a.id,
+          e.name,
+          Math.round(((o + 1) / i) * 100) + "%",
+          ((o + 1) / i) * 100 + "%",
+        );
+        await new Promise((e) => setTimeout(e, 0));
+      }
+      lanSend({ type: "file_done", transferId: n });
+      dropUpdateRow(a.id, e.name, "완료", "100%");
+    }
+    function dropBlobToBase64(e) {
+      return new Promise((t, n) => {
+        const i = new FileReader();
+        i.onload = () => t(String(i.result || "").split(",")[1] || "");
+        i.onerror = () => n(i.error || new Error("file read failed"));
+        i.readAsDataURL(e);
+      });
+    }
+    function dropWaitForSocketBuffer() {
+      return new Promise((e) => {
+        function t() {
+          !lanState.socket || lanState.socket.bufferedAmount < 1024 * 1024
+            ? e()
+            : setTimeout(t, 25);
+        }
+        t();
+      });
+    }
+    function dropBase64ToBytes(e) {
+      const t = atob(e),
+        n = new Uint8Array(t.length);
+      for (let i = 0; i < t.length; i += 1) n[i] = t.charCodeAt(i);
+      return n;
+    }
+    function dropReceiveOffer(e) {
+      if (Number(e.fileSize || 0) > LAN_DROP_MAX_FILE_SIZE) return;
+      lanState.transfersIn[e.transferId] = {
+        transferId: e.transferId,
+        fileName: e.fileName || "download.bin",
+        fileType: e.fileType || "application/octet-stream",
+        fileSize: Number(e.fileSize || 0),
+        totalChunks: Number(e.totalChunks || 1),
+        chunks: [],
+        received: 0,
+        senderName: e.senderName || "Guest",
+      };
+      dropTransferRow("recv_" + e.transferId, t("dropReceiveList"));
+      dropUpdateRow(
+        "recv_" + e.transferId,
+        (e.fileName || "download.bin") + " · " + (e.senderName || "Guest"),
+        "수신 중",
+        "0%",
+      );
+    }
+    function dropReceiveChunk(e) {
+      const t = lanState.transfersIn[e.transferId];
+      if (!t) return;
+      const n = dropBase64ToBytes(e.data || "");
+      t.chunks[Number(e.chunkIndex || 0)] = n;
+      t.received += n.byteLength;
+      const i = t.fileSize ? Math.min(100, (t.received / t.fileSize) * 100) : 0;
+      dropUpdateRow(
+        "recv_" + e.transferId,
+        t.fileName + " · " + t.senderName,
+        Math.round(i) + "%",
+        i + "%",
+      );
+    }
+    function dropReceiveDone(e) {
+      const t = lanState.transfersIn[e.transferId];
+      if (!t) return;
+      const n = new Blob(t.chunks, { type: t.fileType }),
+        i = URL.createObjectURL(n);
+      dropRenderDownload({ ...t, url: i });
+    }
+    function lanInitPanel() {
+      const e = lanParamDefaults(),
+        n = new URLSearchParams(window.location.search);
+      t("lanName").value = s.getItem(STORAGE_KEYS.lanName) || "Guest";
+      t("lanHost").value = e.host;
+      t("lanPort").value = e.port;
+      t("dropRoomName").value = "LAN Drop";
+      t("dropRoomId").value = (
+        n.get("room") ||
+        s.getItem(STORAGE_KEYS.lanLastRoom) ||
+        ""
+      ).toUpperCase();
+      t("dropRoomPin").value = n.get("pin") || dropRandomPin();
+      ["lanName", "lanHost", "lanPort", "dropRoomPin", "dropRoomId"].forEach(
+        (e) => {
+          t(e).addEventListener("input", lanRefreshShareUrls);
+        },
+      );
+      t("lanConnect").onclick = () => lanConnect();
+      t("lanDisconnect").onclick = lanDisconnect;
+      t("lanCopyShare").onclick = () => Ce(t("lanShareUrl").value);
+      t("dropCreateRoom").onclick = dropCreateRoom;
+      t("dropJoinRoom").onclick = () => dropJoinRoom();
+      t("dropCopyShare").onclick = () => Ce(t("dropShareUrl").value);
+      t("dropZone").onclick = () => t("dropFileInput").click();
+      t("dropFileInput").onchange = (e) => {
+        dropSendFiles(e.target.files);
+        e.target.value = "";
+      };
+      ["dragenter", "dragover"].forEach((e) => {
+        t("dropZone").addEventListener(e, (n) => {
+          n.preventDefault();
+          t("dropZone").classList.add("dragging");
+        });
+      });
+      ["dragleave", "drop"].forEach((e) => {
+        t("dropZone").addEventListener(e, (n) => {
+          n.preventDefault();
+          t("dropZone").classList.remove("dragging");
+        });
+      });
+      t("dropZone").addEventListener("drop", (e) => {
+        dropSendFiles(e.dataTransfer.files);
+      });
+      lanRefreshShareUrls();
+      lanRenderRooms();
+      lanRenderPeers();
+      if ("drop" === n.get("tool")) {
+        lanToolMenu.classList.add("show");
+        lanMenuToggle.classList.add("active");
+        X("lanDrop");
+        n.get("room") &&
+          lanConnect({ roomId: n.get("room"), pin: n.get("pin") || "" });
+      } else if ("lan" === n.get("tool")) {
+        lanToolMenu.classList.add("show");
+        lanMenuToggle.classList.add("active");
+        X("lanCenter");
+      }
+    }
+    function dropRandomPin() {
+      return String(Math.floor(1000 + Math.random() * 9000));
+    }
+    lanInitPanel();
     function Ae(e, t) {
       s.setItem(e, t);
     }
@@ -5150,7 +5923,10 @@
       jwt: "textTool",
       csv: "textTool",
       game: "game",
-      lan: "game",
+      lan: "lanCenter",
+      network: "lanCenter",
+      drop: "lanDrop",
+      file: "lanDrop",
       arena: "game",
       게임: "game",
       hex: "charCode",
@@ -5168,7 +5944,14 @@
       return "https://www.google.com/search?q=" + encodeURIComponent(e);
     }
     function Ot(e) {
-      (P.classList.add("show"), F.classList.add("active"), X(e));
+      if (["lanCenter", "lanDrop"].includes(e)) {
+        lanToolMenu.classList.add("show");
+        lanMenuToggle.classList.add("active");
+      } else {
+        P.classList.add("show");
+        F.classList.add("active");
+      }
+      X(e);
     }
     function Dt(e, t, n, i, o) {
       return { icon: e, title: t, desc: n, keyText: i, run: o };
