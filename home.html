@@ -357,6 +357,29 @@
       margin-bottom: 3px;
       font-size: 0.78rem;
     }
+    .lan-chat-message.own {
+      border-color: rgba(76, 175, 80, 0.45);
+      background: rgba(76, 175, 80, 0.1);
+    }
+    .lan-chat-message.system {
+      border-color: rgba(224, 138, 0, 0.45);
+      background: rgba(224, 138, 0, 0.12);
+    }
+    .lan-chat-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 3px;
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+    .lan-chat-time {
+      flex: 0 0 auto;
+      font-size: 0.72rem;
+      font-weight: 500;
+      opacity: 0.7;
+    }
     .lan-chat-row {
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
@@ -384,6 +407,14 @@
     .lan-transfer button {
       min-height: 32px;
       padding: 6px 9px;
+    }
+    .lan-transfer-meta {
+      display: inline-flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 6px;
+      text-align: right;
     }
     .lan-drop-zone {
       min-height: 132px;
@@ -3633,11 +3664,15 @@
         lanMenuToggle.classList.remove("active"));
     }
     ((F.onclick = () => {
-      (P.classList.toggle("show"), F.classList.toggle("active"));
+      const e = P.classList.contains("show");
+      e && X("");
+      (P.classList.toggle("show", !e), F.classList.toggle("active", !e));
     }),
       (lanMenuToggle.onclick = () => {
-        (lanToolMenu.classList.toggle("show"),
-          lanMenuToggle.classList.toggle("active"));
+        const e = lanToolMenu.classList.contains("show");
+        e && X("");
+        (lanToolMenu.classList.toggle("show", !e),
+          lanMenuToggle.classList.toggle("active", !e));
       }),
       [
         "charCode",
@@ -4462,6 +4497,7 @@
       pendingGameLaunch: "",
       pendingGameTimer: 0,
       flashTimer: 0,
+      dropFlashTimer: 0,
       selectedGameRoom: null,
       chatMessages: [],
       chatIds: new Set(),
@@ -5173,6 +5209,82 @@
       }
       lanSend({ type: "join_room", roomId: e, pin: n });
     }
+    function dropMakeId(e) {
+      return e + "_" + Date.now() + "_" + Math.random().toString(16).slice(2);
+    }
+    function dropFormatBytes(e) {
+      let n = Math.max(0, Number(e || 0));
+      const i = ["B", "KB", "MB", "GB"];
+      let a = 0;
+      for (; n >= 1024 && a < i.length - 1; ) {
+        n /= 1024;
+        a += 1;
+      }
+      return (a === 0 || n >= 10 ? Math.round(n) : n.toFixed(1)) + i[a];
+    }
+    function dropFormatChatTime(e) {
+      const n = Number(e || 0);
+      if (!n) return "";
+      const i = new Date(n < 1000000000000 ? n * 1000 : n);
+      return Number.isNaN(i.getTime())
+        ? ""
+        : i.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    }
+    function dropTransferMetaText(e, n, i) {
+      const a = i ? Math.min(100, (n / i) * 100) : 100;
+      return (
+        e +
+        " · " +
+        dropFormatBytes(n) +
+        " / " +
+        dropFormatBytes(i) +
+        " · " +
+        Math.round(a) +
+        "%"
+      );
+    }
+    function dropFlashStatus(e, n = false) {
+      const i = t("dropStatus");
+      if (!i) return;
+      window.clearTimeout(lanState.dropFlashTimer);
+      const a = i.innerHTML,
+        s =
+          '<i class="fas ' +
+          (n ? "fa-exclamation-circle" : "fa-check-circle") +
+          '"></i> ' +
+          Me(e);
+      i.innerHTML = s;
+      lanState.dropFlashTimer = window.setTimeout(() => {
+        i.innerHTML === s && (i.innerHTML = a);
+      }, 1800);
+    }
+    async function dropCopyShareUrl() {
+      const e = t("dropShareUrl").value.trim();
+      if (!e) {
+        dropFlashStatus(
+          "초대 링크가 없습니다. 먼저 방을 만들거나 참여하세요.",
+          true,
+        );
+        return;
+      }
+      try {
+        await Ce(e);
+        dropFlashStatus("초대 링크가 복사되었습니다.");
+      } catch (e) {
+        dropFlashStatus("복사 실패: " + e.message, true);
+      }
+    }
+    function dropAddSystemMessage(e, n = Date.now()) {
+      dropAddChatMessage({
+        type: "system",
+        system: true,
+        chatId: dropMakeId("sys"),
+        message: e,
+        sentAt: n,
+        senderName: "시스템",
+        roomId: lanState.room?.id || "",
+      });
+    }
     function dropRenderChat() {
       const e = t("dropChatList");
       e.innerHTML = "";
@@ -5181,16 +5293,22 @@
         return;
       }
       lanState.chatMessages.slice(-80).forEach((n) => {
-        const i = o("div");
-        i.className = "lan-chat-message";
-        i.innerHTML =
-          "<strong>" +
-          Me(
-            n.senderId === lanState.clientId ? "나" : n.senderName || "Guest",
-          ) +
-          "</strong>" +
-          Me(n.message || "");
-        e.appendChild(i);
+        const i = !!n.system || "system" === n.type,
+          a = !i && n.senderId === lanState.clientId,
+          s = i ? "시스템" : a ? "나" : n.senderName || "Guest",
+          r = dropFormatChatTime(n.sentAt || n.serverTime),
+          l = o("div");
+        l.className =
+          "lan-chat-message" + (a ? " own" : "") + (i ? " system" : "");
+        l.innerHTML =
+          '<div class="lan-chat-head"><span>' +
+          Me(s) +
+          '</span><span class="lan-chat-time">' +
+          Me(r) +
+          "</span></div><div>" +
+          Me(n.message || "") +
+          "</div>";
+        e.appendChild(l);
       });
       e.scrollTop = e.scrollHeight;
     }
@@ -5217,13 +5335,13 @@
         dropSetStatus("Share&Drop 방에 참여한 뒤 채팅을 보낼 수 있습니다.");
         return;
       }
-      const n =
-        "chat_" + Date.now() + "_" + Math.random().toString(16).slice(2);
+      const n = dropMakeId("chat"),
+        i = Date.now();
       dropAddChatMessage({
         type: "chat_message",
         chatId: n,
         message: e,
-        sentAt: Date.now(),
+        sentAt: i,
         senderId: lanState.clientId,
         senderName: t("lanName").value.trim() || "Guest",
         roomId: lanState.room.id,
@@ -5233,7 +5351,7 @@
           type: "chat_message",
           chatId: n,
           message: e,
-          sentAt: Date.now(),
+          sentAt: i,
         })
       ) {
         dropSetStatus("Hub 연결 후 채팅을 보낼 수 있습니다.");
@@ -5262,11 +5380,13 @@
         i =
           t("recv_" + e.transferId) ||
           dropTransferRow("recv_" + e.transferId, n),
-        a = o("button");
-      a.type = "button";
-      a.className = "ck";
-      a.textContent = "다운로드";
-      a.onclick = () => {
+        a = i.querySelector(".lan-transfer-meta"),
+        s = o("span"),
+        r = o("button");
+      r.type = "button";
+      r.className = "ck";
+      r.textContent = "다운로드";
+      r.onclick = () => {
         const t = o("a");
         t.href = e.url;
         t.download = e.fileName;
@@ -5274,8 +5394,10 @@
       };
       i.querySelector(".lan-transfer-title").textContent =
         e.fileName + " · " + e.senderName;
-      i.querySelector(".lan-transfer-meta").innerHTML = "";
-      i.querySelector(".lan-transfer-meta").appendChild(a);
+      s.textContent = "수신 완료 · " + dropFormatBytes(e.fileSize);
+      a.innerHTML = "";
+      a.appendChild(s);
+      a.appendChild(r);
       i.querySelector(".lan-progress span").style.width = "100%";
     }
     async function dropSendFiles(e) {
@@ -5289,53 +5411,122 @@
         dropSetStatus("Share&Drop 방에 참여한 뒤 파일을 보낼 수 있습니다.");
         return;
       }
+      const i = [];
+      let a = 0;
       for (const e of n) {
         if (e.size > LAN_DROP_MAX_FILE_SIZE) {
-          dropSetStatus(
-            Me(e.name) + " 파일은 100MB를 초과해서 전송하지 않았습니다.",
+          a += 1;
+          dropAddSystemMessage(
+            e.name + " 파일은 100MB를 초과해서 전송하지 않았습니다.",
           );
           continue;
         }
+        i.push(e);
+      }
+      if (a) {
+        dropSetStatus(
+          Me(a + "개 파일은 100MB를 초과해서 전송하지 않았습니다."),
+        );
+      }
+      if (!i.length) return;
+      dropSetStatus(Me(i.length + "개 파일 전송을 시작합니다."));
+      for (const e of i) {
         await dropSendFile(e);
       }
     }
     async function dropSendFile(e) {
-      const n = "tx_" + Date.now() + "_" + Math.random().toString(16).slice(2),
+      const n = dropMakeId("tx"),
         i = Math.ceil(e.size / LAN_DROP_CHUNK_SIZE) || 1,
-        a = dropTransferRow("send_" + n, t("dropSendList"));
-      lanSend({
-        type: "file_offer",
-        transferId: n,
+        a = dropTransferRow("send_" + n, t("dropSendList")),
+        s = Date.now();
+      lanState.transfersOut[n] = {
         fileName: e.name,
         fileSize: e.size,
-        fileType: e.type || "application/octet-stream",
+        sent: 0,
         totalChunks: i,
-      });
-      for (let o = 0; o < i; o += 1) {
-        const s = e.slice(
-            o * LAN_DROP_CHUNK_SIZE,
-            (o + 1) * LAN_DROP_CHUNK_SIZE,
-          ),
-          r = await dropBlobToBase64(s);
-        lanSend({
-          type: "file_chunk",
+        startedAt: s,
+      };
+      dropUpdateRow(
+        a.id,
+        e.name,
+        dropTransferMetaText("전송 대기", 0, e.size),
+        "0%",
+      );
+      if (
+        !lanSend({
+          type: "file_offer",
           transferId: n,
-          chunkIndex: o,
+          fileName: e.name,
+          fileSize: e.size,
+          fileType: e.type || "application/octet-stream",
           totalChunks: i,
-          data: r,
-          size: s.size,
-        });
-        await dropWaitForSocketBuffer();
+          sentAt: s,
+        })
+      ) {
+        dropUpdateRow(a.id, e.name, "전송 실패 · Hub 연결 없음", "0%");
+        dropSetStatus("Hub 연결 후 파일을 보낼 수 있습니다.");
+        dropAddSystemMessage(e.name + " 전송에 실패했습니다.");
+        return;
+      }
+      dropAddSystemMessage(
+        e.name + " 전송을 시작했습니다. (" + dropFormatBytes(e.size) + ")",
+        s,
+      );
+      try {
+        for (let o = 0; o < i; o += 1) {
+          const s = e.slice(
+              o * LAN_DROP_CHUNK_SIZE,
+              (o + 1) * LAN_DROP_CHUNK_SIZE,
+            ),
+            r = await dropBlobToBase64(s);
+          if (
+            !lanSend({
+              type: "file_chunk",
+              transferId: n,
+              chunkIndex: o,
+              totalChunks: i,
+              data: r,
+              size: s.size,
+              sentAt: Date.now(),
+            })
+          )
+            throw new Error("Hub 연결이 끊겼습니다.");
+          await dropWaitForSocketBuffer();
+          lanState.transfersOut[n].sent = Math.min(
+            e.size,
+            lanState.transfersOut[n].sent + s.size,
+          );
+          const l = e.size
+            ? Math.min(100, (lanState.transfersOut[n].sent / e.size) * 100)
+            : 100;
+          dropUpdateRow(
+            a.id,
+            e.name,
+            dropTransferMetaText(
+              "전송 중",
+              lanState.transfersOut[n].sent,
+              e.size,
+            ),
+            l + "%",
+          );
+          await new Promise((e) => setTimeout(e, 0));
+        }
+        if (!lanSend({ type: "file_done", transferId: n, sentAt: Date.now() }))
+          throw new Error("완료 신호를 보내지 못했습니다.");
+        lanState.transfersOut[n].sent = e.size;
         dropUpdateRow(
           a.id,
           e.name,
-          Math.round(((o + 1) / i) * 100) + "%",
-          ((o + 1) / i) * 100 + "%",
+          "전송 완료 · " + dropFormatBytes(e.size),
+          "100%",
         );
-        await new Promise((e) => setTimeout(e, 0));
+        dropSetStatus(Me(e.name + " 전송이 완료되었습니다."));
+        dropAddSystemMessage(e.name + " 전송이 완료되었습니다.");
+      } catch (i) {
+        dropUpdateRow(a.id, e.name, "전송 실패 · " + i.message, "0%");
+        dropSetStatus(Me(e.name + " 전송 실패: " + i.message));
+        dropAddSystemMessage(e.name + " 전송에 실패했습니다.");
       }
-      lanSend({ type: "file_done", transferId: n });
-      dropUpdateRow(a.id, e.name, "완료", "100%");
     }
     function dropBlobToBase64(e) {
       return new Promise((t, n) => {
@@ -5363,6 +5554,7 @@
     }
     function dropReceiveOffer(e) {
       if (Number(e.fileSize || 0) > LAN_DROP_MAX_FILE_SIZE) return;
+      if (lanState.transfersIn[e.transferId]) return;
       lanState.transfersIn[e.transferId] = {
         transferId: e.transferId,
         fileName: e.fileName || "download.bin",
@@ -5374,33 +5566,61 @@
         senderName: e.senderName || "Guest",
       };
       dropTransferRow("recv_" + e.transferId, t("dropReceiveList"));
+      dropAddSystemMessage(
+        (e.senderName || "Guest") +
+          "님이 " +
+          (e.fileName || "download.bin") +
+          " 전송을 시작했습니다. (" +
+          dropFormatBytes(e.fileSize) +
+          ")",
+        e.sentAt || Date.now(),
+      );
       dropUpdateRow(
         "recv_" + e.transferId,
         (e.fileName || "download.bin") + " · " + (e.senderName || "Guest"),
-        "수신 중",
+        dropTransferMetaText("수신 대기", 0, Number(e.fileSize || 0)),
         "0%",
       );
     }
     function dropReceiveChunk(e) {
       const t = lanState.transfersIn[e.transferId];
       if (!t) return;
-      const n = dropBase64ToBytes(e.data || "");
-      t.chunks[Number(e.chunkIndex || 0)] = n;
+      const n = dropBase64ToBytes(e.data || ""),
+        i = Number(e.chunkIndex || 0),
+        a = t.chunks[i];
+      a && (t.received -= a.byteLength);
+      t.chunks[i] = n;
       t.received += n.byteLength;
-      const i = t.fileSize ? Math.min(100, (t.received / t.fileSize) * 100) : 0;
+      const s = t.fileSize
+        ? Math.min(100, (t.received / t.fileSize) * 100)
+        : 100;
       dropUpdateRow(
         "recv_" + e.transferId,
         t.fileName + " · " + t.senderName,
-        Math.round(i) + "%",
-        i + "%",
+        dropTransferMetaText("수신 중", t.received, t.fileSize),
+        s + "%",
       );
     }
     function dropReceiveDone(e) {
       const t = lanState.transfersIn[e.transferId];
       if (!t) return;
+      for (let n = 0; n < t.totalChunks; n += 1) {
+        if (!t.chunks[n]) {
+          dropUpdateRow(
+            "recv_" + e.transferId,
+            t.fileName + " · " + t.senderName,
+            "수신 실패 · 일부 조각 누락",
+            "0%",
+          );
+          dropAddSystemMessage(t.fileName + " 수신에 실패했습니다.");
+          return;
+        }
+      }
       const n = new Blob(t.chunks, { type: t.fileType }),
         i = URL.createObjectURL(n);
       dropRenderDownload({ ...t, url: i });
+      dropSetStatus(Me(t.fileName + " 수신이 완료되었습니다."));
+      dropAddSystemMessage(t.fileName + " 수신이 완료되었습니다.");
     }
     function lanInitPanel() {
       const e = lanParamDefaults(),
@@ -5449,7 +5669,7 @@
         );
       t("dropCreateRoom").onclick = dropCreateRoom;
       t("dropJoinRoom").onclick = () => dropJoinRoom();
-      t("dropCopyShare").onclick = () => Ce(t("dropShareUrl").value);
+      t("dropCopyShare").onclick = dropCopyShareUrl;
       t("dropOpenLanSettings").onclick = () => X("lanCenter");
       t("dropSendChat").onclick = dropSendChat;
       t("dropChatInput").addEventListener("keydown", (e) => {
