@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>LAN Arena</title>
-    <link rel="stylesheet" href="./style.css?v=20260528c" />
+    <link rel="stylesheet" href="./style.css?v=20260529a" />
   </head>
   <body>
     <main class="arena-shell">
@@ -78,7 +78,7 @@
     <script>
       (() => {
         const params = new URLSearchParams(window.location.search);
-        const version = encodeURIComponent(params.get("v") || "20260528c");
+        const version = encodeURIComponent(params.get("v") || "20260529a");
         const script = document.createElement("script");
         script.src =
           params.get("game") === "fortress"

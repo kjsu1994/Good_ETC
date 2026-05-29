@@ -7,6 +7,24 @@
   const role = params.get("role") === "host" ? "host" : "client";
   const world = { width: 1400, height: 760 };
   const gravity = 300;
+  const vehiclePalettes = [
+    {
+      body: "#38d6b0",
+      bodyDark: "#18866f",
+      trim: "#d9fff5",
+      tread: "#182a32",
+      accent: "#ffe066",
+      glow: "rgba(56, 214, 176, 0.36)",
+    },
+    {
+      body: "#ffb84a",
+      bodyDark: "#b96a24",
+      trim: "#fff1c2",
+      tread: "#32242a",
+      accent: "#ff6b6b",
+      glow: "rgba(255, 184, 74, 0.36)",
+    },
+  ];
 
   document.title = mode === "multi" ? "포트리스 멀티" : "포트리스 혼자하기";
   shell.className = "fortress-shell";
@@ -522,22 +540,73 @@
   }
 
   function drawSky() {
-    const view = getView();
-    ctx.fillStyle = "#72c9ff";
+    const sky = ctx.createLinearGradient(0, 0, 0, window.innerHeight);
+    sky.addColorStop(0, "#5cb8ff");
+    sky.addColorStop(0.52, "#bfeeff");
+    sky.addColorStop(1, "#eaf8ff");
+    ctx.fillStyle = sky;
     ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+
+    drawMountainLayer(455, "#7aa9a1", [
+      [0, 0],
+      [120, -58],
+      [260, -18],
+      [420, -86],
+      [600, -28],
+      [800, -94],
+      [1030, -24],
+      [1220, -72],
+      [1400, -16],
+    ]);
+    drawMountainLayer(500, "#4e8376", [
+      [0, -18],
+      [170, -74],
+      [360, -28],
+      [540, -98],
+      [760, -36],
+      [930, -82],
+      [1130, -26],
+      [1320, -72],
+      [1400, -38],
+    ]);
+
+    const view = getView();
     const sun = toScreen(1160, 120);
-    ctx.fillStyle = "rgba(255, 236, 146, 0.9)";
+    ctx.fillStyle = "rgba(255, 235, 137, 0.26)";
+    ctx.beginPath();
+    ctx.arc(sun.x, sun.y, 72 * view.scale, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "rgba(255, 238, 148, 0.95)";
     ctx.beginPath();
     ctx.arc(sun.x, sun.y, 38 * view.scale, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
     drawCloud(230, 150, 1.2);
+    drawCloud(520, 92, 0.72);
     drawCloud(870, 95, 1);
+    drawCloud(1090, 205, 0.86);
+    drawWindIndicator();
+  }
+
+  function drawMountainLayer(baseY, color, points) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    points.forEach(([x, offset], index) => {
+      const point = toScreen(x, baseY + offset);
+      if (index === 0) ctx.moveTo(point.x, point.y);
+      else ctx.lineTo(point.x, point.y);
+    });
+    const right = toScreen(world.width, world.height);
+    const left = toScreen(0, world.height);
+    ctx.lineTo(right.x, right.y);
+    ctx.lineTo(left.x, left.y);
+    ctx.closePath();
+    ctx.fill();
   }
 
   function drawCloud(x, y, size) {
     const view = getView();
     const base = toScreen(x, y);
+    ctx.fillStyle = "rgba(255, 255, 255, 0.78)";
     ctx.beginPath();
     ctx.arc(base.x, base.y, 24 * size * view.scale, 0, Math.PI * 2);
     ctx.arc(
@@ -555,6 +624,54 @@
       Math.PI * 2,
     );
     ctx.fill();
+    ctx.fillStyle = "rgba(129, 181, 204, 0.16)";
+    ctx.fillRect(
+      base.x - 34 * size * view.scale,
+      base.y + 20 * size * view.scale,
+      132 * size * view.scale,
+      Math.max(1, 3 * view.scale),
+    );
+  }
+
+  function drawWindIndicator() {
+    const view = getView();
+    const wind = Number(state.wind || 0);
+    const center = toScreen(world.width / 2, 54);
+    const width = 146 * view.scale;
+    const height = 34 * view.scale;
+    const x = center.x - width / 2;
+    const y = center.y - height / 2;
+    ctx.save();
+    ctx.fillStyle = "rgba(12, 37, 54, 0.58)";
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.72)";
+    ctx.lineWidth = Math.max(1, 2 * view.scale);
+    ctx.beginPath();
+    drawRoundRect(x, y, width, height, 8 * view.scale);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#f4fbff";
+    ctx.font = `${Math.max(11, 13 * view.scale)}px system-ui, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(`WIND ${wind > 0 ? "+" : ""}${wind}`, center.x, center.y);
+    if (wind) {
+      const direction = wind > 0 ? 1 : -1;
+      const arrowX = center.x + direction * 58 * view.scale;
+      ctx.fillStyle = wind > 0 ? "#ffcf5c" : "#69dcff";
+      ctx.beginPath();
+      ctx.moveTo(arrowX + direction * 9 * view.scale, center.y);
+      ctx.lineTo(
+        arrowX - direction * 4 * view.scale,
+        center.y - 7 * view.scale,
+      );
+      ctx.lineTo(
+        arrowX - direction * 4 * view.scale,
+        center.y + 7 * view.scale,
+      );
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   function drawTerrain() {
@@ -582,51 +699,241 @@
     gradient.addColorStop(1, "#18341d");
     ctx.fillStyle = gradient;
     ctx.fill();
+
+    ctx.strokeStyle = "#72c84f";
+    ctx.lineWidth = Math.max(2, 5 * view.scale);
+    ctx.beginPath();
+    for (let x = 0; x <= world.width; x += 4) {
+      const point = toScreen(x, state.terrain[x]);
+      if (x === 0) ctx.moveTo(point.x, point.y);
+      else ctx.lineTo(point.x, point.y);
+    }
+    ctx.stroke();
+
+    [26, 58, 96].forEach((offset, index) => {
+      ctx.strokeStyle = [
+        "rgba(150, 102, 54, 0.34)",
+        "rgba(83, 62, 38, 0.32)",
+        "rgba(18, 36, 24, 0.34)",
+      ][index];
+      ctx.lineWidth = Math.max(1, 2 * view.scale);
+      ctx.beginPath();
+      for (let x = 0; x <= world.width; x += 12) {
+        const point = toScreen(
+          x,
+          Math.min(world.height, state.terrain[x] + offset),
+        );
+        if (x === 0) ctx.moveTo(point.x, point.y);
+        else ctx.lineTo(point.x, point.y);
+      }
+      ctx.stroke();
+    });
+
+    ctx.fillStyle = "rgba(255, 232, 142, 0.24)";
+    for (let x = 36; x < world.width; x += 78) {
+      const seed = Math.sin(x * 12.9898) * 43758.5453;
+      if (seed - Math.floor(seed) < 0.36) continue;
+      const y = terrainAt(state.terrain, x) + 10 + (x % 4);
+      const point = toScreen(x, y);
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, Math.max(1, 2.6 * view.scale), 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function drawAimGuide() {
+    const player = currentPlayer();
+    if (!player || !state.ready || state.projectile || state.gameOver) return;
+    const radians = (player.angle * Math.PI) / 180;
+    const speed = 145 + player.power * 5.1;
+    let x = player.x + Math.cos(radians) * 31;
+    let y = player.y - 21 - Math.sin(radians) * 31;
+    let vx = Math.cos(radians) * speed;
+    let vy = -Math.sin(radians) * speed;
+    const view = getView();
+    ctx.save();
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.44)";
+    ctx.lineWidth = Math.max(1, 2 * view.scale);
+    ctx.setLineDash([6 * view.scale, 9 * view.scale]);
+    ctx.beginPath();
+    for (let step = 0; step < 34; step += 1) {
+      const point = toScreen(x, y);
+      if (step === 0) ctx.moveTo(point.x, point.y);
+      else ctx.lineTo(point.x, point.y);
+      vx += state.wind * 0.22 * 0.075;
+      vy += gravity * 0.075;
+      x += vx * 0.075;
+      y += vy * 0.075;
+      if (x < 0 || x > world.width || y > world.height) break;
+      if (y >= terrainAt(state.terrain, x)) break;
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
   }
 
   function drawPlayer(player, index) {
     const view = getView();
     const point = toScreen(player.x, player.y);
     const scale = view.scale;
+    const palette = vehiclePalettes[index % vehiclePalettes.length];
+    const isActive = index === state.turn && !state.gameOver;
+    const radians = (player.angle * Math.PI) / 180;
     ctx.save();
     ctx.translate(point.x, point.y);
+    const bob =
+      isActive && !state.projectile
+        ? Math.sin(performance.now() / 170) * scale
+        : 0;
+    ctx.translate(0, bob);
     ctx.globalAlpha = player.connected === false ? 0.45 : 1;
-    ctx.fillStyle = player.color;
-    ctx.strokeStyle = index === mySlot ? "#ffffff" : "rgba(0,0,0,0.45)";
-    ctx.lineWidth = (index === mySlot ? 4 : 2) * scale;
+
+    ctx.fillStyle = "rgba(0, 0, 0, 0.24)";
     ctx.beginPath();
-    drawRoundRect(-24 * scale, -17 * scale, 48 * scale, 22 * scale, 6 * scale);
+    ctx.ellipse(0, 3 * scale, 38 * scale, 10 * scale, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    if (isActive) {
+      ctx.strokeStyle = palette.glow;
+      ctx.lineWidth = 5 * scale;
+      ctx.beginPath();
+      ctx.arc(0, -20 * scale, 48 * scale, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = palette.accent;
+      ctx.beginPath();
+      ctx.moveTo(0, -76 * scale);
+      ctx.lineTo(-9 * scale, -61 * scale);
+      ctx.lineTo(9 * scale, -61 * scale);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    ctx.fillStyle = palette.tread;
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.34)";
+    ctx.lineWidth = 2 * scale;
+    ctx.beginPath();
+    drawRoundRect(-34 * scale, -14 * scale, 68 * scale, 18 * scale, 9 * scale);
     ctx.fill();
     ctx.stroke();
-    ctx.fillStyle = "rgba(14, 22, 28, 0.9)";
+
+    for (let wheel = -22; wheel <= 22; wheel += 22) {
+      ctx.fillStyle = "#394955";
+      ctx.beginPath();
+      ctx.arc(wheel * scale, -5 * scale, 7 * scale, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#101820";
+      ctx.beginPath();
+      ctx.arc(wheel * scale, -5 * scale, 3 * scale, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    const bodyGradient = ctx.createLinearGradient(
+      -28 * scale,
+      -36 * scale,
+      28 * scale,
+      -10 * scale,
+    );
+    bodyGradient.addColorStop(0, palette.trim);
+    bodyGradient.addColorStop(0.18, palette.body);
+    bodyGradient.addColorStop(1, palette.bodyDark);
+    ctx.fillStyle = bodyGradient;
+    ctx.strokeStyle = index === mySlot ? "#ffffff" : "rgba(0, 0, 0, 0.52)";
+    ctx.lineWidth = (index === mySlot ? 3 : 2) * scale;
     ctx.beginPath();
-    ctx.arc(0, -17 * scale, 13 * scale, 0, Math.PI * 2);
+    drawRoundRect(-28 * scale, -32 * scale, 56 * scale, 25 * scale, 7 * scale);
     ctx.fill();
-    const radians = (player.angle * Math.PI) / 180;
-    ctx.strokeStyle = "#1d2630";
-    ctx.lineWidth = 6 * scale;
+    ctx.stroke();
+
+    ctx.fillStyle = palette.bodyDark;
+    ctx.beginPath();
+    drawRoundRect(-15 * scale, -45 * scale, 30 * scale, 19 * scale, 8 * scale);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.strokeStyle = "#17212a";
+    ctx.lineWidth = 9 * scale;
+    ctx.lineCap = "round";
     ctx.beginPath();
     ctx.moveTo(
-      Math.cos(radians) * 5 * scale,
-      -17 * scale - Math.sin(radians) * 5 * scale,
+      Math.cos(radians) * 4 * scale,
+      -36 * scale - Math.sin(radians) * 4 * scale,
     );
     ctx.lineTo(
-      Math.cos(radians) * 42 * scale,
-      -17 * scale - Math.sin(radians) * 42 * scale,
+      Math.cos(radians) * 56 * scale,
+      -36 * scale - Math.sin(radians) * 56 * scale,
     );
     ctx.stroke();
-    if (player.shield) {
-      ctx.strokeStyle = "rgba(83, 226, 168, 0.85)";
+    ctx.strokeStyle = palette.trim;
+    ctx.lineWidth = 4 * scale;
+    ctx.beginPath();
+    ctx.moveTo(
+      Math.cos(radians) * 7 * scale,
+      -36 * scale - Math.sin(radians) * 7 * scale,
+    );
+    ctx.lineTo(
+      Math.cos(radians) * 53 * scale,
+      -36 * scale - Math.sin(radians) * 53 * scale,
+    );
+    ctx.stroke();
+    ctx.lineCap = "butt";
+
+    const muzzleX = Math.cos(radians) * 59 * scale;
+    const muzzleY = -36 * scale - Math.sin(radians) * 59 * scale;
+    ctx.fillStyle = "#111827";
+    ctx.beginPath();
+    ctx.arc(muzzleX, muzzleY, 5 * scale, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = palette.accent;
+    ctx.beginPath();
+    ctx.arc(-10 * scale, -24 * scale, 3 * scale, 0, Math.PI * 2);
+    ctx.arc(8 * scale, -24 * scale, 3 * scale, 0, Math.PI * 2);
+    ctx.fill();
+
+    if (player.activeItem === "power") {
+      ctx.strokeStyle = "rgba(255, 224, 102, 0.86)";
       ctx.lineWidth = 3 * scale;
       ctx.beginPath();
-      ctx.arc(0, -10 * scale, 34 * scale, 0, Math.PI * 2);
+      ctx.arc(0, -22 * scale, 42 * scale, 0, Math.PI * 2);
       ctx.stroke();
     }
+
+    if (player.shield) {
+      ctx.strokeStyle = "rgba(105, 220, 255, 0.9)";
+      ctx.lineWidth = 4 * scale;
+      ctx.beginPath();
+      ctx.arc(0, -21 * scale, 43 * scale, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    drawPlayerHealth(player, scale);
+
     ctx.fillStyle = "#eef6ff";
-    ctx.font = `${Math.max(11, 14 * scale)}px system-ui, sans-serif`;
+    ctx.font = `800 ${Math.max(11, 14 * scale)}px system-ui, sans-serif`;
     ctx.textAlign = "center";
-    ctx.fillText(player.name, 0, -42 * scale);
+    ctx.fillText(player.name, 0, -86 * scale);
     ctx.restore();
+  }
+
+  function drawPlayerHealth(player, scale) {
+    const width = 58 * scale;
+    const height = 7 * scale;
+    const x = -width / 2;
+    const y = -69 * scale;
+    const ratio = clamp(player.health / 100, 0, 1);
+    ctx.fillStyle = "rgba(8, 17, 25, 0.84)";
+    ctx.fillRect(x, y, width, height);
+    ctx.fillStyle =
+      ratio > 0.55 ? "#55e68f" : ratio > 0.28 ? "#ffd166" : "#ff5f6d";
+    ctx.fillRect(
+      x + scale,
+      y + scale,
+      (width - 2 * scale) * ratio,
+      height - 2 * scale,
+    );
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.62)";
+    ctx.lineWidth = Math.max(1, scale);
+    ctx.strokeRect(x, y, width, height);
   }
 
   function drawRoundRect(x, y, width, height, radius) {
@@ -649,9 +956,36 @@
     if (!state.projectile) return;
     const point = toScreen(state.projectile.x, state.projectile.y);
     const scale = getView().scale;
-    ctx.fillStyle = state.projectile.radius > 52 ? "#ff5f6d" : "#111827";
+    const strong = state.projectile.radius > 52;
+    if (
+      Number.isFinite(state.projectile.vx) &&
+      Number.isFinite(state.projectile.vy)
+    ) {
+      ctx.strokeStyle = strong
+        ? "rgba(255, 95, 109, 0.36)"
+        : "rgba(17, 24, 39, 0.24)";
+      ctx.lineWidth = Math.max(2, 4 * scale);
+      ctx.beginPath();
+      ctx.moveTo(point.x, point.y);
+      ctx.lineTo(
+        point.x - state.projectile.vx * 0.035 * scale,
+        point.y - state.projectile.vy * 0.035 * scale,
+      );
+      ctx.stroke();
+    }
+    ctx.fillStyle = strong ? "#ff5f6d" : "#111827";
     ctx.beginPath();
-    ctx.arc(point.x, point.y, 6 * scale, 0, Math.PI * 2);
+    ctx.arc(point.x, point.y, (strong ? 8 : 6) * scale, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "rgba(255, 255, 255, 0.72)";
+    ctx.beginPath();
+    ctx.arc(
+      point.x - 2 * scale,
+      point.y - 2 * scale,
+      2 * scale,
+      0,
+      Math.PI * 2,
+    );
     ctx.fill();
   }
 
@@ -660,22 +994,66 @@
     const point = toScreen(state.explosion.x, state.explosion.y);
     const scale = getView().scale;
     const alpha = Math.max(0, 1 - state.explosion.age / 0.55);
-    ctx.fillStyle = `rgba(255, 95, 109, ${0.28 * alpha})`;
+    ctx.fillStyle = `rgba(255, 95, 109, ${0.24 * alpha})`;
     ctx.beginPath();
     ctx.arc(point.x, point.y, state.explosion.radius * scale, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = `rgba(255, 188, 84, ${alpha})`;
-    ctx.lineWidth = 3 * scale;
-    ctx.stroke();
+    [0.48, 0.78, 1.04].forEach((size, index) => {
+      ctx.strokeStyle = [
+        `rgba(255, 245, 156, ${alpha})`,
+        `rgba(255, 188, 84, ${0.78 * alpha})`,
+        `rgba(255, 95, 109, ${0.58 * alpha})`,
+      ][index];
+      ctx.lineWidth = Math.max(1, (5 - index) * scale);
+      ctx.beginPath();
+      ctx.arc(
+        point.x,
+        point.y,
+        state.explosion.radius * size * scale,
+        0,
+        Math.PI * 2,
+      );
+      ctx.stroke();
+    });
+    for (let index = 0; index < 16; index += 1) {
+      const angle = (Math.PI * 2 * index) / 16 + state.explosion.age * 4;
+      const distance =
+        state.explosion.radius * (0.22 + state.explosion.age) * scale;
+      ctx.fillStyle =
+        index % 2
+          ? `rgba(255, 214, 102, ${alpha})`
+          : `rgba(255, 255, 255, ${0.75 * alpha})`;
+      ctx.beginPath();
+      ctx.arc(
+        point.x + Math.cos(angle) * distance,
+        point.y + Math.sin(angle) * distance,
+        Math.max(1, 3.2 * scale * alpha),
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+    }
   }
 
   function draw() {
     resizeCanvas();
     drawSky();
+    const shake = state.explosion
+      ? Math.pow(Math.max(0, 1 - state.explosion.age / 0.55), 2) * 5
+      : 0;
+    ctx.save();
+    if (shake) {
+      ctx.translate(
+        Math.sin(performance.now() / 18) * shake,
+        Math.cos(performance.now() / 21) * shake,
+      );
+    }
     drawTerrain();
+    drawAimGuide();
     state.players.forEach(drawPlayer);
     drawProjectile();
     drawExplosion();
+    ctx.restore();
   }
 
   function frame(now) {

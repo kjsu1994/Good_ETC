@@ -303,13 +303,7 @@ button:hover {
   width: 100vw;
   height: 100vh;
   overflow: hidden;
-  background: linear-gradient(
-    180deg,
-    #6ec6ff 0%,
-    #bfe9ff 46%,
-    #24321f 46%,
-    #182316 100%
-  );
+  background: #5cb8ff;
 }
 
 .fortress-canvas {
@@ -327,6 +321,13 @@ button:hover {
   width: min(380px, calc(100vw - 36px));
   padding: 14px;
   border-radius: 8px;
+  border: 2px solid rgba(245, 251, 255, 0.72);
+  background:
+    linear-gradient(180deg, rgba(20, 44, 64, 0.94), rgba(9, 24, 39, 0.94)),
+    var(--panel);
+  box-shadow:
+    inset 0 0 0 2px rgba(0, 0, 0, 0.24),
+    0 18px 50px rgba(0, 0, 0, 0.34);
   transition:
     width 0.2s ease,
     padding 0.2s ease;
@@ -339,6 +340,8 @@ button:hover {
 
 .fortress-panel h1 {
   margin-bottom: 4px;
+  color: #fff4b8;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.42);
 }
 
 .fortress-brand {
@@ -346,6 +349,8 @@ button:hover {
   align-items: center;
   gap: 12px;
   margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
 }
 
 .fortress-brand > div {
@@ -378,10 +383,10 @@ button:hover {
 .fortress-readout span {
   display: block;
   padding: 8px 10px;
-  border: 1px solid var(--line);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--muted);
+  background: rgba(255, 255, 255, 0.1);
+  color: #afcbe0;
   font-size: 0.78rem;
   font-weight: 800;
 }
@@ -389,7 +394,7 @@ button:hover {
 .fortress-readout strong {
   display: block;
   margin-top: 2px;
-  color: var(--text);
+  color: #fff4b8;
   font-size: 1rem;
 }
 
@@ -402,6 +407,19 @@ button:hover {
 .fortress-buttons button {
   min-height: 40px;
   padding: 8px 10px;
+  border-color: rgba(255, 255, 255, 0.2);
+  background: linear-gradient(180deg, #ffe08a, #ffb347);
+  color: #3b2308;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.54),
+    0 3px 0 rgba(91, 47, 22, 0.72);
+}
+
+.fortress-buttons button:disabled {
+  cursor: not-allowed;
+  filter: grayscale(0.45);
+  opacity: 0.5;
+  box-shadow: none;
 }
 
 .fortress-items {
@@ -414,14 +432,16 @@ button:hover {
 .fortress-items button {
   min-height: 42px;
   padding: 8px 7px;
-  border-color: var(--line);
-  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(105, 220, 255, 0.12);
   color: var(--text);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
 }
 
 .fortress-items button.active {
-  border-color: var(--accent);
-  background: rgba(83, 226, 168, 0.18);
+  border-color: #ffe066;
+  background: rgba(255, 224, 102, 0.22);
+  color: #fff4b8;
 }
 
 .fortress-items button:disabled {
@@ -435,10 +455,30 @@ button:hover {
   width: min(300px, calc(100vw - 36px));
   padding: 14px;
   border-radius: 8px;
+  border: 2px solid rgba(245, 251, 255, 0.72);
+  background:
+    linear-gradient(180deg, rgba(20, 44, 64, 0.92), rgba(9, 24, 39, 0.92)),
+    var(--panel);
+  box-shadow:
+    inset 0 0 0 2px rgba(0, 0, 0, 0.24),
+    0 18px 50px rgba(0, 0, 0, 0.28);
 }
 
 .fortress-message h2 {
   margin-bottom: 8px;
+  color: #fff4b8;
+}
+
+.fortress-message p {
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  font-weight: 800;
+}
+
+.fortress-message p + p {
+  margin-top: 8px;
 }
 
 .fortress-help {
@@ -448,8 +488,12 @@ button:hover {
   max-width: calc(100vw - 36px);
   padding: 10px 14px;
   border-radius: 8px;
-  color: var(--muted);
+  border: 2px solid rgba(245, 251, 255, 0.58);
+  background: rgba(9, 24, 39, 0.82);
+  color: #d8e9f5;
   font-size: 0.8rem;
+  font-weight: 800;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.24);
 }
 
 @media (max-width: 760px) {
