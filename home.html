@@ -2200,6 +2200,7 @@
         <select id="lanGameType" class="c26">
           <option value="arena">LAN 아레나</option>
           <option value="fortress">포트리스</option>
+          <option value="defense">웨이브 디펜스</option>
         </select>
         <input id="lanGameInviteUrl" type="hidden" />
         <input id="lanGameDirectUrl" type="hidden" />
@@ -2350,6 +2351,14 @@
         >
           포트리스
         </button>
+        <button
+          type="button"
+          class="ck"
+          id="gameTabDefense"
+          data-game-tab="defense"
+        >
+          웨이브 디펜스
+        </button>
       </div>
       <div class="game-pane active" id="gameArenaPane" data-game-pane="arena">
         <div class="c1e feature-help" id="gameHelp">
@@ -2406,6 +2415,26 @@
             <code>수리(1)</code>는 체력을 회복하고, <code>보호막(2)</code>은
             다음 피해를 줄이며, <code>강화탄(3)</code>은 다음 포탄을 더 강하게
             만듭니다.
+          </div>
+        </div>
+      </div>
+      <div class="game-pane" id="gameDefensePane" data-game-pane="defense">
+        <div class="c1e feature-help" id="defenseHelp">
+          <div>
+            <strong>웨이브 디펜스</strong>는 레트로 픽셀풍 타워 디펜스입니다.
+            맵을 고른 뒤 경로가 아닌 칸에 기본탄, 감속, 폭발, 저격, 증폭기
+            타워를 배치하고 기지 체력을 지키며 15웨이브를 막아냅니다.
+          </div>
+          <div>
+            멀티에서는 통합 입장 센터에서 방을 만들고 참가합니다. 첫 접속자가
+            방장이며, 첫 웨이브 이후에는 준비 시간이 끝나면 다음 웨이브가
+            자동으로 시작됩니다. 자원은 개인별로 관리되고 자신의 타워만
+            업그레이드/판매할 수 있습니다.
+          </div>
+          <div>
+            <code>혼자하기</code>는 서버 연결 없이 현재 브라우저 또는 EXE 안에서
+            실행됩니다. 멀티 연결이 안 되면 호스트 IP, 포트, Windows 방화벽 허용
+            상태를 확인하세요.
           </div>
         </div>
       </div>
@@ -4150,7 +4179,9 @@
         const e =
           "fortress" === gameActiveTab
             ? "포트리스 호스트/입장하기는 WebSocket 멀티 모드, 포트리스 혼자하기는 로컬 모드입니다."
-            : "bat 내용을 관리자 권한으로 실행하면 지정 IP/포트의 인바운드가 허용됩니다.";
+            : "defense" === gameActiveTab
+              ? "웨이브 디펜스 호스트/입장하기는 WebSocket 멀티 모드, 디펜스 혼자하기는 서버 없는 로컬 모드입니다."
+              : "bat 내용을 관리자 권한으로 실행하면 지정 IP/포트의 인바운드가 허용됩니다.";
         ((t("gameFirewallCommand").value = gameFirewallScript()),
           (t("gameStatus").innerText = e));
         gameSyncConnectionInfo();
@@ -4196,6 +4227,10 @@
         e.searchParams.set("game", "fortress");
         e.searchParams.set("mode", "multi");
         e.searchParams.set("role", "client");
+      } else if ("defense" === gameActiveTab) {
+        e.searchParams.set("game", "defense");
+        e.searchParams.set("mode", "multi");
+        e.searchParams.set("auto", "1");
       } else {
         e.searchParams.set("auto", "1");
       }
@@ -4227,7 +4262,7 @@
         e.textContent = "Connection info unavailable: " + n.message;
       }
     }
-    const GAME_ASSET_VERSION = "20260530a";
+    const GAME_ASSET_VERSION = "20260530c";
     let gameActiveTab = "arena";
     function gameIsLauncherShell() {
       return "exe" === gameLauncherParams().launcher || !!window.pywebview;
@@ -4347,23 +4382,61 @@
         e.searchParams.set("mode", "local"));
       return gameApplyClientParams(e, !1);
     }
+    function gameDefenseClientUrl(host = !1) {
+      const e = new URL("game/index.html", window.location.href);
+      (e.searchParams.set("game", "defense"),
+        e.searchParams.set("mode", "multi"));
+      return gameApplyClientParams(e, host);
+    }
+    function gameDefenseServerUrl(host = !1) {
+      const n = gameLauncherParams(),
+        i =
+          n.gameUrl ||
+          "http://" +
+            gameHostValue() +
+            ":" +
+            gamePortValue() +
+            "/game/index.html",
+        e = new URL(i);
+      (e.searchParams.set("game", "defense"),
+        e.searchParams.set("mode", "multi"));
+      return gameApplyClientParams(e, host);
+    }
+    function gameDefenseSoloUrl() {
+      const e = new URL("game/index.html", window.location.href);
+      (e.searchParams.set("game", "defense"),
+        e.searchParams.set("mode", "solo"));
+      return gameApplyClientParams(e, !1);
+    }
     function gameSelectedHostUrl() {
-      return "fortress" === gameActiveTab
-        ? "exe" === gameLauncherParams().launcher
+      if ("fortress" === gameActiveTab) {
+        return "exe" === gameLauncherParams().launcher
           ? gameFortressServerUrl("host")
-          : gameFortressClientUrl("host")
-        : "exe" === gameLauncherParams().launcher
-          ? gameServerClientUrl(!0)
-          : gameLocalClientUrl(!0);
+          : gameFortressClientUrl("host");
+      }
+      if ("defense" === gameActiveTab) {
+        return "exe" === gameLauncherParams().launcher
+          ? gameDefenseServerUrl(!0)
+          : gameDefenseClientUrl(!0);
+      }
+      return "exe" === gameLauncherParams().launcher
+        ? gameServerClientUrl(!0)
+        : gameLocalClientUrl(!0);
     }
     function gameSelectedJoinUrl() {
-      return "fortress" === gameActiveTab
-        ? "exe" === gameLauncherParams().launcher
+      if ("fortress" === gameActiveTab) {
+        return "exe" === gameLauncherParams().launcher
           ? gameFortressServerUrl("client")
-          : gameFortressClientUrl("client")
-        : "exe" === gameLauncherParams().launcher
-          ? gameServerClientUrl()
-          : gameLocalClientUrl();
+          : gameFortressClientUrl("client");
+      }
+      if ("defense" === gameActiveTab) {
+        return "exe" === gameLauncherParams().launcher
+          ? gameDefenseServerUrl()
+          : gameDefenseClientUrl();
+      }
+      return "exe" === gameLauncherParams().launcher
+        ? gameServerClientUrl()
+        : gameLocalClientUrl();
     }
     function gameSyncGameButtons() {
       if ("fortress" === gameActiveTab) {
@@ -4372,6 +4445,18 @@
         t("gameOpenLocal").innerHTML =
           '<i class="fas fa-folder-open"></i> 포트리스 입장하기';
         t("gameOpenSolo").style.display = "";
+        t("gameOpenSolo").innerHTML =
+          '<i class="fas fa-user"></i> 포트리스 혼자하기';
+        return;
+      }
+      if ("defense" === gameActiveTab) {
+        t("gameOpenServer").innerHTML =
+          '<i class="fas fa-play"></i> 디펜스 호스트';
+        t("gameOpenLocal").innerHTML =
+          '<i class="fas fa-folder-open"></i> 디펜스 입장하기';
+        t("gameOpenSolo").style.display = "";
+        t("gameOpenSolo").innerHTML =
+          '<i class="fas fa-user"></i> 디펜스 혼자하기';
         return;
       }
       ((t("gameOpenServer").innerHTML = '<i class="fas fa-play"></i> 호스트'),
@@ -4380,7 +4465,9 @@
         (t("gameOpenSolo").style.display = "none"));
     }
     function gameSetActiveTab(e) {
-      gameActiveTab = "fortress" === e ? "fortress" : "arena";
+      gameActiveTab = ["arena", "fortress", "defense"].includes(e)
+        ? e
+        : "arena";
       (n("[data-game-tab]").forEach((t) => {
         t.classList.toggle("active", t.dataset.gameTab === gameActiveTab);
       }),
@@ -4395,7 +4482,11 @@
       const i = t("gameHelpButton");
       i &&
         (i.dataset.helpTarget =
-          "fortress" === gameActiveTab ? "fortressHelp" : "gameHelp");
+          "fortress" === gameActiveTab
+            ? "fortressHelp"
+            : "defense" === gameActiveTab
+              ? "defenseHelp"
+              : "gameHelp");
       (gameSyncGameButtons(), gameSyncFirewallCommand());
     }
     function gameLauncherParams() {
@@ -4448,7 +4539,11 @@
         }),
         (t("gameOpenSolo").onclick = () => {
           try {
-            gameOpenUrl(gameFortressSoloUrl());
+            gameOpenUrl(
+              "defense" === gameActiveTab
+                ? gameDefenseSoloUrl()
+                : gameFortressSoloUrl(),
+            );
           } catch (e) {
             t("gameStatus").innerText = e.message;
           }
@@ -4714,7 +4809,11 @@
       }
     }
     function lanGameLabel(e) {
-      return "fortress" === e ? "포트리스" : "LAN 아레나";
+      return "fortress" === e
+        ? "포트리스"
+        : "defense" === e
+          ? "웨이브 디펜스"
+          : "LAN 아레나";
     }
     function lanSetGameStatus(e) {
       const n = t("lanGameStatus");
@@ -4775,6 +4874,11 @@
         a.searchParams.set("game", "fortress");
         a.searchParams.set("mode", "multi");
         a.searchParams.set("role", role);
+      } else if ("defense" === n.feature) {
+        a.searchParams.set("game", "defense");
+        a.searchParams.set("mode", "multi");
+        a.searchParams.delete("role");
+        a.searchParams.set("auto", "1");
       } else {
         a.searchParams.delete("game");
         a.searchParams.delete("mode");
@@ -5014,7 +5118,7 @@
         const e = new URLSearchParams(window.location.search).get("room"),
           i = e && lanState.rooms.find((t) => t.id === e.toUpperCase());
         i &&
-          ["arena", "fortress"].includes(i.feature) &&
+          ["arena", "fortress", "defense"].includes(i.feature) &&
           lanSetSelectedGameRoom(i);
         return;
       }
@@ -5037,7 +5141,7 @@
           );
           return;
         }
-        if (["arena", "fortress"].includes(n.room.feature)) {
+        if (["arena", "fortress", "defense"].includes(n.room.feature)) {
           lanSetSelectedGameRoom(n.room);
           lanSetGameStatus(
             "게임 방 준비됨: <code>" +
@@ -5102,7 +5206,7 @@
     function lanRenderRooms() {
       const e = t("lanRoomList");
       const gameRooms = lanState.rooms.filter((e) =>
-        ["arena", "fortress"].includes(e.feature),
+        ["arena", "fortress", "defense"].includes(e.feature),
       );
       e.innerHTML = "";
       if (!gameRooms.length) {

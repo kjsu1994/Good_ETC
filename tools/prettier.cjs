@@ -18,6 +18,7 @@ const files = [
   "game/style.css",
   "game/game.js",
   "game/fortress.js",
+  "game/defense.js",
   "pyluncher/README.md",
 ].map((file) => path.join(rootDir, file));
 

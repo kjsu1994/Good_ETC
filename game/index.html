@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>LAN Arena</title>
-    <link rel="stylesheet" href="./style.css?v=20260530a" />
+    <link rel="stylesheet" href="./style.css?v=20260530c" />
   </head>
   <body>
     <main class="arena-shell">
@@ -110,12 +110,15 @@
     <script>
       (() => {
         const params = new URLSearchParams(window.location.search);
-        const version = encodeURIComponent(params.get("v") || "20260530a");
+        const version = encodeURIComponent(params.get("v") || "20260530c");
+        const game = params.get("game");
         const script = document.createElement("script");
         script.src =
-          params.get("game") === "fortress"
+          game === "fortress"
             ? `./fortress.js?v=${version}`
-            : `./game.js?v=${version}`;
+            : game === "defense"
+              ? `./defense.js?v=${version}`
+              : `./game.js?v=${version}`;
         document.body.appendChild(script);
       })();
     </script>

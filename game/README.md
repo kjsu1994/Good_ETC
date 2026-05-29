@@ -22,7 +22,7 @@ http://localhost:7000/
 http://HOST_IP:7000/
 ```
 
-LAN 아레나는 `/ws`, 포트리스 멀티 모드는 `/fortress` WebSocket을 사용합니다. 통합 입장 센터에서 만든 게임 방은 `room` query로 분리되며, 예를 들어 `/ws?room=ABCDE`, `/fortress?role=client&room=ABCDE`, `/fortress?role=spectator&room=ABCDE`처럼 접속합니다. 방화벽에서 TCP `7000` 포트가 허용되어야 다른 PC가 접속할 수 있습니다.
+LAN 아레나는 `/ws`, 포트리스 멀티 모드는 `/fortress`, 웨이브 디펜스 멀티 모드는 `/defense` WebSocket을 사용합니다. 통합 입장 센터에서 만든 게임 방은 `room` query로 분리되며, 예를 들어 `/ws?room=ABCDE`, `/fortress?role=client&room=ABCDE`, `/fortress?role=spectator&room=ABCDE`, `/defense?room=ABCDE`처럼 접속합니다. 방화벽에서 TCP `7000` 포트가 허용되어야 다른 PC가 접속할 수 있습니다.
 
 포트리스 멀티는 방마다 P1/P2 두 명이 플레이하고, 3번째 이후 접속자는 관전자로 들어갑니다. 관전자는 화면에 관전 상태가 표시되고 조작할 수 없으며, 플레이어가 나가면 오래된 관전자부터 자동으로 빈 슬롯에 참여합니다.
 
@@ -40,3 +40,9 @@ LAN 아레나는 `/ws`, 포트리스 멀티 모드는 `/fortress` WebSocket을 �
 ## Hub socket
 
 The server also exposes `/hub` for the unified entry center and Share&Drop. It reuses the same HTTP/WebSocket port as the games, so no extra socket port is required. The unified entry center uses `/hub` to list and create game rooms, while Share&Drop uses `/hub` rooms for chat and file transfer. Share&Drop relays file chunks between browsers in the same room and currently limits each file to 100MB.
+
+## 웨이브 디펜스
+
+웨이브 디펜스 멀티는 `/defense?room=ABCDE` WebSocket을 사용합니다. 통합 입장 센터의 `defense` 방에서 바로 입장할 수 있고, 첫 접속자가 방장이 되어 첫 웨이브를 시작합니다. 참가자는 각자 개인 자원으로 기본탄, 감속, 폭발, 저격, 증폭기 타워를 배치하며, 기본 우회로/항구 지그재그/용암 협곡 맵에서 15웨이브 동안 기지를 지키면 승리합니다. 5/10/15웨이브에는 보스가 등장하고, 첫 웨이브 이후에는 준비 시간이 끝나면 다음 웨이브가 자동으로 시작됩니다.
+
+혼자하기는 `game/index.html?game=defense&mode=solo`로 실행되며 WebSocket 서버 없이 브라우저 또는 EXE 안에서 동작합니다.

@@ -96,6 +96,159 @@ FORTRESS_WEAPONS: dict[str, dict[str, Any]] = {
     },
 }
 
+DEFENSE_WIDTH = 960
+DEFENSE_HEIGHT = 640
+DEFENSE_CELL = 40
+DEFENSE_COLUMNS = DEFENSE_WIDTH // DEFENSE_CELL
+DEFENSE_ROWS = DEFENSE_HEIGHT // DEFENSE_CELL
+DEFENSE_MAX_WAVE = 15
+DEFENSE_BASE_HEALTH = 20
+DEFENSE_START_RESOURCES = 180
+DEFENSE_AUTO_START_SECONDS = 25
+DEFENSE_BOSS_WAVES = {5, 10, 15}
+DEFENSE_DEFAULT_MAP_ID = "classic"
+DEFENSE_MAPS: dict[str, dict[str, Any]] = {
+    "classic": {
+        "name": "기본 우회로",
+        "baseHealth": 20,
+        "startResources": 180,
+        "pathPoints": [(0, 7), (5, 7), (5, 3), (12, 3), (12, 11), (20, 11), (20, 6), (23, 6)],
+    },
+    "harbor": {
+        "name": "항구 지그재그",
+        "baseHealth": 22,
+        "startResources": 170,
+        "pathPoints": [(0, 4), (4, 4), (4, 12), (9, 12), (9, 5), (15, 5), (15, 10), (23, 10)],
+    },
+    "lava": {
+        "name": "용암 협곡",
+        "baseHealth": 18,
+        "startResources": 200,
+        "pathPoints": [(0, 10), (3, 10), (3, 2), (8, 2), (8, 13), (14, 13), (14, 6), (19, 6), (19, 9), (23, 9)],
+    },
+}
+DEFENSE_PATH_POINTS = list(DEFENSE_MAPS[DEFENSE_DEFAULT_MAP_ID]["pathPoints"])
+DEFENSE_TOWERS: dict[str, dict[str, Any]] = {
+    "basic": {
+        "name": "기본탄",
+        "cost": 60,
+        "range": 140,
+        "damage": 17,
+        "cooldown": 0.48,
+        "color": "#62e6ff",
+        "desc": "빠른 단일 공격",
+    },
+    "slow": {
+        "name": "감속",
+        "cost": 85,
+        "range": 130,
+        "damage": 8,
+        "cooldown": 0.72,
+        "slow": 1.4,
+        "color": "#8be66f",
+        "desc": "적 이동 속도 감소",
+    },
+    "blast": {
+        "name": "폭발",
+        "cost": 110,
+        "range": 125,
+        "damage": 13,
+        "cooldown": 1.15,
+        "splash": 58,
+        "color": "#ffba5a",
+        "desc": "범위 피해",
+    },
+    "sniper": {
+        "name": "저격",
+        "cost": 135,
+        "range": 230,
+        "damage": 55,
+        "cooldown": 1.7,
+        "color": "#c8f7ff",
+        "desc": "긴 사거리 고화력",
+    },
+    "boost": {
+        "name": "증폭기",
+        "cost": 95,
+        "range": 115,
+        "damage": 0,
+        "cooldown": 9.9,
+        "boost": 1.18,
+        "color": "#d08cff",
+        "desc": "주변 타워 강화",
+    },
+}
+DEFENSE_ENEMY_TYPES: dict[str, dict[str, Any]] = {
+    "normal": {
+        "name": "일반",
+        "health": 48,
+        "healthGrowth": 17,
+        "speed": 42,
+        "speedGrowth": 2.8,
+        "reward": 11,
+        "rewardGrowth": 2,
+        "damage": 1,
+        "color": "#ff5f6d",
+    },
+    "runner": {
+        "name": "질주",
+        "healthScale": 0.72,
+        "speedScale": 1.42,
+        "rewardBonus": 2,
+        "damage": 1,
+        "color": "#ff8b52",
+    },
+    "tank": {
+        "name": "중장갑",
+        "healthScale": 1.75,
+        "speedScale": 0.72,
+        "rewardBonus": 7,
+        "damage": 2,
+        "color": "#b58cff",
+    },
+    "shield": {
+        "name": "보호막",
+        "healthScale": 1.12,
+        "speedScale": 0.94,
+        "shieldScale": 0.55,
+        "rewardBonus": 9,
+        "damage": 1,
+        "color": "#6fe8ff",
+    },
+    "boss": {
+        "name": "보스",
+        "health": 620,
+        "healthGrowth": 86,
+        "speed": 28,
+        "reward": 95,
+        "rewardGrowth": 5,
+        "damage": 4,
+        "color": "#ffd166",
+    },
+}
+
+
+def defense_cell_center(cell_x: int, cell_y: int) -> tuple[float, float]:
+    return ((cell_x + 0.5) * DEFENSE_CELL, (cell_y + 0.5) * DEFENSE_CELL)
+
+
+def build_defense_path_cells(points: list[tuple[int, int]]) -> set[tuple[int, int]]:
+    cells: set[tuple[int, int]] = set()
+    for (x1, y1), (x2, y2) in zip(points, points[1:]):
+        step_x = 0 if x1 == x2 else (1 if x2 > x1 else -1)
+        step_y = 0 if y1 == y2 else (1 if y2 > y1 else -1)
+        x, y = x1, y1
+        cells.add((x, y))
+        while (x, y) != (x2, y2):
+            x += step_x
+            y += step_y
+            cells.add((x, y))
+    return cells
+
+
+DEFENSE_PATH_CELLS = build_defense_path_cells(DEFENSE_PATH_POINTS)
+DEFENSE_PATH_PIXELS = [defense_cell_center(x, y) for x, y in DEFENSE_PATH_POINTS]
+
 
 @dataclass
 class Client:
@@ -146,6 +299,59 @@ class FortressClient:
     slot: int = -1
     connected_at: float = field(default_factory=time.time)
     write_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+
+
+@dataclass
+class DefenseClient:
+    id: str
+    writer: asyncio.StreamWriter
+    room_id: str = "MAIN"
+    name: str = "Player"
+    color: str = "#62e6ff"
+    resources: int = DEFENSE_START_RESOURCES
+    kills: int = 0
+    score: int = 0
+    connected_at: float = field(default_factory=time.time)
+    write_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+
+
+@dataclass
+class DefenseTower:
+    id: int
+    owner_id: str
+    tower_type: str
+    cell_x: int
+    cell_y: int
+    level: int = 1
+    cooldown_left: float = 0.0
+
+
+@dataclass
+class DefenseEnemy:
+    id: int
+    x: float
+    y: float
+    segment: int
+    health: float
+    max_health: float
+    speed: float
+    reward: int
+    enemy_type: str = "normal"
+    shield: float = 0.0
+    max_shield: float = 0.0
+    base_damage: int = 1
+    slow_until: float = 0.0
+
+
+@dataclass
+class DefenseShot:
+    id: int
+    x: float
+    y: float
+    target_x: float
+    target_y: float
+    color: str
+    ttl: float = 0.18
 
 
 @dataclass
@@ -705,6 +911,547 @@ class FortressMatch:
         return max(minimum, min(maximum, value))
 
 
+class DefenseRoom:
+    def __init__(self, room_id: str = "MAIN") -> None:
+        self.room_id = room_id
+        self.clients: dict[str, DefenseClient] = {}
+        self.host_id = ""
+        self.next_client_id = 1
+        self.next_tower_id = 1
+        self.next_enemy_id = 1
+        self.next_shot_id = 1
+        self.towers: dict[int, DefenseTower] = {}
+        self.enemies: list[DefenseEnemy] = []
+        self.shots: list[DefenseShot] = []
+        self.wave = 0
+        self.phase = "build"
+        self.map_id = DEFENSE_DEFAULT_MAP_ID
+        self.map_name = str(DEFENSE_MAPS[DEFENSE_DEFAULT_MAP_ID]["name"])
+        self.path_points = list(DEFENSE_MAPS[DEFENSE_DEFAULT_MAP_ID]["pathPoints"])
+        self.path_cells = build_defense_path_cells(self.path_points)
+        self.path_pixels = [defense_cell_center(x, y) for x, y in self.path_points]
+        self.base_health_max = DEFENSE_BASE_HEALTH
+        self.base_health = self.base_health_max
+        self.start_resources = DEFENSE_START_RESOURCES
+        self.max_wave = DEFENSE_MAX_WAVE
+        self.spawn_remaining = 0
+        self.spawn_total = 0
+        self.spawn_timer = 0.0
+        self.auto_start_at = 0.0
+        self.last_ping: dict[str, Any] | None = None
+        self.status = "타워를 배치하고 방장이 웨이브를 시작하세요."
+
+    def apply_map(self, map_id: str) -> None:
+        config = DEFENSE_MAPS.get(map_id, DEFENSE_MAPS[DEFENSE_DEFAULT_MAP_ID])
+        self.map_id = map_id if map_id in DEFENSE_MAPS else DEFENSE_DEFAULT_MAP_ID
+        self.map_name = str(config["name"])
+        self.path_points = list(config["pathPoints"])
+        self.path_cells = build_defense_path_cells(self.path_points)
+        self.path_pixels = [defense_cell_center(x, y) for x, y in self.path_points]
+        self.base_health_max = int(config.get("baseHealth", DEFENSE_BASE_HEALTH))
+        self.base_health = self.base_health_max
+        self.start_resources = int(config.get("startResources", DEFENSE_START_RESOURCES))
+
+    def configure(self, client: DefenseClient, map_id: str) -> str:
+        if client.id != self.host_id:
+            return "방장만 맵을 변경할 수 있습니다."
+        if self.wave > 0 or self.towers or self.phase != "build":
+            return "맵은 1웨이브 시작 전, 타워를 배치하기 전에만 변경할 수 있습니다."
+        if map_id not in DEFENSE_MAPS:
+            return "알 수 없는 맵입니다."
+        self.apply_map(map_id)
+        for player in self.clients.values():
+            player.resources = self.start_resources
+            player.kills = 0
+            player.score = 0
+        self.status = f"{self.map_name} 맵이 선택되었습니다."
+        return ""
+
+    def create_client(self, writer: asyncio.StreamWriter) -> DefenseClient:
+        client = DefenseClient(
+            id=f"d{self.next_client_id}",
+            writer=writer,
+            room_id=self.room_id,
+            color=COLORS[(self.next_client_id - 1) % len(COLORS)],
+            resources=self.start_resources,
+        )
+        self.next_client_id += 1
+        return client
+
+    def add_client(self, client: DefenseClient) -> None:
+        self.clients[client.id] = client
+        self.ensure_host()
+
+    def remove_client(self, client: DefenseClient) -> None:
+        self.clients.pop(client.id, None)
+        if client.id == self.host_id:
+            self.host_id = ""
+        self.ensure_host()
+
+    def ensure_host(self) -> None:
+        if self.host_id in self.clients:
+            return
+        oldest = sorted(self.clients.values(), key=lambda client: client.connected_at)
+        self.host_id = oldest[0].id if oldest else ""
+
+    def summary(self) -> dict[str, Any]:
+        return {
+            "gameCount": len(self.clients),
+            "playerCount": len(self.clients),
+            "spectatorCount": 0,
+            "ready": bool(self.clients),
+        }
+
+    def start_wave(self, client: DefenseClient) -> str:
+        if client.id != self.host_id:
+            return "방장만 웨이브를 시작할 수 있습니다."
+        return self.begin_wave()
+
+    def begin_wave(self) -> str:
+        if self.phase == "wave":
+            return "이미 웨이브가 진행 중입니다."
+        if self.phase in {"win", "defeat"}:
+            return "게임이 끝났습니다. 새 방을 만들어 다시 시작하세요."
+        if self.wave >= self.max_wave:
+            return "모든 웨이브를 완료했습니다."
+        self.wave += 1
+        self.phase = "wave"
+        self.auto_start_at = 0.0
+        self.spawn_remaining = self.wave_spawn_count(self.wave)
+        self.spawn_total = self.spawn_remaining
+        self.spawn_timer = 0.0
+        self.status = f"{self.wave} 웨이브 시작."
+        return ""
+
+    def schedule_auto_start(self) -> None:
+        if self.phase == "build" and 0 < self.wave < self.max_wave:
+            self.auto_start_at = time.time() + DEFENSE_AUTO_START_SECONDS
+        else:
+            self.auto_start_at = 0.0
+
+    def build_tower(
+        self, client: DefenseClient, tower_type: str, cell_x: int, cell_y: int
+    ) -> str:
+        tower_config = DEFENSE_TOWERS.get(tower_type)
+        if not tower_config:
+            return "알 수 없는 타워입니다."
+        if self.phase != "build":
+            return "웨이브 사이 건설 시간에만 타워를 지을 수 있습니다."
+        if not self.can_place(cell_x, cell_y):
+            return "이 위치에는 타워를 지을 수 없습니다."
+        cost = int(tower_config["cost"])
+        if client.resources < cost:
+            return "자원이 부족합니다."
+        client.resources -= cost
+        tower = DefenseTower(
+            id=self.next_tower_id,
+            owner_id=client.id,
+            tower_type=tower_type,
+            cell_x=cell_x,
+            cell_y=cell_y,
+        )
+        self.towers[tower.id] = tower
+        self.next_tower_id += 1
+        self.status = f"{client.name}님이 {tower_config['name']} 타워를 배치했습니다."
+        return ""
+
+    def upgrade_tower(self, client: DefenseClient, tower_id: int) -> str:
+        tower = self.towers.get(tower_id)
+        if not tower:
+            return "타워를 찾을 수 없습니다."
+        if tower.owner_id != client.id:
+            return "자신의 타워만 업그레이드할 수 있습니다."
+        if self.phase != "build":
+            return "웨이브 사이 건설 시간에만 업그레이드할 수 있습니다."
+        if tower.level >= 3:
+            return "이미 최대 단계입니다."
+        cost = self.upgrade_cost(tower)
+        if client.resources < cost:
+            return "자원이 부족합니다."
+        client.resources -= cost
+        tower.level += 1
+        self.status = f"{client.name}님이 타워를 {tower.level}단계로 업그레이드했습니다."
+        return ""
+
+    def sell_tower(self, client: DefenseClient, tower_id: int) -> str:
+        tower = self.towers.get(tower_id)
+        if not tower:
+            return "타워를 찾을 수 없습니다."
+        if tower.owner_id != client.id:
+            return "자신의 타워만 판매할 수 있습니다."
+        if self.phase != "build":
+            return "웨이브 사이 건설 시간에만 판매할 수 있습니다."
+        refund = int(self.tower_total_cost(tower) * 0.6)
+        client.resources += refund
+        self.towers.pop(tower.id, None)
+        self.status = f"{client.name}님이 타워를 판매했습니다. +{refund}"
+        return ""
+
+    def can_place(self, cell_x: int, cell_y: int) -> bool:
+        if cell_x < 0 or cell_x >= DEFENSE_COLUMNS or cell_y < 0 or cell_y >= DEFENSE_ROWS:
+            return False
+        if (cell_x, cell_y) in self.path_cells:
+            return False
+        return all(
+            tower.cell_x != cell_x or tower.cell_y != cell_y
+            for tower in self.towers.values()
+        )
+
+    def upgrade_cost(self, tower: DefenseTower) -> int:
+        base = int(DEFENSE_TOWERS[tower.tower_type]["cost"])
+        return int(base * (0.75 + tower.level * 0.5))
+
+    def tower_total_cost(self, tower: DefenseTower) -> int:
+        base = int(DEFENSE_TOWERS[tower.tower_type]["cost"])
+        total = base
+        for level in range(1, tower.level):
+            total += int(base * (0.75 + level * 0.5))
+        return total
+
+    def update(self, dt: float) -> None:
+        for shot in self.shots:
+            shot.ttl -= dt
+        self.shots = [shot for shot in self.shots if shot.ttl > 0]
+        if (
+            self.phase == "build"
+            and self.auto_start_at
+            and self.clients
+            and time.time() >= self.auto_start_at
+        ):
+            self.begin_wave()
+        if self.phase != "wave":
+            return
+        self.spawn_timer -= dt
+        while self.spawn_remaining > 0 and self.spawn_timer <= 0:
+            self.spawn_enemy()
+            self.spawn_remaining -= 1
+            self.spawn_timer += max(0.26, 0.74 - self.wave * 0.035)
+        self.update_enemies(dt)
+        self.update_towers(dt)
+        if self.base_health <= 0:
+            self.phase = "defeat"
+            self.enemies.clear()
+            self.status = "기지가 파괴되었습니다."
+            return
+        if self.spawn_remaining <= 0 and not self.enemies:
+            if self.wave >= self.max_wave:
+                self.phase = "win"
+                self.status = "모든 웨이브를 막아냈습니다."
+                self.auto_start_at = 0.0
+            else:
+                self.phase = "build"
+                bonus = 35 + self.wave * 9
+                for client in self.clients.values():
+                    client.resources += bonus
+                self.status = f"{self.wave} 웨이브 완료. 전원 +{bonus}"
+                self.schedule_auto_start()
+
+    def wave_spawn_count(self, wave: int) -> int:
+        player_bonus = max(0, len(self.clients) - 1) * 2
+        boss_bonus = 1 if wave in DEFENSE_BOSS_WAVES else 0
+        return 7 + wave * 3 + player_bonus + boss_bonus
+
+    def wave_enemy_counts(self, wave: int) -> dict[str, int]:
+        total = self.wave_spawn_count(wave)
+        counts = {"normal": total}
+        if wave >= 4:
+            counts["runner"] = max(1, total // 5)
+            counts["normal"] -= counts["runner"]
+        if wave >= 6:
+            counts["tank"] = max(1, total // 7)
+            counts["normal"] -= counts["tank"]
+        if wave >= 8:
+            counts["shield"] = max(1, total // 8)
+            counts["normal"] -= counts["shield"]
+        if wave in DEFENSE_BOSS_WAVES:
+            counts["boss"] = 1
+            counts["normal"] -= 1
+        counts["normal"] = max(0, counts["normal"])
+        return {kind: count for kind, count in counts.items() if count > 0}
+
+    def wave_preview(self) -> dict[str, Any]:
+        next_wave = min(self.wave + 1, self.max_wave)
+        counts = self.wave_enemy_counts(next_wave) if self.wave < self.max_wave else {}
+        enemies = [
+            {
+                "type": kind,
+                "name": DEFENSE_ENEMY_TYPES.get(kind, {}).get("name", kind),
+                "count": count,
+                "color": DEFENSE_ENEMY_TYPES.get(kind, {}).get("color", "#ff5f6d"),
+            }
+            for kind, count in counts.items()
+        ]
+        return {
+            "wave": next_wave,
+            "boss": next_wave in DEFENSE_BOSS_WAVES,
+            "enemies": enemies,
+        }
+
+    def enemy_kind_for_spawn(self) -> str:
+        if self.wave in DEFENSE_BOSS_WAVES and self.spawn_remaining == 1:
+            return "boss"
+        if self.wave >= 8 and self.next_enemy_id % 8 == 0:
+            return "shield"
+        if self.wave >= 6 and self.next_enemy_id % 7 == 0:
+            return "tank"
+        if self.wave >= 4 and self.next_enemy_id % 5 == 0:
+            return "runner"
+        return "normal"
+
+    def spawn_enemy(self) -> None:
+        x, y = self.path_pixels[0]
+        enemy_type = self.enemy_kind_for_spawn()
+        base = DEFENSE_ENEMY_TYPES["normal"]
+        config = DEFENSE_ENEMY_TYPES.get(enemy_type, base)
+        if enemy_type == "boss":
+            health = float(config["health"]) + self.wave * float(config["healthGrowth"])
+            speed = float(config["speed"])
+            reward = int(config["reward"]) + self.wave * int(config["rewardGrowth"])
+        else:
+            health = float(base["health"]) + self.wave * float(base["healthGrowth"])
+            speed = float(base["speed"]) + self.wave * float(base["speedGrowth"])
+            reward = int(base["reward"]) + self.wave * int(base["rewardGrowth"])
+            health *= float(config.get("healthScale", 1.0))
+            speed *= float(config.get("speedScale", 1.0))
+            reward += int(config.get("rewardBonus", 0))
+        shield = health * float(config.get("shieldScale", 0.0))
+        self.enemies.append(
+            DefenseEnemy(
+                id=self.next_enemy_id,
+                x=x,
+                y=y,
+                segment=0,
+                health=health,
+                max_health=health,
+                speed=speed,
+                reward=reward,
+                enemy_type=enemy_type,
+                shield=shield,
+                max_shield=shield,
+                base_damage=int(config.get("damage", 1)),
+            )
+        )
+        self.next_enemy_id += 1
+
+    def update_enemies(self, dt: float) -> None:
+        reached: list[DefenseEnemy] = []
+        for enemy in list(self.enemies):
+            enemy.slow_until = max(0.0, enemy.slow_until - dt)
+            speed = enemy.speed * (0.55 if enemy.slow_until > 0 else 1.0)
+            remaining = speed * dt
+            while remaining > 0 and enemy.segment < len(self.path_pixels) - 1:
+                target_x, target_y = self.path_pixels[enemy.segment + 1]
+                distance = math.hypot(target_x - enemy.x, target_y - enemy.y)
+                if distance <= 0.001:
+                    enemy.segment += 1
+                    continue
+                if distance <= remaining:
+                    enemy.x, enemy.y = target_x, target_y
+                    enemy.segment += 1
+                    remaining -= distance
+                else:
+                    enemy.x += (target_x - enemy.x) / distance * remaining
+                    enemy.y += (target_y - enemy.y) / distance * remaining
+                    remaining = 0
+            if enemy.segment >= len(self.path_pixels) - 1:
+                reached.append(enemy)
+        for enemy in reached:
+            if enemy in self.enemies:
+                self.enemies.remove(enemy)
+                self.base_health = max(0, self.base_health - max(1, enemy.base_damage))
+        if reached:
+            self.status = f"적 {len(reached)}기가 기지에 도달했습니다."
+
+    def update_towers(self, dt: float) -> None:
+        for tower in list(self.towers.values()):
+            tower.cooldown_left = max(0.0, tower.cooldown_left - dt)
+            if tower.cooldown_left > 0:
+                continue
+            target = self.find_target(tower)
+            if not target:
+                continue
+            config = DEFENSE_TOWERS[tower.tower_type]
+            if config.get("boost"):
+                continue
+            level_bonus = 1 + (tower.level - 1) * 0.45
+            boost = self.tower_boost_multiplier(tower)
+            damage = float(config["damage"]) * level_bonus * boost
+            cooldown = (
+                float(config["cooldown"])
+                * max(0.74, 1 - (tower.level - 1) * 0.1)
+                / boost
+            )
+            tower.cooldown_left = cooldown
+            tower_x, tower_y = defense_cell_center(tower.cell_x, tower.cell_y)
+            self.add_shot(tower_x, tower_y, target.x, target.y, str(config["color"]))
+            if config.get("slow"):
+                target.slow_until = max(target.slow_until, float(config["slow"]))
+            if config.get("splash"):
+                splash = float(config["splash"])
+                for enemy in list(self.enemies):
+                    if math.hypot(enemy.x - target.x, enemy.y - target.y) <= splash:
+                        self.damage_enemy(enemy, damage, tower.owner_id)
+            else:
+                self.damage_enemy(target, damage, tower.owner_id)
+
+    def find_target(self, tower: DefenseTower) -> DefenseEnemy | None:
+        tower_x, tower_y = defense_cell_center(tower.cell_x, tower.cell_y)
+        config = DEFENSE_TOWERS[tower.tower_type]
+        tower_range = float(config["range"]) + (tower.level - 1) * 14
+        targets = [
+            enemy
+            for enemy in self.enemies
+            if math.hypot(enemy.x - tower_x, enemy.y - tower_y) <= tower_range
+        ]
+        return max(targets, key=lambda enemy: enemy.segment, default=None)
+
+    def tower_boost_multiplier(self, tower: DefenseTower) -> float:
+        best = 1.0
+        tower_x, tower_y = defense_cell_center(tower.cell_x, tower.cell_y)
+        for booster in self.towers.values():
+            if booster.id == tower.id:
+                continue
+            config = DEFENSE_TOWERS.get(booster.tower_type, {})
+            if not config.get("boost"):
+                continue
+            booster_x, booster_y = defense_cell_center(booster.cell_x, booster.cell_y)
+            booster_range = float(config["range"]) + (booster.level - 1) * 14
+            if math.hypot(tower_x - booster_x, tower_y - booster_y) <= booster_range:
+                best = max(best, 1 + (float(config["boost"]) - 1) * booster.level)
+        return best
+
+    def damage_enemy(self, enemy: DefenseEnemy, damage: float, owner_id: str) -> None:
+        if enemy not in self.enemies:
+            return
+        if enemy.shield > 0:
+            absorbed = min(enemy.shield, damage)
+            enemy.shield -= absorbed
+            damage -= absorbed
+            if damage <= 0:
+                return
+        enemy.health -= damage
+        if enemy.health > 0:
+            return
+        self.enemies.remove(enemy)
+        owner = self.clients.get(owner_id)
+        if owner:
+            owner.resources += enemy.reward
+            owner.kills += 1
+            owner.score += enemy.reward * 10
+
+    def add_shot(
+        self, x: float, y: float, target_x: float, target_y: float, color: str
+    ) -> None:
+        self.shots.append(
+            DefenseShot(
+                id=self.next_shot_id,
+                x=x,
+                y=y,
+                target_x=target_x,
+                target_y=target_y,
+                color=color,
+            )
+        )
+        self.next_shot_id += 1
+
+    def state(self) -> dict[str, Any]:
+        auto_start_seconds = 0
+        if self.auto_start_at and self.phase == "build":
+            auto_start_seconds = max(0, math.ceil(self.auto_start_at - time.time()))
+        return {
+            "type": "defense_state",
+            "roomId": self.room_id,
+            "width": DEFENSE_WIDTH,
+            "height": DEFENSE_HEIGHT,
+            "cell": DEFENSE_CELL,
+            "columns": DEFENSE_COLUMNS,
+            "rows": DEFENSE_ROWS,
+            "phase": self.phase,
+            "wave": self.wave,
+            "maxWave": self.max_wave,
+            "mapId": self.map_id,
+            "mapName": self.map_name,
+            "maps": DEFENSE_MAPS,
+            "towerTypes": DEFENSE_TOWERS,
+            "enemyTypes": DEFENSE_ENEMY_TYPES,
+            "wavePreview": self.wave_preview(),
+            "autoStartSeconds": auto_start_seconds,
+            "baseHealth": self.base_health,
+            "baseHealthMax": self.base_health_max,
+            "status": self.status,
+            "hostId": self.host_id,
+            "pathPoints": [[x, y] for x, y in self.path_points],
+            "pathCells": [[x, y] for x, y in sorted(self.path_cells)],
+            "lastPing": self.last_ping,
+            "players": [
+                {
+                    "id": client.id,
+                    "name": client.name,
+                    "color": client.color,
+                    "resources": client.resources,
+                    "kills": client.kills,
+                    "score": client.score,
+                    "isHost": client.id == self.host_id,
+                    "connectedAt": round(client.connected_at, 3),
+                }
+                for client in self.clients.values()
+            ],
+            "scores": [
+                {
+                    "id": client.id,
+                    "name": client.name,
+                    "kills": client.kills,
+                    "score": client.score,
+                }
+                for client in sorted(self.clients.values(), key=lambda item: item.score, reverse=True)
+            ],
+            "towers": [
+                {
+                    "id": tower.id,
+                    "ownerId": tower.owner_id,
+                    "ownerName": self.clients[tower.owner_id].name
+                    if tower.owner_id in self.clients
+                    else "퇴장",
+                    "type": tower.tower_type,
+                    "cellX": tower.cell_x,
+                    "cellY": tower.cell_y,
+                    "level": tower.level,
+                    "range": int(DEFENSE_TOWERS[tower.tower_type]["range"])
+                    + (tower.level - 1) * 14,
+                    "boost": round(self.tower_boost_multiplier(tower), 2),
+                }
+                for tower in self.towers.values()
+            ],
+            "enemies": [
+                {
+                    "id": enemy.id,
+                    "x": round(enemy.x, 2),
+                    "y": round(enemy.y, 2),
+                    "health": round(enemy.health, 1),
+                    "maxHealth": round(enemy.max_health, 1),
+                    "slowed": enemy.slow_until > 0,
+                    "type": enemy.enemy_type,
+                    "shield": round(enemy.shield, 1),
+                    "maxShield": round(enemy.max_shield, 1),
+                }
+                for enemy in self.enemies
+            ],
+            "shots": [
+                {
+                    "id": shot.id,
+                    "x": round(shot.x, 2),
+                    "y": round(shot.y, 2),
+                    "targetX": round(shot.target_x, 2),
+                    "targetY": round(shot.target_y, 2),
+                    "color": shot.color,
+                    "ttl": round(max(0, shot.ttl), 3),
+                }
+                for shot in self.shots
+            ],
+            "serverTime": round(time.time(), 3),
+        }
+
+
 class ArenaServer:
     def __init__(
         self, game_root: Path | str = ROOT, home_path: Path | str | None = None
@@ -713,6 +1460,7 @@ class ArenaServer:
         self.home_path = Path(home_path).resolve() if home_path else None
         self.arena_rooms: dict[str, ArenaRoom] = {}
         self.fortress_rooms: dict[str, FortressMatch] = {}
+        self.defense_rooms: dict[str, DefenseRoom] = {}
         self.hub_clients: dict[str, HubClient] = {}
         self.hub_rooms: dict[str, HubRoom] = {}
         self.next_hub_client_id = 1
@@ -735,13 +1483,21 @@ class ArenaServer:
             self.fortress_rooms[room_id] = FortressMatch(room_id=room_id)
         return self.fortress_rooms[room_id]
 
+    def ensure_defense_room(self, room_id: str) -> DefenseRoom:
+        room_id = self.clean_room_id(room_id)
+        if room_id not in self.defense_rooms:
+            self.defense_rooms[room_id] = DefenseRoom(room_id=room_id)
+        return self.defense_rooms[room_id]
+
     def room_has_activity(self, room_id: str) -> bool:
         arena_room = self.arena_rooms.get(room_id)
         fortress_room = self.fortress_rooms.get(room_id)
+        defense_room = self.defense_rooms.get(room_id)
         return (
             any(client.room_id == room_id for client in self.hub_clients.values())
             or bool(arena_room and arena_room.clients)
             or bool(fortress_room and fortress_room.clients)
+            or bool(defense_room and defense_room.clients)
         )
 
     async def cleanup_hub_room_if_empty(self, room_id: str) -> None:
@@ -775,6 +1531,8 @@ class ArenaServer:
             parsed = urlparse(path)
             if parsed.path == "/fortress":
                 await self.handle_fortress_websocket(reader, writer, headers, parsed.query)
+            elif parsed.path == "/defense":
+                await self.handle_defense_websocket(reader, writer, headers, parsed.query)
             elif parsed.path == "/hub":
                 await self.handle_hub_websocket(reader, writer, headers)
             else:
@@ -977,6 +1735,113 @@ class ArenaServer:
             except OSError:
                 pass
 
+    async def handle_defense_websocket(
+        self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+        headers: dict[str, str],
+        query: str,
+    ) -> None:
+        key = headers.get("sec-websocket-key")
+        if not key:
+            writer.close()
+            await writer.wait_closed()
+            return
+
+        accept = base64.b64encode(hashlib.sha1((key + GUID).encode()).digest()).decode()
+        writer.write(
+            (
+                "HTTP/1.1 101 Switching Protocols\r\n"
+                "Upgrade: websocket\r\n"
+                "Connection: Upgrade\r\n"
+                f"Sec-WebSocket-Accept: {accept}\r\n\r\n"
+            ).encode("ascii")
+        )
+        await writer.drain()
+
+        values = parse_qs(query)
+        room_id = self.clean_room_id(values.get("room", ["MAIN"])[0])
+        room = self.ensure_defense_room(room_id)
+        client = room.create_client(writer)
+        room.add_client(client)
+        await self.send_json(
+            writer,
+            {
+                "type": "defense_welcome",
+                "id": client.id,
+                "roomId": room_id,
+                "isHost": client.id == room.host_id,
+            },
+            client.write_lock,
+        )
+        await self.broadcast_hub_room_list()
+
+        try:
+            while self.running:
+                message = await self.read_ws_message(reader)
+                if message is None:
+                    break
+                await self.handle_defense_message(room, client, message)
+        except (asyncio.IncompleteReadError, ConnectionError, OSError, UnicodeDecodeError):
+            pass
+        finally:
+            room.remove_client(client)
+            if not room.clients:
+                self.defense_rooms.pop(room_id, None)
+            await self.cleanup_hub_room_if_empty(room_id)
+            writer.close()
+            try:
+                await writer.wait_closed()
+            except OSError:
+                pass
+
+    async def handle_defense_message(
+        self, room: DefenseRoom, client: DefenseClient, raw: str
+    ) -> None:
+        try:
+            message = json.loads(raw)
+        except json.JSONDecodeError:
+            return
+
+        kind = str(message.get("type") or "")
+        error = ""
+        if kind == "defense_join":
+            client.name = str(message.get("name") or "Player").strip()[:18] or "Player"
+            return
+        if kind == "defense_configure":
+            error = room.configure(client, str(message.get("mapId") or "classic"))
+        elif kind == "defense_ping":
+            if room.phase in {"win", "defeat"}:
+                error = "게임이 끝난 뒤에는 핑을 표시할 수 없습니다."
+            else:
+                room.last_ping = {
+                    "x": self.safe_int(message.get("cellX"), -1),
+                    "y": self.safe_int(message.get("cellY"), -1),
+                    "clientId": client.id,
+                    "name": client.name,
+                    "time": round(time.time(), 3),
+                }
+                room.status = f"{client.name}님이 전장에 핑을 표시했습니다."
+        elif kind == "defense_start_wave":
+            error = room.start_wave(client)
+        elif kind == "defense_build":
+            error = room.build_tower(
+                client,
+                str(message.get("towerType") or "basic"),
+                self.safe_int(message.get("cellX"), -1),
+                self.safe_int(message.get("cellY"), -1),
+            )
+        elif kind == "defense_upgrade":
+            error = room.upgrade_tower(client, self.safe_int(message.get("towerId"), -1))
+        elif kind == "defense_sell":
+            error = room.sell_tower(client, self.safe_int(message.get("towerId"), -1))
+        if error:
+            await self.send_json(
+                client.writer,
+                {"type": "defense_error", "message": error},
+                client.write_lock,
+            )
+
     async def handle_hub_websocket(
         self,
         reader: asyncio.StreamReader,
@@ -1099,9 +1964,13 @@ class ArenaServer:
         self, client: HubClient, message: dict[str, Any]
     ) -> None:
         feature = str(message.get("feature") or "drop").strip().lower()[:24]
-        if feature not in {"drop", "arena", "fortress"}:
+        if feature not in {"drop", "arena", "fortress", "defense"}:
             feature = "drop"
-        pin = "" if feature in {"arena", "fortress"} else str(message.get("pin") or "").strip()[:24]
+        pin = (
+            ""
+            if feature in {"arena", "fortress", "defense"}
+            else str(message.get("pin") or "").strip()[:24]
+        )
         room = HubRoom(
             id=self.make_hub_room_id(),
             name=str(message.get("name") or "LAN Room").strip()[:40] or "LAN Room",
@@ -1229,9 +2098,26 @@ class ArenaServer:
             if fortress_room
             else {"gameCount": 0, "playerCount": 0, "spectatorCount": 0, "ready": False}
         )
-        game_count = (
-            arena_count if room.feature == "arena" else fortress_summary["gameCount"]
+        defense_room = self.defense_rooms.get(room.id)
+        defense_summary = (
+            defense_room.summary()
+            if defense_room
+            else {"gameCount": 0, "playerCount": 0, "spectatorCount": 0, "ready": False}
         )
+        game_count = arena_count
+        player_count = arena_count
+        spectator_count = 0
+        ready = bool(arena_count)
+        if room.feature == "fortress":
+            game_count = fortress_summary["gameCount"]
+            player_count = fortress_summary["playerCount"]
+            spectator_count = fortress_summary["spectatorCount"]
+            ready = fortress_summary["ready"]
+        elif room.feature == "defense":
+            game_count = defense_summary["gameCount"]
+            player_count = defense_summary["playerCount"]
+            spectator_count = 0
+            ready = defense_summary["ready"]
         return {
             "id": room.id,
             "name": room.name,
@@ -1241,9 +2127,9 @@ class ArenaServer:
             "count": hub_count,
             "hubCount": hub_count,
             "gameCount": game_count,
-            "playerCount": fortress_summary["playerCount"] if room.feature == "fortress" else game_count,
-            "spectatorCount": fortress_summary["spectatorCount"] if room.feature == "fortress" else 0,
-            "ready": fortress_summary["ready"] if room.feature == "fortress" else bool(game_count),
+            "playerCount": player_count,
+            "spectatorCount": spectator_count,
+            "ready": ready,
             "createdAt": round(room.created_at, 3),
         }
 
@@ -1386,6 +2272,13 @@ class ArenaServer:
             return fallback
         return result
 
+    def safe_int(self, value: Any, fallback: int) -> int:
+        try:
+            result = int(value)
+        except (TypeError, ValueError):
+            return fallback
+        return result
+
     async def read_ws_message(self, reader: asyncio.StreamReader) -> str | None:
         first = await reader.readexactly(2)
         opcode = first[0] & 0x0F
@@ -1440,8 +2333,11 @@ class ArenaServer:
             self.update_players(dt, now)
             for match in list(self.fortress_rooms.values()):
                 match.update(dt, now)
+            for room in list(self.defense_rooms.values()):
+                room.update(dt)
             await self.broadcast_state()
             await self.broadcast_fortress_state()
+            await self.broadcast_defense_state()
             await asyncio.sleep(1 / TICK_RATE)
 
     def update_players(self, dt: float, now: float) -> None:
@@ -1603,6 +2499,29 @@ class ArenaServer:
                     match.remove_client(client)
             if not match.clients:
                 self.fortress_rooms.pop(room_id, None)
+                await self.cleanup_hub_room_if_empty(room_id)
+
+    async def broadcast_defense_state(self) -> None:
+        for room_id, room in list(self.defense_rooms.items()):
+            if not room.clients:
+                continue
+            state = room.state()
+            stale: list[str] = []
+            for client in list(room.clients.values()):
+                try:
+                    await self.send_json(
+                        client.writer,
+                        {**state, "clientId": client.id, "isHost": client.id == room.host_id},
+                        client.write_lock,
+                    )
+                except (ConnectionError, OSError):
+                    stale.append(client.id)
+            for client_id in stale:
+                client = room.clients.get(client_id)
+                if client:
+                    room.remove_client(client)
+            if not room.clients:
+                self.defense_rooms.pop(room_id, None)
                 await self.cleanup_hub_room_if_empty(room_id)
 
 

@@ -102,7 +102,7 @@ function safeUrl(value) {
 }
 
 function currentAssetVersion() {
-  return new URLSearchParams(window.location.search).get("v") || "20260530a";
+  return new URLSearchParams(window.location.search).get("v") || "20260530c";
 }
 
 function escapeHtml(value) {
