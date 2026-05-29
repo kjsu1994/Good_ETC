@@ -7,6 +7,66 @@
   const role = params.get("role") === "host" ? "host" : "client";
   const world = { width: 1400, height: 760 };
   const gravity = 300;
+  const moveBudgetMax = 100;
+  const moveCost = 10;
+  const defaultWeapon = "standard";
+  const weaponOrder = ["standard", "impact", "burst", "split", "drill"];
+  const weapons = {
+    standard: {
+      key: "Z",
+      name: "표준탄",
+      desc: "균형",
+      speed: 1,
+      radius: 52,
+      damage: 34,
+      carve: 1,
+      color: "#111827",
+    },
+    impact: {
+      key: "X",
+      name: "강타탄",
+      desc: "직격",
+      speed: 0.95,
+      radius: 42,
+      damage: 50,
+      carve: 0.82,
+      color: "#ff5f6d",
+    },
+    burst: {
+      key: "C",
+      name: "광역탄",
+      desc: "범위",
+      speed: 0.92,
+      radius: 78,
+      damage: 26,
+      carve: 1.05,
+      color: "#69dcff",
+    },
+    split: {
+      key: "V",
+      name: "분열탄",
+      desc: "3분열",
+      speed: 1.02,
+      radius: 36,
+      damage: 22,
+      carve: 0.68,
+      color: "#b987ff",
+      splitAt: 0.72,
+      childRadius: 30,
+      childDamage: 17,
+      childCarve: 0.56,
+    },
+    drill: {
+      key: "B",
+      name: "굴착탄",
+      desc: "지형",
+      speed: 1.05,
+      radius: 48,
+      damage: 30,
+      carve: 1.55,
+      color: "#8b5a2b",
+    },
+  };
   const vehiclePalettes = [
     {
       body: "#38d6b0",
@@ -54,6 +114,8 @@
         <span>바람<strong id="fortressWind">0</strong></span>
         <span>포각<strong id="fortressAngle">45도</strong></span>
         <span>파워<strong id="fortressPower">60</strong></span>
+        <span>이동<strong id="fortressMove">100</strong></span>
+        <span>탄종<strong id="fortressWeapon">표준탄</strong></span>
       </div>
       <div class="fortress-buttons">
         <button type="button" id="moveLeftButton">이동(←)</button>
@@ -70,6 +132,13 @@
         <button type="button" id="shieldButton">보호막(2)</button>
         <button type="button" id="powerShotButton">강화탄(3)</button>
       </div>
+      <div class="fortress-weapons" aria-label="탄종 선택">
+        <button type="button" id="weaponStandard" data-weapon="standard">Z 표준탄</button>
+        <button type="button" id="weaponImpact" data-weapon="impact">X 강타탄</button>
+        <button type="button" id="weaponBurst" data-weapon="burst">C 광역탄</button>
+        <button type="button" id="weaponSplit" data-weapon="split">V 분열탄</button>
+        <button type="button" id="weaponDrill" data-weapon="drill">B 굴착탄</button>
+      </div>
     </section>
     <section class="hud fortress-message" aria-label="플레이어 상태">
       <h2>플레이어</h2>
@@ -77,7 +146,7 @@
       <p id="playerTwoStatus"></p>
     </section>
     <section class="hud fortress-help" aria-label="조작법">
-      ←/→: 이동 · ↑/↓: 포각 · A/D: 파워 · Space: 발사 · 1/2/3: 아이템 · R: 재시작
+      ←/→: 이동 · ↑/↓: 포각 · A/D: 파워 · Space: 발사 · Z/X/C/V/B: 탄종 · 1/2/3: 아이템
     </section>
   `;
 
@@ -90,13 +159,18 @@
     wind: document.getElementById("fortressWind"),
     angle: document.getElementById("fortressAngle"),
     power: document.getElementById("fortressPower"),
+    move: document.getElementById("fortressMove"),
+    weapon: document.getElementById("fortressWeapon"),
     panel: document.getElementById("fortressPanel"),
     toggle: document.getElementById("fortressToggle"),
     p1: document.getElementById("playerOneStatus"),
     p2: document.getElementById("playerTwoStatus"),
+    moveLeft: document.getElementById("moveLeftButton"),
+    moveRight: document.getElementById("moveRightButton"),
     repair: document.getElementById("repairButton"),
     shield: document.getElementById("shieldButton"),
     powerShot: document.getElementById("powerShotButton"),
+    weaponButtons: Array.from(document.querySelectorAll("[data-weapon]")),
     controls: [
       "moveLeftButton",
       "moveRightButton",
@@ -108,6 +182,11 @@
       "repairButton",
       "shieldButton",
       "powerShotButton",
+      "weaponStandard",
+      "weaponImpact",
+      "weaponBurst",
+      "weaponSplit",
+      "weaponDrill",
     ].map((id) => document.getElementById(id)),
   };
 
@@ -116,6 +195,35 @@
   let lastFrame = performance.now();
   let state = createInitialState();
 
+  function weaponConfig(key) {
+    return weapons[key] || weapons[defaultWeapon];
+  }
+
+  function normalizePlayer(player) {
+    player.moveLeft = Number.isFinite(Number(player.moveLeft))
+      ? Number(player.moveLeft)
+      : moveBudgetMax;
+    player.weapon = weapons[player.weapon] ? player.weapon : defaultWeapon;
+    player.items = player.items || { repair: 1, shield: 1, power: 1 };
+    return player;
+  }
+
+  function normalizeState(nextState) {
+    nextState.players.forEach(normalizePlayer);
+    if (!Array.isArray(nextState.projectiles)) {
+      nextState.projectiles = nextState.projectile
+        ? [nextState.projectile]
+        : [];
+    }
+    nextState.projectile = nextState.projectiles[0] || null;
+    nextState.turnLocked = Boolean(nextState.turnLocked);
+    return nextState;
+  }
+
+  function hasProjectiles() {
+    return (state.projectiles || []).length > 0 || !!state.projectile;
+  }
+
   function createInitialState() {
     const players = [
       createPlayer("P1", "#53e2a8", 170, 45, 8, 82),
@@ -123,18 +231,19 @@
     ];
     const terrain = buildTerrain();
     placePlayers(players, terrain);
-    return {
+    return normalizeState({
       world,
       terrain,
       players,
       turn: 0,
       wind: randomWind(),
       projectile: null,
+      projectiles: [],
       explosion: null,
       gameOver: false,
       ready: true,
       status: "P1 턴. 이동, 포각, 파워를 조절하세요.",
-    };
+    });
   }
 
   function createPlayer(name, color, x, angle, minAngle, maxAngle) {
@@ -147,6 +256,8 @@
       minAngle,
       maxAngle,
       power: 60,
+      moveLeft: moveBudgetMax,
+      weapon: defaultWeapon,
       health: 100,
       shield: false,
       activeItem: "",
@@ -201,7 +312,9 @@
     return (
       state.ready &&
       !state.gameOver &&
-      !state.projectile &&
+      !hasProjectiles() &&
+      !state.turnDelayAt &&
+      !state.turnLocked &&
       (mode === "local" || mySlot === state.turn)
     );
   }
@@ -230,6 +343,7 @@
     if (type === "move") movePlayer(payload.delta);
     if (type === "angle") adjustAngle(payload.delta);
     if (type === "power") adjustPower(payload.delta);
+    if (type === "weapon") selectWeapon(payload.weapon);
     if (type === "fire") fire();
     if (type === "item") useItem(payload.item);
   }
@@ -237,10 +351,15 @@
   function movePlayer(delta) {
     const player = currentPlayer();
     const other = state.players[state.turn === 0 ? 1 : 0];
+    if ((player.moveLeft || 0) < moveCost) {
+      state.status = `${player.name} 이동 게이지가 부족합니다.`;
+      return;
+    }
     const nextX = clamp(player.x + delta, 50, world.width - 50);
     if (Math.abs(nextX - other.x) < 72) return;
     player.x = nextX;
     player.y = terrainAt(state.terrain, player.x) - 18;
+    player.moveLeft = Math.max(0, (player.moveLeft || 0) - moveCost);
   }
 
   function adjustAngle(delta) {
@@ -255,6 +374,13 @@
   function adjustPower(delta) {
     const player = currentPlayer();
     player.power = clamp(player.power + delta, 20, 100);
+  }
+
+  function selectWeapon(weapon) {
+    if (!weapons[weapon]) return;
+    const player = currentPlayer();
+    player.weapon = weapon;
+    state.status = `${player.name} ${weaponConfig(weapon).name} 선택.`;
   }
 
   function useItem(item) {
@@ -285,22 +411,59 @@
 
   function fire() {
     const player = currentPlayer();
+    const weaponKey = weapons[player.weapon] ? player.weapon : defaultWeapon;
+    const weapon = weaponConfig(weaponKey);
     const radians = (player.angle * Math.PI) / 180;
-    const speed = 145 + player.power * 5.1;
+    const speed = (145 + player.power * 5.1) * weapon.speed;
     const powerShot = player.activeItem === "power" && player.items.power > 0;
     if (powerShot) player.items.power -= 1;
     player.activeItem = "";
-    state.projectile = {
-      owner: state.turn,
-      x: player.x + Math.cos(radians) * 31,
-      y: player.y - 21 - Math.sin(radians) * 31,
-      vx: Math.cos(radians) * speed,
-      vy: -Math.sin(radians) * speed,
-      radius: powerShot ? 72 : 52,
-      damage: powerShot ? 48 : 34,
-      age: 0,
+    state.projectiles = [
+      createProjectile({
+        owner: state.turn,
+        x: player.x + Math.cos(radians) * 31,
+        y: player.y - 21 - Math.sin(radians) * 31,
+        vx: Math.cos(radians) * speed,
+        vy: -Math.sin(radians) * speed,
+        weapon: weaponKey,
+        powered: powerShot,
+      }),
+    ];
+    state.projectile = state.projectiles[0];
+    state.status = `${player.name} ${weapon.name} 발사.`;
+  }
+
+  function createProjectile({
+    owner,
+    x,
+    y,
+    vx,
+    vy,
+    weapon,
+    powered = false,
+    splitDone = false,
+    radius,
+    damage,
+    carve,
+    age = 0,
+  }) {
+    const config = weaponConfig(weapon);
+    const boost = powered ? 1.22 : 1;
+    return {
+      owner,
+      x,
+      y,
+      vx,
+      vy,
+      weapon,
+      color: config.color,
+      radius: radius || Math.round(config.radius * boost),
+      damage: damage || Math.round(config.damage * boost),
+      carve: carve || config.carve * (powered ? 1.14 : 1),
+      splitAt: config.splitAt || 0,
+      splitDone,
+      age,
     };
-    state.status = `${player.name} 발사.`;
   }
 
   function finishTurnSoon() {
@@ -310,6 +473,7 @@
   function nextTurn() {
     currentPlayer().activeItem = "";
     state.turn = state.turn === 0 ? 1 : 0;
+    currentPlayer().moveLeft = moveBudgetMax;
     state.wind = randomWind();
     state.turnDelayAt = 0;
     state.status = `${currentPlayer().name} 턴. 이동, 포각, 파워를 조절하세요.`;
@@ -320,55 +484,110 @@
     if (state.turnDelayAt && performance.now() >= state.turnDelayAt) {
       nextTurn();
     }
-    updateProjectile(dt);
+    updateProjectiles(dt);
     if (state.explosion) {
       state.explosion.age += dt;
       if (state.explosion.age > 0.55) state.explosion = null;
     }
   }
 
-  function updateProjectile(dt) {
-    const shot = state.projectile;
-    if (!shot) return;
-    shot.age += dt;
-    shot.vx += state.wind * 0.22 * dt;
-    shot.vy += gravity * dt;
-    shot.x += shot.vx * dt;
-    shot.y += shot.vy * dt;
+  function updateProjectiles(dt) {
+    const active = [];
+    let exploded = false;
+    for (const shot of state.projectiles || []) {
+      shot.age += dt;
+      shot.vx += state.wind * 0.22 * dt;
+      shot.vy += gravity * dt;
+      shot.x += shot.vx * dt;
+      shot.y += shot.vy * dt;
 
+      if (shouldSplitProjectile(shot)) {
+        active.push(...splitProjectile(shot));
+        continue;
+      }
+
+      if (projectileHitPlayer(shot)) {
+        exploded = true;
+        continue;
+      }
+
+      if (shot.x < 0 || shot.x > world.width || shot.y > world.height) {
+        explodeProjectile(
+          shot,
+          clamp(shot.x, 0, world.width),
+          clamp(shot.y, 0, world.height),
+        );
+        exploded = true;
+        continue;
+      }
+
+      if (shot.y >= terrainAt(state.terrain, shot.x)) {
+        explodeProjectile(shot, shot.x, shot.y);
+        exploded = true;
+        continue;
+      }
+
+      active.push(shot);
+    }
+    state.projectiles = state.gameOver ? [] : active;
+    state.projectile = state.projectiles[0] || null;
+    if (exploded && !state.gameOver && state.projectiles.length === 0) {
+      finishTurnSoon();
+    }
+  }
+
+  function shouldSplitProjectile(shot) {
+    return shot.splitAt && !shot.splitDone && shot.age >= shot.splitAt;
+  }
+
+  function splitProjectile(shot) {
+    const speed = Math.hypot(shot.vx, shot.vy) * 0.92;
+    const angle = Math.atan2(shot.vy, shot.vx);
+    const config = weaponConfig("split");
+    state.status = "분열탄이 갈라졌습니다.";
+    return [-0.18, 0, 0.18].map((offset) =>
+      createProjectile({
+        owner: shot.owner,
+        x: shot.x,
+        y: shot.y,
+        vx: Math.cos(angle + offset) * speed,
+        vy: Math.sin(angle + offset) * speed,
+        weapon: "split",
+        splitDone: true,
+        radius: config.childRadius,
+        damage: config.childDamage,
+        carve: config.childCarve,
+        age: shot.age,
+      }),
+    );
+  }
+
+  function projectileHitPlayer(shot) {
     for (let index = 0; index < state.players.length; index += 1) {
       const player = state.players[index];
       if (index === shot.owner && shot.age < 0.18) continue;
       if (Math.hypot(shot.x - player.x, shot.y - player.y) <= 24) {
-        explode(shot.x, shot.y);
-        return;
+        explodeProjectile(shot, shot.x, shot.y);
+        return true;
       }
     }
-
-    if (shot.x < 0 || shot.x > world.width || shot.y > world.height) {
-      explode(clamp(shot.x, 0, world.width), clamp(shot.y, 0, world.height));
-      return;
-    }
-
-    if (shot.y >= terrainAt(state.terrain, shot.x)) explode(shot.x, shot.y);
+    return false;
   }
 
-  function explode(x, y) {
-    const shot = state.projectile;
-    state.projectile = null;
+  function explodeProjectile(shot, x, y) {
     state.explosion = { x, y, radius: shot.radius, age: 0 };
-    carveTerrain(x, y, shot.radius);
+    carveTerrain(x, y, shot.radius, shot.carve || 1);
     applyExplosionDamage(x, y, shot.radius, shot.damage);
     placePlayers(state.players, state.terrain);
-    if (!state.gameOver) finishTurnSoon();
   }
 
-  function carveTerrain(cx, cy, radius) {
+  function carveTerrain(cx, cy, radius, carve = 1) {
     const start = clamp(Math.floor(cx - radius), 0, world.width);
     const end = clamp(Math.ceil(cx + radius), 0, world.width);
     for (let x = start; x <= end; x += 1) {
       const dx = x - cx;
-      const depth = Math.sqrt(Math.max(0, radius * radius - dx * dx)) * 0.72;
+      const depth =
+        Math.sqrt(Math.max(0, radius * radius - dx * dx)) * 0.72 * carve;
       state.terrain[x] = clamp(
         Math.max(state.terrain[x], Math.round(cy + depth)),
         0,
@@ -437,7 +656,7 @@
         return;
       }
       if (message.type === "fortress_state") {
-        state = message;
+        state = normalizeState(message);
         if (Number.isInteger(message.slot)) mySlot = message.slot;
         syncUi();
       }
@@ -479,6 +698,8 @@
       state.wind > 0 ? `+${state.wind}` : String(state.wind);
     ui.angle.textContent = `${Math.round(player?.angle || 0)}도`;
     ui.power.textContent = Math.round(player?.power || 0);
+    ui.move.textContent = Math.round(player?.moveLeft || 0);
+    ui.weapon.textContent = weaponConfig(player?.weapon).name;
     ui.p1.textContent = statusText(state.players[0]);
     ui.p2.textContent = statusText(state.players[1]);
     ui.repair.textContent = `수리(1) x${player?.items?.repair || 0}`;
@@ -488,9 +709,18 @@
     ui.controls.forEach((button) => {
       button.disabled = !canControl();
     });
+    ui.moveLeft.disabled = !canControl() || (player?.moveLeft || 0) < moveCost;
+    ui.moveRight.disabled = !canControl() || (player?.moveLeft || 0) < moveCost;
     ui.repair.disabled = !canControl() || (player?.items?.repair || 0) <= 0;
     ui.shield.disabled = !canControl() || (player?.items?.shield || 0) <= 0;
     ui.powerShot.disabled = !canControl() || (player?.items?.power || 0) <= 0;
+    ui.weaponButtons.forEach((button) => {
+      button.classList.toggle(
+        "active",
+        button.dataset.weapon === player?.weapon,
+      );
+      button.disabled = !canControl();
+    });
     document.getElementById("restartButton").disabled =
       mode === "multi" && mySlot < 0;
   }
@@ -499,7 +729,7 @@
     if (!player) return "-";
     const connected = mode === "multi" && !player.connected ? " 대기" : "";
     const shield = player.shield ? " 보호막" : "";
-    return `${player.name}: ${Math.max(0, player.health)} HP${shield}${connected}`;
+    return `${player.name}: ${Math.max(0, player.health)} HP · 이동 ${Math.round(player.moveLeft || 0)} · ${weaponConfig(player.weapon).name}${shield}${connected}`;
   }
 
   function setPanelCollapsed(isCollapsed) {
@@ -743,9 +973,10 @@
 
   function drawAimGuide() {
     const player = currentPlayer();
-    if (!player || !state.ready || state.projectile || state.gameOver) return;
+    if (!player || !state.ready || hasProjectiles() || state.gameOver) return;
     const radians = (player.angle * Math.PI) / 180;
-    const speed = 145 + player.power * 5.1;
+    const speed =
+      (145 + player.power * 5.1) * weaponConfig(player.weapon).speed;
     let x = player.x + Math.cos(radians) * 31;
     let y = player.y - 21 - Math.sin(radians) * 31;
     let vx = Math.cos(radians) * speed;
@@ -953,14 +1184,14 @@
   }
 
   function drawProjectile() {
-    if (!state.projectile) return;
-    const point = toScreen(state.projectile.x, state.projectile.y);
+    (state.projectiles || []).forEach(drawProjectileShot);
+  }
+
+  function drawProjectileShot(shot) {
+    const point = toScreen(shot.x, shot.y);
     const scale = getView().scale;
-    const strong = state.projectile.radius > 52;
-    if (
-      Number.isFinite(state.projectile.vx) &&
-      Number.isFinite(state.projectile.vy)
-    ) {
+    const strong = shot.radius > 52 || shot.weapon === "impact";
+    if (Number.isFinite(shot.vx) && Number.isFinite(shot.vy)) {
       ctx.strokeStyle = strong
         ? "rgba(255, 95, 109, 0.36)"
         : "rgba(17, 24, 39, 0.24)";
@@ -968,12 +1199,12 @@
       ctx.beginPath();
       ctx.moveTo(point.x, point.y);
       ctx.lineTo(
-        point.x - state.projectile.vx * 0.035 * scale,
-        point.y - state.projectile.vy * 0.035 * scale,
+        point.x - shot.vx * 0.035 * scale,
+        point.y - shot.vy * 0.035 * scale,
       );
       ctx.stroke();
     }
-    ctx.fillStyle = strong ? "#ff5f6d" : "#111827";
+    ctx.fillStyle = shot.color || weaponConfig(shot.weapon).color;
     ctx.beginPath();
     ctx.arc(point.x, point.y, (strong ? 8 : 6) * scale, 0, Math.PI * 2);
     ctx.fill();
@@ -1084,11 +1315,25 @@
   ui.repair.onclick = () => action("item", { item: "repair" });
   ui.shield.onclick = () => action("item", { item: "shield" });
   ui.powerShot.onclick = () => action("item", { item: "power" });
+  ui.weaponButtons.forEach((button) => {
+    button.onclick = () => action("weapon", { weapon: button.dataset.weapon });
+  });
 
   window.addEventListener("keydown", (event) => {
     const key = event.key.toLowerCase();
     if (
-      ["arrowleft", "arrowright", "arrowup", "arrowdown", " "].includes(key)
+      [
+        "arrowleft",
+        "arrowright",
+        "arrowup",
+        "arrowdown",
+        " ",
+        "z",
+        "x",
+        "c",
+        "v",
+        "b",
+      ].includes(key)
     ) {
       event.preventDefault();
     }
@@ -1099,6 +1344,10 @@
     if (key === "a") action("power", { delta: -4 });
     if (key === "d") action("power", { delta: 4 });
     if (key === " ") action("fire");
+    const weapon = weaponOrder.find(
+      (weaponKey) => weapons[weaponKey].key.toLowerCase() === key,
+    );
+    if (weapon) action("weapon", { weapon });
     if (key === "1") action("item", { item: "repair" });
     if (key === "2") action("item", { item: "shield" });
     if (key === "3") action("item", { item: "power" });

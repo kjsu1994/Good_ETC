@@ -46,6 +46,55 @@ FORTRESS_WIDTH = 1400
 FORTRESS_HEIGHT = 760
 FORTRESS_GRAVITY = 300
 FORTRESS_TICK_RATE = 30
+FORTRESS_MOVE_BUDGET_MAX = 100
+FORTRESS_MOVE_COST = 10
+FORTRESS_DEFAULT_WEAPON = "standard"
+FORTRESS_WEAPONS: dict[str, dict[str, Any]] = {
+    "standard": {
+        "name": "표준탄",
+        "speed": 1.0,
+        "radius": 52,
+        "damage": 34,
+        "carve": 1.0,
+        "color": "#111827",
+    },
+    "impact": {
+        "name": "강타탄",
+        "speed": 0.95,
+        "radius": 42,
+        "damage": 50,
+        "carve": 0.82,
+        "color": "#ff5f6d",
+    },
+    "burst": {
+        "name": "광역탄",
+        "speed": 0.92,
+        "radius": 78,
+        "damage": 26,
+        "carve": 1.05,
+        "color": "#69dcff",
+    },
+    "split": {
+        "name": "분열탄",
+        "speed": 1.02,
+        "radius": 36,
+        "damage": 22,
+        "carve": 0.68,
+        "color": "#b987ff",
+        "splitAt": 0.72,
+        "childRadius": 30,
+        "childDamage": 17,
+        "childCarve": 0.56,
+    },
+    "drill": {
+        "name": "굴착탄",
+        "speed": 1.05,
+        "radius": 48,
+        "damage": 30,
+        "carve": 1.55,
+        "color": "#8b5a2b",
+    },
+}
 
 
 @dataclass
@@ -95,6 +144,7 @@ class FortressMatch:
         self.players: list[dict[str, Any]] = []
         self.turn = 0
         self.wind = 0
+        self.projectiles: list[dict[str, Any]] = []
         self.projectile: dict[str, Any] | None = None
         self.explosion: dict[str, Any] | None = None
         self.game_over = False
@@ -129,7 +179,7 @@ class FortressMatch:
                 self.slots[index] = None
         self.clients.pop(client.id, None)
         if not self.ready():
-            self.projectile = None
+            self.set_projectiles([])
             self.turn_delay_at = 0.0
 
     def ready(self) -> bool:
@@ -144,7 +194,7 @@ class FortressMatch:
         self.place_players()
         self.turn = 0
         self.wind = self.random_wind()
-        self.projectile = None
+        self.set_projectiles([])
         self.explosion = None
         self.game_over = False
         self.turn_delay_at = 0.0
@@ -168,6 +218,8 @@ class FortressMatch:
             "minAngle": min_angle,
             "maxAngle": max_angle,
             "power": 60,
+            "moveLeft": FORTRESS_MOVE_BUDGET_MAX,
+            "weapon": FORTRESS_DEFAULT_WEAPON,
             "health": 100,
             "shield": False,
             "activeItem": "",
@@ -204,6 +256,19 @@ class FortressMatch:
     def current_player(self) -> dict[str, Any]:
         return self.players[self.turn]
 
+    def set_projectiles(self, projectiles: list[dict[str, Any]]) -> None:
+        self.projectiles = projectiles
+        self.projectile = projectiles[0] if projectiles else None
+
+    def has_projectiles(self) -> bool:
+        return bool(self.projectiles)
+
+    def weapon_config(self, key: str | None) -> dict[str, Any]:
+        return FORTRESS_WEAPONS.get(str(key or ""), FORTRESS_WEAPONS[FORTRESS_DEFAULT_WEAPON])
+
+    def weapon_key(self, key: str | None) -> str:
+        return str(key or "") if str(key or "") in FORTRESS_WEAPONS else FORTRESS_DEFAULT_WEAPON
+
     def handle_message(self, client: FortressClient, raw: str) -> None:
         try:
             message = json.loads(raw)
@@ -222,7 +287,7 @@ class FortressMatch:
             client.slot != self.turn
             or not self.ready()
             or self.game_over
-            or self.projectile
+            or self.has_projectiles()
             or self.turn_delay_at
         ):
             return
@@ -232,6 +297,8 @@ class FortressMatch:
             self.adjust_angle(self.safe_float(message.get("delta"), 0))
         elif action == "power":
             self.adjust_power(self.safe_float(message.get("delta"), 0))
+        elif action == "weapon":
+            self.select_weapon(str(message.get("weapon") or ""))
         elif action == "fire":
             self.fire()
         elif action == "item":
@@ -240,12 +307,16 @@ class FortressMatch:
     def move_player(self, delta: float) -> None:
         player = self.current_player()
         other = self.players[1 - self.turn]
+        if int(player.get("moveLeft", 0)) < FORTRESS_MOVE_COST:
+            self.status = f"{player['name']} 이동 게이지가 부족합니다."
+            return
         delta = self.clamp(delta, -20, 20)
         next_x = self.clamp(player["x"] + delta, 50, FORTRESS_WIDTH - 50)
         if abs(next_x - other["x"]) < 72:
             return
         player["x"] = next_x
         player["y"] = self.terrain_at(player["x"]) - 18
+        player["moveLeft"] = max(0, int(player.get("moveLeft", 0)) - FORTRESS_MOVE_COST)
 
     def adjust_angle(self, delta: float) -> None:
         player = self.current_player()
@@ -258,6 +329,12 @@ class FortressMatch:
     def adjust_power(self, delta: float) -> None:
         player = self.current_player()
         player["power"] = self.clamp(player["power"] + delta, 20, 100)
+
+    def select_weapon(self, weapon: str) -> None:
+        weapon = self.weapon_key(weapon)
+        player = self.current_player()
+        player["weapon"] = weapon
+        self.status = f"{player['name']} {self.weapon_config(weapon)['name']} 선택."
 
     def use_item(self, item: str) -> None:
         player = self.current_player()
@@ -285,23 +362,62 @@ class FortressMatch:
 
     def fire(self) -> None:
         player = self.current_player()
+        weapon_key = self.weapon_key(player.get("weapon"))
+        weapon = self.weapon_config(weapon_key)
         radians = (player["angle"] * math.pi) / 180
-        speed = 145 + player["power"] * 5.1
+        speed = (145 + player["power"] * 5.1) * float(weapon["speed"])
         power_shot = player["activeItem"] == "power" and player["items"]["power"] > 0
         if power_shot:
             player["items"]["power"] -= 1
         player["activeItem"] = ""
-        self.projectile = {
-            "owner": self.turn,
-            "x": player["x"] + math.cos(radians) * 31,
-            "y": player["y"] - 21 - math.sin(radians) * 31,
-            "vx": math.cos(radians) * speed,
-            "vy": -math.sin(radians) * speed,
-            "radius": 72 if power_shot else 52,
-            "damage": 48 if power_shot else 34,
-            "age": 0.0,
+        self.set_projectiles(
+            [
+                self.create_projectile(
+                    owner=self.turn,
+                    x=player["x"] + math.cos(radians) * 31,
+                    y=player["y"] - 21 - math.sin(radians) * 31,
+                    vx=math.cos(radians) * speed,
+                    vy=-math.sin(radians) * speed,
+                    weapon_key=weapon_key,
+                    powered=power_shot,
+                )
+            ]
+        )
+        self.status = f"{player['name']} {weapon['name']} 발사."
+
+    def create_projectile(
+        self,
+        owner: int,
+        x: float,
+        y: float,
+        vx: float,
+        vy: float,
+        weapon_key: str,
+        powered: bool = False,
+        split_done: bool = False,
+        radius: float | None = None,
+        damage: float | None = None,
+        carve: float | None = None,
+        age: float = 0.0,
+    ) -> dict[str, Any]:
+        weapon_key = self.weapon_key(weapon_key)
+        weapon = self.weapon_config(weapon_key)
+        boost = 1.22 if powered else 1.0
+        return {
+            "owner": owner,
+            "x": x,
+            "y": y,
+            "vx": vx,
+            "vy": vy,
+            "weapon": weapon_key,
+            "color": weapon["color"],
+            "radius": radius if radius is not None else round(float(weapon["radius"]) * boost),
+            "damage": damage if damage is not None else round(float(weapon["damage"]) * boost),
+            "carve": carve if carve is not None else float(weapon["carve"]) * (1.14 if powered else 1.0),
+            "splitAt": weapon.get("splitAt", 0),
+            "splitDone": split_done,
+            "age": age,
         }
-        self.status = f"{player['name']} 발사."
 
     def finish_turn_soon(self) -> None:
         self.turn_delay_at = time.monotonic() + 0.65
@@ -309,6 +425,7 @@ class FortressMatch:
     def next_turn(self) -> None:
         self.current_player()["activeItem"] = ""
         self.turn = 1 - self.turn
+        self.current_player()["moveLeft"] = FORTRESS_MOVE_BUDGET_MAX
         self.wind = self.random_wind()
         self.turn_delay_at = 0.0
         self.status = f"{self.current_player()['name']} 턴. 이동, 포각, 파워를 조절하세요."
@@ -317,57 +434,96 @@ class FortressMatch:
         if self.turn_delay_at and now >= self.turn_delay_at and not self.projectile:
             self.next_turn()
         if self.ready():
-            self.update_projectile(dt)
+            self.update_projectiles(dt)
         if self.explosion:
             self.explosion["age"] += dt
             if self.explosion["age"] > 0.55:
                 self.explosion = None
 
-    def update_projectile(self, dt: float) -> None:
-        shot = self.projectile
-        if not shot:
-            return
-        shot["age"] += dt
-        shot["vx"] += self.wind * 0.22 * dt
-        shot["vy"] += FORTRESS_GRAVITY * dt
-        shot["x"] += shot["vx"] * dt
-        shot["y"] += shot["vy"] * dt
+    def update_projectiles(self, dt: float) -> None:
+        active: list[dict[str, Any]] = []
+        exploded = False
+        for shot in list(self.projectiles):
+            shot["age"] += dt
+            shot["vx"] += self.wind * 0.22 * dt
+            shot["vy"] += FORTRESS_GRAVITY * dt
+            shot["x"] += shot["vx"] * dt
+            shot["y"] += shot["vy"] * dt
 
+            if self.should_split_projectile(shot):
+                active.extend(self.split_projectile(shot))
+                continue
+
+            if self.projectile_hit_player(shot):
+                exploded = True
+                continue
+
+            if shot["x"] < 0 or shot["x"] > FORTRESS_WIDTH or shot["y"] > FORTRESS_HEIGHT:
+                self.explode_projectile(
+                    shot,
+                    self.clamp(shot["x"], 0, FORTRESS_WIDTH),
+                    self.clamp(shot["y"], 0, FORTRESS_HEIGHT),
+                )
+                exploded = True
+                continue
+
+            if shot["y"] >= self.terrain_at(shot["x"]):
+                self.explode_projectile(shot, shot["x"], shot["y"])
+                exploded = True
+                continue
+
+            active.append(shot)
+
+        self.set_projectiles([] if self.game_over else active)
+        if exploded and not self.game_over and not self.projectiles:
+            self.finish_turn_soon()
+
+    def should_split_projectile(self, shot: dict[str, Any]) -> bool:
+        return bool(shot.get("splitAt")) and not shot.get("splitDone") and shot["age"] >= shot["splitAt"]
+
+    def split_projectile(self, shot: dict[str, Any]) -> list[dict[str, Any]]:
+        speed = math.hypot(shot["vx"], shot["vy"]) * 0.92
+        angle = math.atan2(shot["vy"], shot["vx"])
+        weapon = self.weapon_config("split")
+        self.status = "분열탄이 갈라졌습니다."
+        return [
+            self.create_projectile(
+                owner=shot["owner"],
+                x=shot["x"],
+                y=shot["y"],
+                vx=math.cos(angle + offset) * speed,
+                vy=math.sin(angle + offset) * speed,
+                weapon_key="split",
+                split_done=True,
+                radius=float(weapon["childRadius"]),
+                damage=float(weapon["childDamage"]),
+                carve=float(weapon["childCarve"]),
+                age=shot["age"],
+            )
+            for offset in (-0.18, 0, 0.18)
+        ]
+
+    def projectile_hit_player(self, shot: dict[str, Any]) -> bool:
         for index, player in enumerate(self.players):
             if index == shot["owner"] and shot["age"] < 0.18:
                 continue
             if math.hypot(shot["x"] - player["x"], shot["y"] - player["y"]) <= 24:
-                self.explode(shot["x"], shot["y"])
-                return
+                self.explode_projectile(shot, shot["x"], shot["y"])
+                return True
+        return False
 
-        if shot["x"] < 0 or shot["x"] > FORTRESS_WIDTH or shot["y"] > FORTRESS_HEIGHT:
-            self.explode(
-                self.clamp(shot["x"], 0, FORTRESS_WIDTH),
-                self.clamp(shot["y"], 0, FORTRESS_HEIGHT),
-            )
-            return
-
-        if shot["y"] >= self.terrain_at(shot["x"]):
-            self.explode(shot["x"], shot["y"])
-
-    def explode(self, x: float, y: float) -> None:
-        shot = self.projectile
-        if not shot:
-            return
-        self.projectile = None
+    def explode_projectile(self, shot: dict[str, Any], x: float, y: float) -> None:
         self.explosion = {"x": x, "y": y, "radius": shot["radius"], "age": 0.0}
-        self.carve_terrain(x, y, shot["radius"])
+        self.carve_terrain(x, y, shot["radius"], shot.get("carve", 1.0))
         self.apply_explosion_damage(x, y, shot["radius"], shot["damage"])
         self.place_players()
-        if not self.game_over:
-            self.finish_turn_soon()
 
-    def carve_terrain(self, cx: float, cy: float, radius: float) -> None:
+    def carve_terrain(self, cx: float, cy: float, radius: float, carve: float = 1.0) -> None:
         start = self.clamp(math.floor(cx - radius), 0, FORTRESS_WIDTH)
         end = self.clamp(math.ceil(cx + radius), 0, FORTRESS_WIDTH)
         for x in range(start, end + 1):
             dx = x - cx
-            depth = math.sqrt(max(0, radius * radius - dx * dx)) * 0.72
+            depth = math.sqrt(max(0, radius * radius - dx * dx)) * 0.72 * carve
             self.terrain[x] = self.clamp(
                 max(self.terrain[x], round(cy + depth)),
                 0,
@@ -415,6 +571,8 @@ class FortressMatch:
                     "y": round(player["y"], 2),
                     "angle": round(player["angle"], 2),
                     "power": round(player["power"], 2),
+                    "moveLeft": int(player.get("moveLeft", FORTRESS_MOVE_BUDGET_MAX)),
+                    "weapon": self.weapon_key(player.get("weapon")),
                     "items": dict(player["items"]),
                 }
                 for index, player in enumerate(self.players)
@@ -422,20 +580,34 @@ class FortressMatch:
             "turn": self.turn,
             "wind": self.wind,
             "projectile": self.visible_projectile(),
+            "projectiles": self.visible_projectiles(),
             "explosion": self.visible_explosion(),
             "gameOver": self.game_over,
             "ready": self.ready(),
+            "turnLocked": bool(self.turn_delay_at),
             "status": self.status_text(),
         }
 
     def visible_projectile(self) -> dict[str, Any] | None:
-        if not self.projectile:
-            return None
-        return {
-            "x": round(self.projectile["x"], 2),
-            "y": round(self.projectile["y"], 2),
-            "radius": self.projectile["radius"],
-        }
+        projectiles = self.visible_projectiles()
+        return projectiles[0] if projectiles else None
+
+    def visible_projectiles(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "owner": shot["owner"],
+                "x": round(shot["x"], 2),
+                "y": round(shot["y"], 2),
+                "vx": round(shot["vx"], 2),
+                "vy": round(shot["vy"], 2),
+                "radius": shot["radius"],
+                "damage": shot["damage"],
+                "weapon": self.weapon_key(shot.get("weapon")),
+                "color": shot.get("color"),
+                "age": round(shot["age"], 3),
+            }
+            for shot in self.projectiles
+        ]
 
     def visible_explosion(self) -> dict[str, Any] | None:
         if not self.explosion:

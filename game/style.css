@@ -365,7 +365,8 @@ button:hover {
 .fortress-panel.collapsed .fortress-brand > div,
 .fortress-panel.collapsed .fortress-readout,
 .fortress-panel.collapsed .fortress-buttons,
-.fortress-panel.collapsed .fortress-items {
+.fortress-panel.collapsed .fortress-items,
+.fortress-panel.collapsed .fortress-weapons {
   display: none;
 }
 
@@ -429,7 +430,15 @@ button:hover {
   margin-top: 8px;
 }
 
-.fortress-items button {
+.fortress-weapons {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 8px;
+}
+
+.fortress-items button,
+.fortress-weapons button {
   min-height: 42px;
   padding: 8px 7px;
   border-color: rgba(255, 255, 255, 0.18);
@@ -438,13 +447,21 @@ button:hover {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
 }
 
-.fortress-items button.active {
+.fortress-weapons button {
+  min-height: 38px;
+  padding: 7px 5px;
+  font-size: 0.75rem;
+}
+
+.fortress-items button.active,
+.fortress-weapons button.active {
   border-color: #ffe066;
   background: rgba(255, 224, 102, 0.22);
   color: #fff4b8;
 }
 
-.fortress-items button:disabled {
+.fortress-items button:disabled,
+.fortress-weapons button:disabled {
   cursor: not-allowed;
   opacity: 0.42;
 }
@@ -523,6 +540,10 @@ button:hover {
   .fortress-message {
     top: auto;
     bottom: 84px;
+  }
+
+  .fortress-weapons {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 

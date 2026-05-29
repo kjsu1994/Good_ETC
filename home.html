@@ -1980,8 +1980,14 @@
           </div>
           <div>
             <code>←/→</code>는 이동, <code>↑/↓</code>는 포각, <code>A/D</code>는
-            파워, <code>Space</code>는 발사입니다. 바람은 턴마다 바뀌며, 포탄
-            폭발은 지형을 깎고 폭발 반경 안의 상대에게 피해를 줍니다.
+            파워, <code>Space</code>는 발사입니다. 이동 게이지는 턴마다
+            <code>100</code>으로 회복되고 좌/우 이동마다 <code>10</code>씩
+            줄어듭니다.
+          </div>
+          <div>
+            <code>Z/X/C/V/B</code>로 표준탄, 강타탄, 광역탄, 분열탄, 굴착탄을
+            선택합니다. 바람은 턴마다 바뀌며, 포탄 폭발은 지형을 깎고 폭발 반경
+            안의 상대에게 피해를 줍니다.
           </div>
           <div>
             아이템은 <code>1/2/3</code> 키 또는 화면 버튼으로 사용합니다.
@@ -3705,7 +3711,7 @@
           .replace(/:\d+$/, "") || "localhost"
       );
     }
-    const GAME_ASSET_VERSION = "20260529a";
+    const GAME_ASSET_VERSION = "20260529b";
     let gameActiveTab = "arena";
     function gameIsLauncherShell() {
       return "exe" === gameLauncherParams().launcher || !!window.pywebview;
