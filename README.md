@@ -273,3 +273,11 @@ npm run format
 - GitHub ZIP 전체를 내려받으면 LAN 아레나와 포트리스풍 포격전을 포함한 전체 기능을 사용할 수 있습니다. 대시보드만 필요하면 `home.html`만 열어도 됩니다.
 - 기본 즐겨찾기에는 내부망 주소가 포함되어 있으므로 사용 환경에 맞게 수정해서 쓰는 것을 권장합니다.
 - 개인 데이터는 서버가 아니라 브라우저에 저장됩니다. PC 교체나 브라우저 초기화 전에는 설정과 메모를 내보내거나 백업하세요.
+
+## LAN connection note
+
+- `127.0.0.1`, `127.x.x.x`, and `localhost` always mean the current PC only.
+- If the host PC is `192.168.1.154` and the active game port is `7000`, another PC should open `http://192.168.1.154:7000/game/index.html`.
+- If the launcher had to use `7001`, `7002`, or another port, use that actual port instead of `7000`.
+- The Arena and Fortress game screens include a collapsible connection info panel with the current page URL, WebSocket target, active port, and LAN share URL.
+- A URL that starts with `http://127.0.0.1:8081/...` only works on the PC that is opening it. For another PC, use the host PC LAN IP in the page address or use the in-game LAN share URL.

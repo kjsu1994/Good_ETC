@@ -298,6 +298,83 @@ button:hover {
   display: none;
 }
 
+.net-info {
+  right: 18px;
+  bottom: 72px;
+  width: min(340px, calc(100vw - 36px));
+  padding: 12px;
+  border-radius: 8px;
+  transition:
+    width 0.2s ease,
+    padding 0.2s ease;
+}
+
+.net-info.collapsed {
+  width: 44px;
+  padding: 5px;
+}
+
+.net-info-toggle {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+  font-weight: 900;
+}
+
+.net-info:not(.collapsed) .net-info-toggle {
+  margin-bottom: 10px;
+}
+
+.net-info.collapsed .net-info-body {
+  display: none;
+}
+
+.net-info dl {
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr);
+  gap: 7px 10px;
+  margin: 0;
+  font-size: 0.76rem;
+}
+
+.net-info dt {
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.net-info dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--text);
+  font-weight: 800;
+  word-break: break-all;
+}
+
+#netInfoWarning {
+  margin-top: 10px;
+  color: #ffd166;
+  font-size: 0.76rem;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+#netInfoWarning:empty {
+  display: none;
+}
+
+#netInfoCopy {
+  width: 100%;
+  margin-top: 10px;
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
 .fortress-shell {
   position: relative;
   width: 100vw;
@@ -523,6 +600,12 @@ button:hover {
 
   .hud-bottom {
     font-size: 0.76rem;
+  }
+
+  .net-info {
+    right: 12px;
+    bottom: 72px;
+    width: min(320px, calc(100vw - 24px));
   }
 
   .fortress-panel,

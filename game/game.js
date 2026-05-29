@@ -10,6 +10,14 @@ const connectionState = document.getElementById("connectionState");
 const hudToggle = document.getElementById("hudToggle");
 const scoreboard = document.getElementById("scoreboard");
 const centerMessage = document.getElementById("centerMessage");
+const netInfoPanel = document.getElementById("netInfoPanel");
+const netInfoToggle = document.getElementById("netInfoToggle");
+const netInfoCopy = document.getElementById("netInfoCopy");
+const netInfoGame = document.getElementById("netInfoGame");
+const netInfoPage = document.getElementById("netInfoPage");
+const netInfoServer = document.getElementById("netInfoServer");
+const netInfoShare = document.getElementById("netInfoShare");
+const netInfoWarning = document.getElementById("netInfoWarning");
 
 const keys = new Set();
 const pointer = { x: 0, y: 0, down: false };
@@ -22,6 +30,7 @@ let latestState = {
   bullets: [],
 };
 let lastInputSent = 0;
+let latestShareUrl = "";
 
 function getDefaultServerUrl() {
   const params = new URLSearchParams(window.location.search);
@@ -57,6 +66,81 @@ function setCenterMessage(text) {
 function setConnectionPanelCollapsed(isCollapsed) {
   connectionPanel.classList.toggle("collapsed", isCollapsed);
   hudToggle.setAttribute("aria-expanded", String(!isCollapsed));
+}
+
+function isLoopbackHost(host) {
+  const normalized = String(host || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^\[/, "")
+    .replace(/\]$/, "");
+  return (
+    normalized === "localhost" ||
+    normalized === "::1" ||
+    normalized === "0.0.0.0" ||
+    /^127(?:\.|$)/.test(normalized)
+  );
+}
+
+function safeUrl(value) {
+  try {
+    return new URL(value);
+  } catch {
+    return null;
+  }
+}
+
+function currentAssetVersion() {
+  return new URLSearchParams(window.location.search).get("v") || "20260529c";
+}
+
+function buildArenaShareUrl(serverUrl) {
+  const target = safeUrl(serverUrl);
+  if (!target) return "";
+  const protocol = target.protocol === "wss:" ? "https:" : "http:";
+  const port = target.port || (target.protocol === "wss:" ? "443" : "80");
+  const share = new URL(`${protocol}//${target.host}/game/index.html`);
+  share.searchParams.set("host", target.hostname);
+  share.searchParams.set("port", port);
+  share.searchParams.set("auto", "1");
+  share.searchParams.set("v", currentAssetVersion());
+  return share.toString();
+}
+
+function connectionWarnings(serverUrl) {
+  const warnings = [];
+  const pageHost = window.location.hostname;
+  const target = safeUrl(serverUrl);
+  if (isLoopbackHost(pageHost)) {
+    warnings.push(
+      "Current page URL uses localhost/127.x, so another PC cannot open this exact address.",
+    );
+  }
+  if (target && isLoopbackHost(target.hostname)) {
+    warnings.push(
+      "Server target uses localhost/127.x/0.0.0.0. Use the host PC LAN IP, for example 192.168.1.154.",
+    );
+  }
+  return warnings.join(" ");
+}
+
+function setNetInfoCollapsed(isCollapsed) {
+  if (!netInfoPanel || !netInfoToggle) return;
+  netInfoPanel.classList.toggle("collapsed", isCollapsed);
+  netInfoToggle.setAttribute("aria-expanded", String(!isCollapsed));
+}
+
+function updateNetInfo(
+  serverUrl = serverUrlInput.value || getDefaultServerUrl(),
+) {
+  if (!netInfoPanel) return;
+  latestShareUrl = buildArenaShareUrl(serverUrl);
+  netInfoGame.textContent = "Arena";
+  netInfoPage.textContent = window.location.href;
+  netInfoServer.textContent = serverUrl;
+  netInfoShare.textContent = latestShareUrl || "-";
+  netInfoShare.title = latestShareUrl;
+  netInfoWarning.textContent = connectionWarnings(serverUrl);
 }
 
 function resizeCanvas() {
@@ -126,6 +210,7 @@ function connect() {
   const url = serverUrlInput.value.trim() || getDefaultServerUrl();
   localStorage.setItem("lan_arena_name", name);
   localStorage.setItem("lan_arena_url", url);
+  updateNetInfo(url);
 
   if (socket) socket.close();
   const activeSocket = new WebSocket(url);
@@ -164,14 +249,22 @@ function connect() {
     setStatus("Disconnected", false);
     setConnectionPanelCollapsed(false);
     playerId = "";
-    setCenterMessage("Disconnected. Check server address and firewall.");
+    setCenterMessage(
+      isLoopbackHost(safeUrl(url)?.hostname)
+        ? "Disconnected. localhost/127.x points to this PC only; use the host LAN IP and active port."
+        : "Disconnected. Check server address, active port, and firewall.",
+    );
   });
 
   activeSocket.addEventListener("error", () => {
     if (socket !== activeSocket) return;
     setStatus("Connection error", false);
     setConnectionPanelCollapsed(false);
-    setCenterMessage("Connection failed. Check server address and firewall.");
+    setCenterMessage(
+      isLoopbackHost(safeUrl(url)?.hostname)
+        ? "Connection failed. localhost/127.x points to this PC only; use the host LAN IP and active port."
+        : "Connection failed. Check server address, active port, and firewall.",
+    );
   });
 }
 
@@ -304,6 +397,15 @@ hudToggle.addEventListener("click", () => {
   setConnectionPanelCollapsed(!connectionPanel.classList.contains("collapsed"));
 });
 
+netInfoToggle?.addEventListener("click", () => {
+  setNetInfoCollapsed(!netInfoPanel.classList.contains("collapsed"));
+});
+
+netInfoCopy?.addEventListener("click", () => {
+  if (!latestShareUrl) return;
+  navigator.clipboard?.writeText(latestShareUrl);
+});
+
 window.addEventListener("keydown", (event) => {
   const key = event.key.toLowerCase();
   if ([" ", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(key)) {
@@ -337,7 +439,9 @@ playerNameInput.value = localStorage.getItem("lan_arena_name") || "Player";
 serverUrlInput.value = launchParams.has("host")
   ? getDefaultServerUrl()
   : localStorage.getItem("lan_arena_url") || getDefaultServerUrl();
+serverUrlInput.addEventListener("input", () => updateNetInfo());
 setStatus("Disconnected");
+updateNetInfo();
 renderScoreboard();
 draw();
 

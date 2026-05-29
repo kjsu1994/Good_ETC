@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>LAN Arena</title>
-    <link rel="stylesheet" href="./style.css?v=20260529b" />
+    <link rel="stylesheet" href="./style.css?v=20260529c" />
   </head>
   <body>
     <main class="arena-shell">
@@ -70,6 +70,38 @@
         <span>Click / Space: Fire</span>
       </section>
 
+      <section
+        class="hud net-info collapsed"
+        id="netInfoPanel"
+        aria-label="network connection info"
+      >
+        <button
+          id="netInfoToggle"
+          class="net-info-toggle"
+          type="button"
+          aria-label="Toggle network info"
+          aria-expanded="false"
+          title="Connection info"
+        >
+          i
+        </button>
+        <div class="net-info-body">
+          <h2>Connection</h2>
+          <dl>
+            <dt>Game</dt>
+            <dd id="netInfoGame">-</dd>
+            <dt>Page</dt>
+            <dd id="netInfoPage">-</dd>
+            <dt>Server</dt>
+            <dd id="netInfoServer">-</dd>
+            <dt>Share</dt>
+            <dd id="netInfoShare">-</dd>
+          </dl>
+          <p id="netInfoWarning"></p>
+          <button id="netInfoCopy" type="button">Copy share URL</button>
+        </div>
+      </section>
+
       <div id="centerMessage" class="center-message">
         Connect to start the LAN match.
       </div>
@@ -78,7 +110,7 @@
     <script>
       (() => {
         const params = new URLSearchParams(window.location.search);
-        const version = encodeURIComponent(params.get("v") || "20260529b");
+        const version = encodeURIComponent(params.get("v") || "20260529c");
         const script = document.createElement("script");
         script.src =
           params.get("game") === "fortress"

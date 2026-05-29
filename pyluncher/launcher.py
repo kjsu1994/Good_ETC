@@ -83,7 +83,7 @@ class LauncherServer:
             params = urlencode(
                 {
                     "launcher": "exe",
-                    "gameHost": "127.0.0.1",
+                    "gameHost": local_ip(),
                     "gamePort": str(self.port),
                     "gameUrl": self.game_url,
                 }
@@ -113,7 +113,7 @@ class LauncherServer:
 
     def prepare_home_view(self) -> None:
         launcher_config = {
-            "gameHost": "127.0.0.1",
+            "gameHost": local_ip(),
             "gamePort": str(self.port),
             "gameUrl": self.game_url,
             "launcher": "exe",

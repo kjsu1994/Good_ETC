@@ -2051,6 +2051,7 @@
       <div class="c1o" id="gameStatus">
         서버 실행 후 방화벽에서 TCP 7000 포트를 허용해야 LAN 접속이 가능합니다.
       </div>
+      <div class="c1o" id="gameConnectionInfo"></div>
     </div>
     <div class="c28 cp" id="chatPanel">
       <div class="c1t">
@@ -3698,9 +3699,11 @@
             : "bat 내용을 관리자 권한으로 실행하면 지정 IP/포트의 인바운드가 허용됩니다.";
         ((t("gameFirewallCommand").value = gameFirewallScript()),
           (t("gameStatus").innerText = e));
+        gameSyncConnectionInfo();
       } catch (e) {
         ((t("gameFirewallCommand").value = ""),
           (t("gameStatus").innerText = e.message));
+        gameSyncConnectionInfo();
       }
     }
     function gameHostValue() {
@@ -3711,7 +3714,66 @@
           .replace(/:\d+$/, "") || "localhost"
       );
     }
-    const GAME_ASSET_VERSION = "20260529b";
+    function gameIsLoopbackHost(e) {
+      const n = String(e || "")
+        .trim()
+        .toLowerCase()
+        .replace(/^\[/, "")
+        .replace(/\]$/, "");
+      return (
+        "localhost" === n ||
+        "::1" === n ||
+        "0.0.0.0" === n ||
+        /^127(?:\.|$)/.test(n)
+      );
+    }
+    function gameLanShareUrl() {
+      const e = new URL(
+        "http://" +
+          gameHostValue() +
+          ":" +
+          gamePortValue() +
+          "/game/index.html",
+      );
+      e.searchParams.set("host", gameHostValue());
+      e.searchParams.set("port", gamePortValue());
+      e.searchParams.set("v", GAME_ASSET_VERSION);
+      if ("fortress" === gameActiveTab) {
+        e.searchParams.set("game", "fortress");
+        e.searchParams.set("mode", "multi");
+        e.searchParams.set("role", "client");
+      } else {
+        e.searchParams.set("auto", "1");
+      }
+      return e.toString();
+    }
+    function gameSyncConnectionInfo() {
+      const e = t("gameConnectionInfo");
+      if (!e) return;
+      try {
+        const n = gameLanShareUrl(),
+          i = [],
+          o = gameHostValue();
+        gameIsLoopbackHost(o) &&
+          i.push(
+            "Host IP is localhost/127.x/0.0.0.0. Other PCs need the host PC LAN IP, for example 192.168.1.154.",
+          );
+        gameIsLoopbackHost(window.location.hostname) &&
+          i.push(
+            "This dashboard page is opened through localhost/127.x. Other PCs cannot use this exact page URL.",
+          );
+        e.innerHTML =
+          "Host target: <code>" +
+          Me(o + ":" + gamePortValue()) +
+          "</code><br>LAN share URL: <code>" +
+          Me(n) +
+          "</code>" +
+          (i.length ? "<br><strong>Warning:</strong> " + Me(i.join(" ")) : "");
+      } catch (n) {
+        e.textContent = "Connection info unavailable: " + n.message;
+      }
+    }
+    const GAME_ASSET_VERSION = "20260529c";
     let gameActiveTab = "arena";
     function gameIsLauncherShell() {
       return "exe" === gameLauncherParams().launcher || !!window.pywebview;

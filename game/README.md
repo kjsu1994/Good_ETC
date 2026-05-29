@@ -25,3 +25,12 @@ http://HOST_IP:7000/
 LAN 아레나는 `/ws`, 포트리스 멀티 모드는 `/fortress` WebSocket을 사용합니다. 방화벽에서 TCP `7000` 포트가 허용되어야 다른 PC가 접속할 수 있습니다.
 
 `포트리스 혼자하기`는 WebSocket 서버 없이 브라우저 안에서 로컬로 실행됩니다. 각 턴에는 이동 게이지가 100 지급되고, `Z/X/C/V/B`로 표준탄, 강타탄, 광역탄, 분열탄, 굴착탄을 선택합니다. 포트리스 화면은 독자 레트로 차량, 지형, HUD, 폭발 효과를 Canvas/CSS로 그리며 원작 게임 자산을 사용하지 않습니다.
+
+## LAN connection note
+
+- `127.0.0.1`, `127.x.x.x`, and `localhost` always mean the current PC only.
+- If the host PC is `192.168.1.154` and the active game port is `7000`, other PCs should open `http://192.168.1.154:7000/game/index.html`.
+- Arena can also use `http://192.168.1.154:7000/game/index.html?host=192.168.1.154&port=7000&auto=1`.
+- Fortress multiplayer join uses `http://192.168.1.154:7000/game/index.html?game=fortress&mode=multi&role=client&host=192.168.1.154&port=7000`.
+- The game screen has a collapsible connection info panel that shows the current page URL, WebSocket target, active port, and a LAN share URL for another PC.
+- The Windows launcher may use `7001`, `7002`, and so on if `7000` is busy. Use the port shown in the dashboard or in the in-game connection panel.

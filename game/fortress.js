@@ -5,6 +5,7 @@
   const params = new URLSearchParams(window.location.search);
   const mode = params.get("mode") === "multi" ? "multi" : "local";
   const role = params.get("role") === "host" ? "host" : "client";
+  const assetVersion = params.get("v") || "20260529c";
   const world = { width: 1400, height: 760 };
   const gravity = 300;
   const moveBudgetMax = 100;
@@ -148,6 +149,37 @@
     <section class="hud fortress-help" aria-label="조작법">
       ←/→: 이동 · ↑/↓: 포각 · A/D: 파워 · Space: 발사 · Z/X/C/V/B: 탄종 · 1/2/3: 아이템
     </section>
+    <section
+      class="hud net-info collapsed"
+      id="netInfoPanel"
+      aria-label="network connection info"
+    >
+      <button
+        id="netInfoToggle"
+        class="net-info-toggle"
+        type="button"
+        aria-label="Toggle network info"
+        aria-expanded="false"
+        title="Connection info"
+      >
+        i
+      </button>
+      <div class="net-info-body">
+        <h2>Connection</h2>
+        <dl>
+          <dt>Game</dt>
+          <dd id="netInfoGame">-</dd>
+          <dt>Page</dt>
+          <dd id="netInfoPage">-</dd>
+          <dt>Server</dt>
+          <dd id="netInfoServer">-</dd>
+          <dt>Share</dt>
+          <dd id="netInfoShare">-</dd>
+        </dl>
+        <p id="netInfoWarning"></p>
+        <button id="netInfoCopy" type="button">Copy share URL</button>
+      </div>
+    </section>
   `;
 
   const canvas = document.getElementById("fortressCanvas");
@@ -189,11 +221,22 @@
       "weaponDrill",
     ].map((id) => document.getElementById(id)),
   };
+  const netInfo = {
+    panel: document.getElementById("netInfoPanel"),
+    toggle: document.getElementById("netInfoToggle"),
+    copy: document.getElementById("netInfoCopy"),
+    game: document.getElementById("netInfoGame"),
+    page: document.getElementById("netInfoPage"),
+    server: document.getElementById("netInfoServer"),
+    share: document.getElementById("netInfoShare"),
+    warning: document.getElementById("netInfoWarning"),
+  };
 
   let socket = null;
   let mySlot = mode === "multi" ? -1 : 0;
   let lastFrame = performance.now();
   let state = createInitialState();
+  let latestShareUrl = "";
 
   function weaponConfig(key) {
     return weapons[key] || weapons[defaultWeapon];
@@ -622,6 +665,82 @@
     }
   }
 
+  function isLoopbackHost(host) {
+    const normalized = String(host || "")
+      .trim()
+      .toLowerCase()
+      .replace(/^\[/, "")
+      .replace(/\]$/, "");
+    return (
+      normalized === "localhost" ||
+      normalized === "::1" ||
+      normalized === "0.0.0.0" ||
+      /^127(?:\.|$)/.test(normalized)
+    );
+  }
+
+  function safeUrl(value) {
+    try {
+      return new URL(value);
+    } catch {
+      return null;
+    }
+  }
+
+  function buildFortressShareUrl(socketUrl) {
+    const target = safeUrl(socketUrl);
+    if (!target) return "";
+    const protocol = target.protocol === "wss:" ? "https:" : "http:";
+    const port = target.port || (target.protocol === "wss:" ? "443" : "80");
+    const share = new URL(`${protocol}//${target.host}/game/index.html`);
+    share.searchParams.set("game", "fortress");
+    share.searchParams.set("mode", "multi");
+    share.searchParams.set("role", "client");
+    share.searchParams.set("host", target.hostname);
+    share.searchParams.set("port", port);
+    share.searchParams.set("v", assetVersion);
+    return share.toString();
+  }
+
+  function connectionWarnings(socketUrl) {
+    const warnings = [];
+    const pageHost = window.location.hostname;
+    const target = safeUrl(socketUrl);
+    if (isLoopbackHost(pageHost)) {
+      warnings.push(
+        "Current page URL uses localhost/127.x, so another PC cannot open this exact address.",
+      );
+    }
+    if (target && isLoopbackHost(target.hostname)) {
+      warnings.push(
+        "Server target uses localhost/127.x/0.0.0.0. Use the host PC LAN IP, for example 192.168.1.154.",
+      );
+    }
+    return warnings.join(" ");
+  }
+
+  function setNetInfoCollapsed(isCollapsed) {
+    if (!netInfo.panel || !netInfo.toggle) return;
+    netInfo.panel.classList.toggle("collapsed", isCollapsed);
+    netInfo.toggle.setAttribute("aria-expanded", String(!isCollapsed));
+  }
+
+  function updateNetInfo(socketUrl = "") {
+    if (!netInfo.panel) return;
+    const targetUrl =
+      mode === "multi" ? socketUrl || getFortressSocketUrl() : "";
+    latestShareUrl = targetUrl ? buildFortressShareUrl(targetUrl) : "";
+    netInfo.game.textContent =
+      mode === "multi" ? `Fortress ${role}` : "Fortress local";
+    netInfo.page.textContent = window.location.href;
+    netInfo.server.textContent = targetUrl || "-";
+    netInfo.share.textContent = latestShareUrl || "-";
+    netInfo.share.title = latestShareUrl;
+    netInfo.warning.textContent = targetUrl
+      ? connectionWarnings(targetUrl)
+      : "";
+  }
+
   function getFortressSocketUrl() {
     const host = params.get("host");
     const port = params.get("port") || "7000";
@@ -634,6 +753,7 @@
 
   function connectMulti() {
     const url = getFortressSocketUrl();
+    updateNetInfo(url);
     socket = new WebSocket(url);
     state.ready = false;
     state.status =
@@ -666,12 +786,21 @@
       state.ready = false;
       state.status = "연결이 끊겼습니다. 서버 주소와 방화벽을 확인하세요.";
       setPanelCollapsed(false);
+      state.status = isLoopbackHost(safeUrl(url)?.hostname)
+        ? "Connection closed. localhost/127.x points to this PC only; use the host LAN IP and active port."
+        : "Connection closed. Check server address, active port, and firewall.";
       syncUi();
     });
 
     socket.addEventListener("error", () => {
       state.ready = false;
       state.status = "연결 실패. 서버 주소와 방화벽을 확인하세요.";
+      syncUi();
+    });
+    socket.addEventListener("error", () => {
+      state.status = isLoopbackHost(safeUrl(url)?.hostname)
+        ? "Connection failed. localhost/127.x points to this PC only; use the host LAN IP and active port."
+        : "Connection failed. Check server address, active port, and firewall.";
       syncUi();
     });
   }
@@ -1312,6 +1441,12 @@
   document.getElementById("restartButton").onclick = () => action("reset");
   ui.toggle.onclick = () =>
     setPanelCollapsed(!ui.panel.classList.contains("collapsed"));
+  netInfo.toggle.onclick = () =>
+    setNetInfoCollapsed(!netInfo.panel.classList.contains("collapsed"));
+  netInfo.copy.onclick = () => {
+    if (!latestShareUrl) return;
+    navigator.clipboard?.writeText(latestShareUrl);
+  };
   ui.repair.onclick = () => action("item", { item: "repair" });
   ui.shield.onclick = () => action("item", { item: "shield" });
   ui.powerShot.onclick = () => action("item", { item: "power" });
@@ -1355,6 +1490,7 @@
   });
 
   if (mode === "multi") connectMulti();
+  updateNetInfo();
   syncUi();
   requestAnimationFrame(frame);
 })();
