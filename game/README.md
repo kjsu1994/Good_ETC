@@ -22,7 +22,7 @@ http://localhost:7000/
 http://HOST_IP:7000/
 ```
 
-LAN 아레나는 `/ws`, 포트리스 멀티 모드는 `/fortress` WebSocket을 사용합니다. 통합 입장 센터에서 만든 게임 방은 `room` query로 분리되며, 예를 들어 `/ws?room=ABCDE`와 `/fortress?role=client&room=ABCDE`처럼 접속합니다. 방화벽에서 TCP `7000` 포트가 허용되어야 다른 PC가 접속할 수 있습니다.
+LAN 아레나는 `/ws`, 포트리스 멀티 모드는 `/fortress` WebSocket을 사용합니다. 통합 입장 센터에서 만든 게임 방은 `room` query로 분리되며, 예를 들어 `/ws?room=ABCDE`, `/fortress?role=client&room=ABCDE`, `/fortress?role=spectator&room=ABCDE`처럼 접속합니다. 방화벽에서 TCP `7000` 포트가 허용되어야 다른 PC가 접속할 수 있습니다.
 
 포트리스 멀티는 방마다 P1/P2 두 명이 플레이하고, 3번째 이후 접속자는 관전자로 들어갑니다. 관전자는 화면에 관전 상태가 표시되고 조작할 수 없으며, 플레이어가 나가면 오래된 관전자부터 자동으로 빈 슬롯에 참여합니다.
 
@@ -34,7 +34,7 @@ LAN 아레나는 `/ws`, 포트리스 멀티 모드는 `/fortress` WebSocket을 �
 - If the host PC is `192.168.1.154` and the active game port is `7000`, other PCs should open `http://192.168.1.154:7000/game/index.html`.
 - Arena can also use `http://192.168.1.154:7000/game/index.html?host=192.168.1.154&port=7000&room=ABCDE&auto=1`.
 - Fortress multiplayer join uses `http://192.168.1.154:7000/game/index.html?game=fortress&mode=multi&role=client&host=192.168.1.154&port=7000&room=ABCDE`.
-- The game screen has a collapsible connection info panel that shows the current page URL, WebSocket target, active port, and a LAN share URL for another PC.
+- The game screen has a collapsible connection info panel. `현재 화면` is the local page currently open, `서버 연결` is the WebSocket target used by the game, and `초대 링크` is the address to send to another participant.
 - The Windows launcher may use `7001`, `7002`, and so on if `7000` is busy. Use the port shown in the dashboard or in the in-game connection panel.
 
 ## Hub socket

@@ -18,7 +18,7 @@ services:
     depends_on:
       - game-server
     ports:
-      - "8080:80"
+      - "8085:80"
     volumes:
       - .:/usr/share/nginx/html
     restart: always

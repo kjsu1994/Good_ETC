@@ -155,6 +155,11 @@ class HubClient:
     name: str = "Guest"
     room_id: str = ""
     peer: str = ""
+    runtime: str = ""
+    page_host: str = ""
+    page_port: str = ""
+    game_host: str = ""
+    game_port: str = ""
     connected_at: float = field(default_factory=time.time)
     write_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
@@ -198,6 +203,9 @@ class FortressMatch:
 
     def add_client(self, client: FortressClient, role: str) -> None:
         self.clients[client.id] = client
+        if role == "spectator":
+            client.slot = -1
+            return
         if role == "host" and self.slots[0] is None:
             self.reset()
             self.assign_slot(client, 0)
@@ -1038,6 +1046,11 @@ class ArenaServer:
         kind = str(message.get("type") or "")
         if kind == "hello":
             client.name = self.clean_hub_name(message.get("name"))
+            client.runtime = self.clean_hub_meta(message.get("runtime"), 24)
+            client.page_host = self.clean_hub_meta(message.get("pageHost"), 80)
+            client.page_port = self.clean_hub_meta(message.get("pagePort"), 12)
+            client.game_host = self.clean_hub_meta(message.get("gameHost"), 80)
+            client.game_port = self.clean_hub_meta(message.get("gamePort"), 12)
             await self.send_hub_info(client)
             if client.room_id:
                 await self.broadcast_hub_presence(client.room_id)
@@ -1194,6 +1207,9 @@ class ArenaServer:
     def clean_hub_name(self, value: Any) -> str:
         return str(value or "Guest").strip()[:24] or "Guest"
 
+    def clean_hub_meta(self, value: Any, limit: int = 80) -> str:
+        return str(value or "").replace("\r", "").replace("\n", "").strip()[:limit]
+
     def make_hub_room_id(self) -> str:
         alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
         while True:
@@ -1232,11 +1248,18 @@ class ArenaServer:
         }
 
     def hub_participants(self, room_id: str) -> list[dict[str, Any]]:
+        room = self.hub_rooms.get(room_id)
         return [
             {
                 "id": client.id,
                 "name": client.name,
                 "peer": client.peer,
+                "runtime": client.runtime,
+                "pageHost": client.page_host,
+                "pagePort": client.page_port,
+                "gameHost": client.game_host,
+                "gamePort": client.game_port,
+                "isHost": bool(room and client.id == room.host_id),
                 "connectedAt": round(client.connected_at, 3),
             }
             for client in self.hub_clients.values()
@@ -1251,6 +1274,11 @@ class ArenaServer:
                 "id": client.id,
                 "name": client.name,
                 "peer": client.peer,
+                "runtime": client.runtime,
+                "pageHost": client.page_host,
+                "pagePort": client.page_port,
+                "gameHost": client.game_host,
+                "gamePort": client.game_port,
                 "serverTime": round(time.time(), 3),
             },
             client.write_lock,

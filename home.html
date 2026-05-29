@@ -307,6 +307,31 @@
       line-height: 1.6;
       word-break: break-word;
     }
+    .lan-game-detail {
+      display: grid;
+      gap: 8px;
+    }
+    .lan-game-detail .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .lan-game-detail .detail-item {
+      padding: 8px 10px;
+      border: 1px solid var(--b);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.06);
+    }
+    .lan-game-detail .detail-item span,
+    .lan-peer small {
+      display: block;
+      margin-bottom: 3px;
+      color: var(--d);
+      font-size: 0.76rem;
+    }
+    .lan-game-detail .detail-warn {
+      color: #e08a00;
+    }
     .lan-list {
       display: grid;
       gap: 8px;
@@ -2145,21 +2170,38 @@
           <option value="arena">LAN 아레나</option>
           <option value="fortress">포트리스</option>
         </select>
-        <input id="lanGameInviteUrl" class="c26 section-hidden" readonly />
-        <input id="lanGameDirectUrl" class="c26 section-hidden" readonly />
+        <input id="lanGameInviteUrl" type="hidden" />
+        <input id="lanGameDirectUrl" type="hidden" />
       </div>
       <div class="lan-toolbar">
         <button type="button" id="lanCreateGameRoom">
           <i class="fas fa-plus"></i> 게임 방 만들기
         </button>
-        <button type="button" class="ck" id="lanCopyGameInvite">
+        <button
+          type="button"
+          class="ck"
+          id="lanCopyGameInvite"
+          title="다른 사용자가 통합입장센터에서 방 상태를 보고 들어올 수 있는 초대 링크를 복사합니다."
+        >
           <i class="fas fa-copy"></i> 입장 센터 초대
         </button>
-        <button type="button" class="ck" id="lanCopyGameDirect">
+        <button
+          type="button"
+          class="ck"
+          id="lanCopyGameDirect"
+          title="선택한 방의 게임 화면을 바로 엽니다. 포트리스 정원이 차면 관전으로 입장합니다."
+        >
           <i class="fas fa-link"></i> 바로 입장
+        </button>
+        <button type="button" class="ck" id="lanCopyDiagnostics">
+          <i class="fas fa-info-circle"></i> 진단 정보 복사
         </button>
       </div>
       <div class="lan-status" id="lanGameStatus"></div>
+      <div
+        class="lan-status lan-game-detail section-hidden"
+        id="lanGameDetail"
+      ></div>
       <h4>방 목록</h4>
       <div class="lan-list" id="lanRoomList"></div>
       <h4>참가자</h4>
@@ -3988,7 +4030,29 @@
         .join("");
     }
     async function Ce(e) {
-      await navigator.clipboard.writeText(e || "");
+      const n = String(e || "");
+      if (navigator.clipboard?.writeText) {
+        try {
+          await navigator.clipboard.writeText(n);
+          return;
+        } catch (e) {
+          // Browser and EXE shells can reject Clipboard API depending on focus/security context.
+        }
+      }
+      const i = o("textarea");
+      i.value = n;
+      i.setAttribute("readonly", "");
+      Object.assign(i.style, {
+        position: "fixed",
+        left: "-9999px",
+        top: "0",
+      });
+      document.body.appendChild(i);
+      i.select();
+      i.setSelectionRange(0, i.value.length);
+      const a = document.execCommand("copy");
+      i.remove();
+      if (!a) throw new Error("클립보드 복사 권한을 확인하세요.");
     }
     function je(e) {
       Ce(t(e).innerText);
@@ -4128,7 +4192,7 @@
         e.textContent = "Connection info unavailable: " + n.message;
       }
     }
-    const GAME_ASSET_VERSION = "20260529c";
+    const GAME_ASSET_VERSION = "20260530a";
     let gameActiveTab = "arena";
     function gameIsLauncherShell() {
       return "exe" === gameLauncherParams().launcher || !!window.pywebview;
@@ -4391,11 +4455,13 @@
       rooms: [],
       peers: [],
       pingAt: 0,
+      pingMs: 0,
       transfersIn: {},
       transfersOut: {},
       pendingJoin: null,
       pendingGameLaunch: "",
       pendingGameTimer: 0,
+      flashTimer: 0,
       selectedGameRoom: null,
       chatMessages: [],
       chatIds: new Set(),
@@ -4440,6 +4506,40 @@
       });
       return e.toString();
     }
+    function lanRuntimeInfo() {
+      const e = gameLauncherParams();
+      return {
+        runtime: gameIsLauncherShell() ? "exe" : "browser",
+        pageHost: window.location.hostname || "local-file",
+        pagePort: window.location.port || "",
+        gameHost: e.host || lanHostValue(),
+        gamePort: e.port || String(lanPortValue()),
+      };
+    }
+    function lanHelloPayload() {
+      return {
+        type: "hello",
+        name: t("lanName").value.trim() || "Guest",
+        ...lanRuntimeInfo(),
+      };
+    }
+    function lanIsFortressSpectatorEntry(e) {
+      return "fortress" === e?.feature && Number(e.playerCount || 0) >= 2;
+    }
+    function lanPreferredGameRole(e) {
+      return lanIsFortressSpectatorEntry(e) ? "spectator" : "client";
+    }
+    function lanGameActionLabel(e) {
+      return lanIsFortressSpectatorEntry(e) ? "관전하기" : "입장";
+    }
+    function lanFormatPeerRuntime(e) {
+      return "exe" === e ? "EXE" : "browser" === e ? "브라우저" : "알 수 없음";
+    }
+    function lanFormatTime(e) {
+      if (!e) return "-";
+      const t = new Date(Number(e) * 1000);
+      return Number.isNaN(t.getTime()) ? "-" : t.toLocaleTimeString();
+    }
     function lanSetStatus(e) {
       const n = t("lanStatus");
       n && (n.innerHTML = e);
@@ -4470,6 +4570,8 @@
         const n = lanHostValue();
         e.push("Hub: <code>" + Me(lanWsUrl()) + "</code>");
         e.push("Share: <code>" + Me(t("lanShareUrl").value || "") + "</code>");
+        e.push("Game: <code>" + Me(n + ":" + lanPortValue()) + "</code>");
+        e.push("Runtime: <code>" + Me(lanRuntimeInfo().runtime) + "</code>");
         gameIsLoopbackHost(n) &&
           e.push(
             "<strong>Warning:</strong> localhost/127.x는 이 PC에서만 유효합니다. 다른 PC는 호스트 LAN IP를 사용해야 합니다.",
@@ -4484,11 +4586,51 @@
       if (lanState.pingAt) {
         e.push(
           "Ping: <code>" +
-            Math.max(0, Date.now() - lanState.pingAt) +
+            (lanState.pingMs || Math.max(0, Date.now() - lanState.pingAt)) +
             "ms</code>",
         );
       }
       return e.join("<br>");
+    }
+    function lanDiagnosticsPlainText() {
+      const e = lanState.selectedGameRoom,
+        n = lanRuntimeInfo(),
+        i = [
+          "통합입장센터 진단 정보",
+          "Hub: " + lanWsUrl(),
+          "입장센터 주소: " + (t("lanShareUrl").value || ""),
+          "현재 페이지: " + window.location.href,
+          "게임 서버: " + lanHostValue() + ":" + lanPortValue(),
+          "실행 환경: " + n.runtime,
+          "페이지 host/port: " +
+            n.pageHost +
+            (n.pagePort ? ":" + n.pagePort : ""),
+          "게임 host/port: " + n.gameHost + ":" + n.gamePort,
+          "Ping: " + (lanState.pingMs ? lanState.pingMs + "ms" : "-"),
+        ];
+      e &&
+        i.push(
+          "선택 방: " + e.name + " / " + e.id + " / " + lanGameLabel(e.feature),
+          "게임 접속자: " + (e.gameCount || 0),
+          "플레이어: " + (e.playerCount || 0),
+          "관전자: " + (e.spectatorCount || 0),
+          "직접 입장: " + t("lanGameDirectUrl").value,
+        );
+      lanState.peers.length &&
+        i.push(
+          "참가자:",
+          ...lanState.peers.map(
+            (e) =>
+              "- " +
+              (e.name || "Guest") +
+              " / " +
+              (e.peer || "-") +
+              " / " +
+              lanFormatPeerRuntime(e.runtime) +
+              (e.isHost ? " / 방장" : ""),
+          ),
+        );
+      return i.join("\n");
     }
     function lanRefreshShareUrls() {
       try {
@@ -4500,10 +4642,11 @@
           );
           t("lanGameDirectUrl").value = lanGameDirectUrl(
             lanState.selectedGameRoom,
-            "client",
+            lanPreferredGameRole(lanState.selectedGameRoom),
           );
           t("lanGameInviteUrl").classList.remove("section-hidden");
           t("lanGameDirectUrl").classList.remove("section-hidden");
+          lanRenderGameDetail();
         }
         if (t("lanStatus")) {
           lanSetStatus(
@@ -4540,6 +4683,36 @@
     function lanSetGameStatus(e) {
       const n = t("lanGameStatus");
       n && (n.innerHTML = e);
+    }
+    function lanRestoreGameStatus() {
+      if (lanState.selectedGameRoom) {
+        lanSetSelectedGameRoom(lanState.selectedGameRoom);
+        return;
+      }
+      lanSetGameStatus("");
+    }
+    function lanFlashGameStatus(e, n = false) {
+      window.clearTimeout(lanState.flashTimer);
+      lanSetGameStatus(
+        '<i class="fas ' +
+          (n ? "fa-exclamation-circle" : "fa-check-circle") +
+          '"></i> ' +
+          Me(e),
+      );
+      lanState.flashTimer = window.setTimeout(lanRestoreGameStatus, 1600);
+    }
+    async function lanCopyWithFeedback(e, n) {
+      const i = String(e || "").trim();
+      if (!i) {
+        lanFlashGameStatus("먼저 게임 방을 만들거나 선택하세요.", true);
+        return;
+      }
+      try {
+        await Ce(i);
+        lanFlashGameStatus(n || "복사되었습니다.");
+      } catch (e) {
+        lanFlashGameStatus("복사 실패: " + e.message, true);
+      }
     }
     function lanGameCenterUrl(e) {
       return lanHomeShareUrl({ tool: "lan", room: e.id || e });
@@ -4581,21 +4754,92 @@
         t("lanGameDirectUrl").value = "";
         t("lanGameInviteUrl").classList.add("section-hidden");
         t("lanGameDirectUrl").classList.add("section-hidden");
+        t("lanGameDetail").classList.add("section-hidden");
+        t("lanCopyGameDirect").innerHTML =
+          '<i class="fas fa-link"></i> 바로 입장';
         return;
       }
       t("lanGameInviteUrl").value = lanGameCenterUrl(e);
-      t("lanGameDirectUrl").value = lanGameDirectUrl(e, "client");
+      t("lanGameDirectUrl").value = lanGameDirectUrl(
+        e,
+        lanPreferredGameRole(e),
+      );
       t("lanGameInviteUrl").classList.remove("section-hidden");
       t("lanGameDirectUrl").classList.remove("section-hidden");
+      t("lanCopyGameDirect").innerHTML =
+        '<i class="fas fa-link"></i> ' + lanGameActionLabel(e);
       lanSetGameStatus(
         "선택한 방: <code>" +
           Me(e.name + " / " + e.id) +
-          "</code><br>입장 센터 초대와 바로 입장 링크를 복사할 수 있습니다.",
+          "</code><br>입장 센터 초대를 복사하거나 바로 입장할 수 있습니다.",
       );
+      lanRenderGameDetail();
     }
-    function lanOpenGameRoom(e, role = "client") {
+    function lanRenderGameDetail() {
+      const e = t("lanGameDetail");
+      if (!e) return;
+      let n = lanState.selectedGameRoom;
+      if (!n) {
+        e.classList.add("section-hidden");
+        return;
+      }
+      const i = lanState.rooms.find((e) => e.id === n.id);
+      i && ((n = { ...n, ...i }), (lanState.selectedGameRoom = n));
+      const a = "fortress" === n.feature,
+        s = lanIsFortressSpectatorEntry(n),
+        r = s ? "관전자로 입장합니다." : "플레이어로 입장합니다.",
+        l = a
+          ? "플레이어 " +
+            (n.playerCount || 0) +
+            "/2 · 관전자 " +
+            (n.spectatorCount || 0) +
+            "명"
+          : "플레이어 " + (n.gameCount || 0) + "명",
+        d = [
+          gameIsLoopbackHost(lanHostValue())
+            ? "호스트가 localhost/127.x이면 다른 PC에서 접속할 수 없습니다."
+            : "",
+          gameIsLoopbackHost(window.location.hostname)
+            ? "현재 페이지 주소가 localhost/127.x입니다. 다른 PC에는 입장센터 초대 주소를 전달하세요."
+            : "",
+        ].filter(Boolean);
+      e.innerHTML =
+        '<div class="detail-grid">' +
+        '<div class="detail-item"><span>방</span><strong>' +
+        Me(n.name) +
+        "</strong><br>" +
+        Me(n.id) +
+        "</div>" +
+        '<div class="detail-item"><span>게임</span><strong>' +
+        Me(lanGameLabel(n.feature)) +
+        "</strong><br>" +
+        Me(l) +
+        "</div>" +
+        '<div class="detail-item"><span>입장 동작</span><strong>' +
+        Me(lanGameActionLabel(n)) +
+        "</strong><br>" +
+        Me(r) +
+        "</div>" +
+        '<div class="detail-item"><span>접속 대상</span><strong>' +
+        Me(lanHostValue() + ":" + lanPortValue()) +
+        "</strong><br>" +
+        Me(lanRuntimeInfo().runtime) +
+        "</div>" +
+        '<div class="detail-item"><span>입장센터 초대</span><strong>링크 복사</strong><br>방 목록과 상태를 먼저 보여줍니다.' +
+        "</div>" +
+        '<div class="detail-item"><span>바로 입장</span><strong>' +
+        Me(lanGameActionLabel(n)) +
+        "</strong><br>게임 화면을 바로 엽니다." +
+        "</div>" +
+        "</div>" +
+        (d.length
+          ? '<div class="detail-warn">' + Me(d.join(" ")) + "</div>"
+          : "");
+      e.classList.remove("section-hidden");
+    }
+    function lanOpenGameRoom(e, role = "") {
       lanSetSelectedGameRoom(e);
-      gameOpenUrl(lanGameDirectUrl(e, role));
+      gameOpenUrl(lanGameDirectUrl(e, role || lanPreferredGameRole(e)));
     }
     function lanCreateGameRoom(feature = "") {
       const e = feature || t("lanGameType").value,
@@ -4653,10 +4897,7 @@
           lanState.connectFailed = !1;
           lanSetConnectBusy(!1);
           s.setItem(STORAGE_KEYS.lanName, t("lanName").value.trim() || "Guest");
-          lanSend({
-            type: "hello",
-            name: t("lanName").value.trim() || "Guest",
-          });
+          lanSend(lanHelloPayload());
           lanSend({ type: "room_list" });
           lanPing();
           lanSetStatus("연결됨<br>" + lanDiagnosticsText());
@@ -4728,6 +4969,12 @@
       if ("room_list" === n.type) {
         lanState.rooms = Array.isArray(n.rooms) ? n.rooms : [];
         lanRenderRooms();
+        if (lanState.selectedGameRoom) {
+          const t = lanState.rooms.find(
+            (e) => e.id === lanState.selectedGameRoom.id,
+          );
+          t ? lanSetSelectedGameRoom(t) : lanSetSelectedGameRoom(null);
+        }
         const e = new URLSearchParams(window.location.search).get("room"),
           i = e && lanState.rooms.find((t) => t.id === e.toUpperCase());
         i &&
@@ -4781,9 +5028,14 @@
       if ("presence" === n.type) {
         lanState.peers = n.participants || [];
         lanRenderPeers();
+        lanRenderGameDetail();
         return;
       }
       if ("pong" === n.type) {
+        lanState.pingMs = Math.max(
+          0,
+          Date.now() - Number(n.sentAt || lanState.pingAt || Date.now()),
+        );
         lanSetStatus("연결됨<br>" + lanDiagnosticsText());
         return;
       }
@@ -4832,6 +5084,7 @@
                 (n.spectatorCount || 0) +
                 "명"
               : "게임 " + (n.gameCount || 0) + "명";
+        const r = lanGameActionLabel(n);
         i.className = "lan-room";
         i.innerHTML =
           "<span><strong>" +
@@ -4844,10 +5097,13 @@
           Me(s) +
           (n.locked ? " · PIN" : "") +
           '</span><button type="button" class="ck">' +
-          "입장" +
+          Me(r) +
           "</button>";
+        i.onclick = (e) => {
+          e.target.closest("button") || lanSetSelectedGameRoom(n);
+        };
         i.querySelector("button").onclick = () => {
-          lanOpenGameRoom(n, "client");
+          lanOpenGameRoom(n);
         };
         e.appendChild(i);
       });
@@ -4861,14 +5117,33 @@
       }
       lanState.peers.forEach((n) => {
         const i = o("div");
+        const a = [
+          n.isHost ? "방장" : "",
+          n.id === lanState.clientId ? "나" : "연결",
+          lanFormatPeerRuntime(n.runtime),
+        ]
+          .filter(Boolean)
+          .join(" · ");
+        const s =
+          (n.gameHost || n.gamePort
+            ? "게임 " +
+              (n.gameHost || "-") +
+              (n.gamePort ? ":" + n.gamePort : "")
+            : "") || "게임 정보 없음";
         i.className = "lan-peer";
         i.innerHTML =
           "<span><strong>" +
           Me(n.name) +
-          "</strong><br>" +
+          "</strong><small>" +
+          Me(a) +
+          "</small>" +
           Me(n.peer || "-") +
+          "<br>" +
+          Me(s) +
+          " · " +
+          Me(lanFormatTime(n.connectedAt)) +
           "</span><span>" +
-          (n.id === lanState.clientId ? "나" : "연결") +
+          (n.id === lanState.clientId ? "나" : n.isHost ? "방장" : "참가") +
           "</span>";
         e.appendChild(i);
       });
@@ -5142,15 +5417,36 @@
       t("dropRoomPin").value = n.get("pin") || dropRandomPin();
       ["lanName", "lanHost", "lanPort", "dropRoomPin", "dropRoomId"].forEach(
         (e) => {
-          t(e).addEventListener("input", lanRefreshShareUrls);
+          t(e).addEventListener("input", () => {
+            lanRefreshShareUrls();
+            "dropRoomPin" !== e &&
+              "dropRoomId" !== e &&
+              lanState.connected &&
+              lanSend(lanHelloPayload());
+          });
         },
       );
       t("lanConnect").onclick = () => lanConnect();
       t("lanDisconnect").onclick = lanDisconnect;
       t("lanCopyShare").onclick = () => Ce(t("lanShareUrl").value);
       t("lanCreateGameRoom").onclick = () => lanCreateGameRoom();
-      t("lanCopyGameInvite").onclick = () => Ce(t("lanGameInviteUrl").value);
-      t("lanCopyGameDirect").onclick = () => Ce(t("lanGameDirectUrl").value);
+      t("lanCopyGameInvite").onclick = () =>
+        lanCopyWithFeedback(
+          t("lanGameInviteUrl").value,
+          "입장센터 초대 링크가 복사되었습니다.",
+        );
+      t("lanCopyGameDirect").onclick = () => {
+        if (lanState.selectedGameRoom) {
+          lanOpenGameRoom(lanState.selectedGameRoom);
+          return;
+        }
+        t("lanGameDirectUrl").value && gameOpenUrl(t("lanGameDirectUrl").value);
+      };
+      t("lanCopyDiagnostics").onclick = () =>
+        lanCopyWithFeedback(
+          lanDiagnosticsPlainText(),
+          "진단 정보가 복사되었습니다.",
+        );
       t("dropCreateRoom").onclick = dropCreateRoom;
       t("dropJoinRoom").onclick = () => dropJoinRoom();
       t("dropCopyShare").onclick = () => Ce(t("dropShareUrl").value);

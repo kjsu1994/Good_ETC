@@ -72,7 +72,7 @@ docker compose up -d web-server
 브라우저에서 접속합니다.
 
 ```text
-http://localhost:8081/home.html
+http://localhost:8085/home.html
 ```
 
 MinIO와 Oracle XE까지 함께 쓰려면 전체 서비스를 실행합니다.
@@ -85,7 +85,7 @@ docker compose up -d
 
 `home.html`의 게임 패널은 탭으로 게임을 선택합니다. `LAN 아레나`는 기존 LAN 실시간 게임이고, `포트리스`는 WebSocket 멀티 모드와 혼자하기 로컬 모드를 함께 제공합니다. 호스트 IP, 포트, 방화벽 bat 생성 영역은 게임 탭 아래에 공통으로 표시됩니다.
 
-통합 입장 센터에서는 같은 `/hub` 연결로 열린 게임 방을 만들고 참가할 수 있습니다. 게임 방을 만들면 만든 사람은 바로 게임 화면으로 들어가며, 다른 사용자는 통합 입장 센터 방 목록의 `입장` 버튼이나 공유 링크로 참가합니다. 게임 방은 공개 방이며, 초대 링크는 통합 입장 센터를 여는 링크와 게임에 바로 입장하는 링크를 함께 제공합니다.
+통합 입장 센터에서는 같은 `/hub` 연결로 열린 게임 방을 만들고 참가할 수 있습니다. 게임 방을 만들면 만든 사람은 바로 게임 화면으로 들어가며, 다른 사용자는 통합 입장 센터 방 목록의 `입장` 또는 `관전하기` 버튼이나 공유 링크로 참가합니다. `입장 센터 초대`는 방 목록과 상태를 먼저 보여주는 링크를 복사하고, `바로 입장`은 선택한 게임 화면을 즉시 엽니다.
 
 ### LAN 아레나
 
@@ -143,7 +143,7 @@ EXE는 기본적으로 `0.0.0.0:7000`에 LAN 아레나와 포트리스 멀티용
 
 | 서비스        | 포트                     | 용도                                                                                                       |
 | ------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------- |
-| `web-server`  | `8081:80`                | `home.html`과 정적 게임 클라이언트를 Nginx로 서빙합니다.                                                   |
+| `web-server`  | `8085:80`                | `home.html`과 정적 게임 클라이언트를 Nginx로 서빙합니다.                                                   |
 | `game-server` | `7000:7000`              | LAN 아레나와 포트리스 멀티용 HTTP/WebSocket 서버를 실행합니다. `web-server` 실행 시 함께 시작됩니다.       |
 | `minio`       | `9000:9000`, `9001:9001` | S3 호환 오브젝트 스토리지와 콘솔을 제공합니다.                                                             |
 | `oracle`      | `1522:1521`              | Oracle XE 21c 컨테이너입니다. 컨테이너 내부 접속 문자열은 `jdbc:oracle:thin:@//oracle:1521/XEPDB1` 입니다. |
@@ -281,8 +281,8 @@ npm run format
 - `127.0.0.1`, `127.x.x.x`, and `localhost` always mean the current PC only.
 - If the host PC is `192.168.1.154` and the active game port is `7000`, another PC should open `http://192.168.1.154:7000/game/index.html`.
 - If the launcher had to use `7001`, `7002`, or another port, use that actual port instead of `7000`.
-- The Arena and Fortress game screens include a collapsible connection info panel with the current page URL, WebSocket target, active port, and LAN share URL.
-- A URL that starts with `http://127.0.0.1:8081/...` only works on the PC that is opening it. For another PC, use the host PC LAN IP in the page address or use the in-game LAN share URL.
+- The Arena and Fortress game screens include a collapsible connection info panel. `현재 화면` is the page currently open, `서버 연결` is the WebSocket target used by the game, and `초대 링크` is the address to send to another participant.
+- A URL that starts with `http://127.0.0.1:8085/...` only works on the PC that is opening it. For another PC, use the host PC LAN IP in the page address or use the in-game LAN share URL.
 
 ## 통합 입장 센터와 Share&Drop
 
@@ -290,6 +290,8 @@ npm run format
 - 통합 입장 센터는 `ws://HOST_IP:PORT/hub`로 연결해 현재 공유 주소, 열린 방, 참가자, 접속 진단, 게임 방 만들기/입장을 제공합니다.
 - 통합 입장 센터의 `연결`은 입력한 호스트 IP와 포트의 Hub에 접속해 방 목록을 불러오고, `해제`는 현재 Hub 연결을 끊으며, `주소 복사`는 다른 사용자가 통합 입장 센터를 열 수 있는 공유 주소를 복사합니다.
 - 통합 입장 센터의 게임 방은 `arena` 또는 `fortress` 타입으로 만들어지며, 실제 게임 WebSocket은 `/ws?room=방코드` 또는 `/fortress?room=방코드`로 접속합니다.
+- 통합 입장 센터는 선택한 게임 방의 참가자, 브라우저/EXE 실행 환경, 접속 IP, 게임 포트, ping, localhost 경고를 보여주고 `진단 정보 복사`로 공유할 수 있습니다.
+- 포트리스 방은 플레이어 2명이 차면 이후 참가 버튼이 `관전하기`로 표시되고, 직접 입장 링크도 관전 역할로 만들어집니다.
 - Share&Drop은 같은 `/hub` 소켓을 사용하며 별도 포트가 필요 없습니다. 방을 만들거나 참여하면 같은 방 안에서 채팅과 파일 전송을 함께 사용할 수 있습니다.
 - Share&Drop 초대 주소는 통합 입장 센터의 호스트 IP/포트와 Share&Drop의 방 코드/PIN으로 자동 생성됩니다. 포트를 바꾸려면 Share&Drop의 `접속 설정`에서 통합 입장 센터를 열고 포트를 수정합니다.
 - 파일 전송은 WebSocket 청크를 메모리에서 중계하며 파일당 최대 100MB까지 지원합니다. 같은 방 참가자는 파일을 자동 수신하고 수신 목록에서 다운로드할 수 있습니다.

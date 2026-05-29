@@ -4,8 +4,14 @@
 
   const params = new URLSearchParams(window.location.search);
   const mode = params.get("mode") === "multi" ? "multi" : "local";
-  const role = params.get("role") === "host" ? "host" : "client";
-  const assetVersion = params.get("v") || "20260529c";
+  const requestedRole = params.get("role");
+  const role =
+    requestedRole === "host"
+      ? "host"
+      : requestedRole === "spectator"
+        ? "spectator"
+        : "client";
+  const assetVersion = params.get("v") || "20260530a";
   const world = { width: 1400, height: 760 };
   const gravity = 300;
   const moveBudgetMax = 100;
@@ -158,26 +164,26 @@
         id="netInfoToggle"
         class="net-info-toggle"
         type="button"
-        aria-label="Toggle network info"
+        aria-label="접속 정보 열기"
         aria-expanded="false"
-        title="Connection info"
+        title="접속 정보"
       >
         i
       </button>
       <div class="net-info-body">
-        <h2>Connection</h2>
+        <h2>접속 정보</h2>
         <dl>
-          <dt>Game</dt>
+          <dt>게임</dt>
           <dd id="netInfoGame">-</dd>
-          <dt>Page</dt>
+          <dt>현재 화면</dt>
           <dd id="netInfoPage">-</dd>
-          <dt>Server</dt>
+          <dt>서버 연결</dt>
           <dd id="netInfoServer">-</dd>
-          <dt>Share</dt>
+          <dt>초대 링크</dt>
           <dd id="netInfoShare">-</dd>
         </dl>
         <p id="netInfoWarning"></p>
-        <button id="netInfoCopy" type="button">Copy share URL</button>
+        <button id="netInfoCopy" type="button">초대 링크 복사</button>
       </div>
     </section>
   `;
@@ -237,6 +243,7 @@
   let lastFrame = performance.now();
   let state = createInitialState();
   let latestShareUrl = "";
+  let netInfoCopyTimer = 0;
 
   function weaponConfig(key) {
     return weapons[key] || weapons[defaultWeapon];
@@ -687,6 +694,71 @@
     }
   }
 
+  function escapeHtml(value) {
+    return String(value ?? "").replace(
+      /[&<>"']/g,
+      (char) =>
+        ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;",
+        })[char],
+    );
+  }
+
+  function renderNetInfoValue(element, label, description, value) {
+    if (!element) return;
+    const text = String(value || "-");
+    element.innerHTML =
+      "<strong>" +
+      escapeHtml(label) +
+      "</strong><small>" +
+      escapeHtml(description) +
+      "</small><code>" +
+      escapeHtml(text) +
+      "</code>";
+    element.title = text;
+  }
+
+  async function copyText(value) {
+    const text = String(value || "");
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return;
+      } catch {
+        // File URLs, embedded shells, or unfocused windows can reject Clipboard API.
+      }
+    }
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.setAttribute("readonly", "");
+    Object.assign(area.style, {
+      position: "fixed",
+      left: "-9999px",
+      top: "0",
+    });
+    document.body.appendChild(area);
+    area.select();
+    area.setSelectionRange(0, area.value.length);
+    const copied = document.execCommand("copy");
+    area.remove();
+    if (!copied) throw new Error("클립보드 복사 권한을 확인하세요.");
+  }
+
+  function flashNetInfoCopy(message, isError = false) {
+    if (!netInfo.copy) return;
+    window.clearTimeout(netInfoCopyTimer);
+    netInfo.copy.textContent = message;
+    netInfo.copy.classList.toggle("error", isError);
+    netInfoCopyTimer = window.setTimeout(() => {
+      netInfo.copy.textContent = "초대 링크 복사";
+      netInfo.copy.classList.remove("error");
+    }, 1600);
+  }
+
   function buildFortressShareUrl(socketUrl) {
     const target = safeUrl(socketUrl);
     if (!target) return "";
@@ -734,14 +806,28 @@
     const targetUrl =
       mode === "multi" ? socketUrl || getFortressSocketUrl() : "";
     latestShareUrl = targetUrl ? buildFortressShareUrl(targetUrl) : "";
+    const roleLabel =
+      role === "host" ? "호스트" : role === "spectator" ? "관전" : "입장";
     netInfo.game.textContent =
-      mode === "multi"
-        ? `포트리스 멀티 / ${role === "host" ? "호스트" : "입장"}`
-        : "포트리스 혼자하기";
-    netInfo.page.textContent = window.location.href;
-    netInfo.server.textContent = targetUrl || "-";
-    netInfo.share.textContent = latestShareUrl || "-";
-    netInfo.share.title = latestShareUrl;
+      mode === "multi" ? `포트리스 멀티 / ${roleLabel}` : "포트리스 혼자하기";
+    renderNetInfoValue(
+      netInfo.page,
+      "현재 내 화면 주소",
+      "지금 열린 화면입니다. 다른 PC 초대에는 아래 초대 링크를 사용하세요.",
+      window.location.href,
+    );
+    renderNetInfoValue(
+      netInfo.server,
+      "게임 서버 연결",
+      "실시간 포트리스 상태를 주고받는 WebSocket 대상입니다.",
+      targetUrl || "-",
+    );
+    renderNetInfoValue(
+      netInfo.share,
+      "참가자 초대 링크",
+      "다른 참가자에게 보내면 같은 방으로 들어올 수 있습니다.",
+      latestShareUrl || "-",
+    );
     netInfo.warning.textContent = targetUrl
       ? connectionWarnings(targetUrl)
       : "";
@@ -769,14 +855,18 @@
     state.status =
       role === "host"
         ? "포트리스 방을 여는 중입니다."
-        : "포트리스 방에 입장 중입니다.";
+        : role === "spectator"
+          ? "포트리스 방에 관전자로 입장 중입니다."
+          : "포트리스 방에 입장 중입니다.";
 
     socket.addEventListener("open", () => {
       setPanelCollapsed(true);
       state.status =
         role === "host"
           ? "상대를 기다리는 중입니다."
-          : "서버에 연결되었습니다.";
+          : role === "spectator"
+            ? "관전자로 연결되었습니다."
+            : "서버에 연결되었습니다.";
     });
 
     socket.addEventListener("message", (event) => {
@@ -1459,7 +1549,9 @@
     setNetInfoCollapsed(!netInfo.panel.classList.contains("collapsed"));
   netInfo.copy.onclick = () => {
     if (!latestShareUrl) return;
-    navigator.clipboard?.writeText(latestShareUrl);
+    copyText(latestShareUrl)
+      .then(() => flashNetInfoCopy("초대 링크가 복사되었습니다."))
+      .catch((error) => flashNetInfoCopy("복사 실패: " + error.message, true));
   };
   ui.repair.onclick = () => action("item", { item: "repair" });
   ui.shield.onclick = () => action("item", { item: "shield" });

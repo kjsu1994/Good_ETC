@@ -336,7 +336,7 @@ button:hover {
 
 .net-info dl {
   display: grid;
-  grid-template-columns: 62px minmax(0, 1fr);
+  grid-template-columns: 78px minmax(0, 1fr);
   gap: 7px 10px;
   margin: 0;
   font-size: 0.76rem;
@@ -353,6 +353,33 @@ button:hover {
   color: var(--text);
   font-weight: 800;
   word-break: break-all;
+}
+
+.net-info dd strong {
+  display: block;
+  font-size: 0.78rem;
+}
+
+.net-info dd small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.35;
+  word-break: keep-all;
+}
+
+.net-info dd code {
+  display: block;
+  margin-top: 4px;
+  padding: 3px 5px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.18);
+  color: var(--text);
+  font-size: 0.7rem;
+  font-weight: 800;
+  line-height: 1.35;
 }
 
 #netInfoWarning {
@@ -373,6 +400,11 @@ button:hover {
   border-color: var(--line);
   background: rgba(255, 255, 255, 0.08);
   color: var(--text);
+}
+
+#netInfoCopy.error {
+  border-color: rgba(255, 95, 109, 0.8);
+  color: #ffb4bd;
 }
 
 .fortress-shell {

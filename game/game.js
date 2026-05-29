@@ -31,6 +31,7 @@ let latestState = {
 };
 let lastInputSent = 0;
 let latestShareUrl = "";
+let netInfoCopyTimer = 0;
 
 function getDefaultServerUrl() {
   const params = new URLSearchParams(window.location.search);
@@ -101,7 +102,72 @@ function safeUrl(value) {
 }
 
 function currentAssetVersion() {
-  return new URLSearchParams(window.location.search).get("v") || "20260529c";
+  return new URLSearchParams(window.location.search).get("v") || "20260530a";
+}
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(
+    /[&<>"']/g,
+    (char) =>
+      ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      })[char],
+  );
+}
+
+function renderNetInfoValue(element, label, description, value) {
+  if (!element) return;
+  const text = String(value || "-");
+  element.innerHTML =
+    "<strong>" +
+    escapeHtml(label) +
+    "</strong><small>" +
+    escapeHtml(description) +
+    "</small><code>" +
+    escapeHtml(text) +
+    "</code>";
+  element.title = text;
+}
+
+async function copyText(value) {
+  const text = String(value || "");
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch {
+      // File URLs, embedded shells, or unfocused windows can reject Clipboard API.
+    }
+  }
+  const area = document.createElement("textarea");
+  area.value = text;
+  area.setAttribute("readonly", "");
+  Object.assign(area.style, {
+    position: "fixed",
+    left: "-9999px",
+    top: "0",
+  });
+  document.body.appendChild(area);
+  area.select();
+  area.setSelectionRange(0, area.value.length);
+  const copied = document.execCommand("copy");
+  area.remove();
+  if (!copied) throw new Error("클립보드 복사 권한을 확인하세요.");
+}
+
+function flashNetInfoCopy(message, isError = false) {
+  if (!netInfoCopy) return;
+  window.clearTimeout(netInfoCopyTimer);
+  netInfoCopy.textContent = message;
+  netInfoCopy.classList.toggle("error", isError);
+  netInfoCopyTimer = window.setTimeout(() => {
+    netInfoCopy.textContent = "초대 링크 복사";
+    netInfoCopy.classList.remove("error");
+  }, 1600);
 }
 
 function buildArenaShareUrl(serverUrl) {
@@ -152,10 +218,24 @@ function updateNetInfo(
   const room = safeUrl(serverUrl)?.searchParams.get("room") || "-";
   netInfoGame.textContent =
     room === "-" ? "LAN 아레나" : `LAN 아레나 / 방 ${room}`;
-  netInfoPage.textContent = window.location.href;
-  netInfoServer.textContent = serverUrl;
-  netInfoShare.textContent = latestShareUrl || "-";
-  netInfoShare.title = latestShareUrl;
+  renderNetInfoValue(
+    netInfoPage,
+    "현재 내 화면 주소",
+    "지금 열린 화면입니다. 다른 PC 초대에는 아래 초대 링크를 사용하세요.",
+    window.location.href,
+  );
+  renderNetInfoValue(
+    netInfoServer,
+    "게임 서버 연결",
+    "실시간 조작을 주고받는 WebSocket 대상입니다.",
+    serverUrl,
+  );
+  renderNetInfoValue(
+    netInfoShare,
+    "참가자 초대 링크",
+    "다른 참가자에게 보내면 같은 방으로 바로 들어올 수 있습니다.",
+    latestShareUrl || "-",
+  );
   netInfoWarning.textContent = connectionWarnings(serverUrl);
 }
 
@@ -419,7 +499,9 @@ netInfoToggle?.addEventListener("click", () => {
 
 netInfoCopy?.addEventListener("click", () => {
   if (!latestShareUrl) return;
-  navigator.clipboard?.writeText(latestShareUrl);
+  copyText(latestShareUrl)
+    .then(() => flashNetInfoCopy("초대 링크가 복사되었습니다."))
+    .catch((error) => flashNetInfoCopy("복사 실패: " + error.message, true));
 });
 
 window.addEventListener("keydown", (event) => {
