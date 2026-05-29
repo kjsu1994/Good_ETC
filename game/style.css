@@ -1,0 +1,653 @@
+:root {
+  color-scheme: dark;
+  --bg: #07111f;
+  --panel: rgba(13, 24, 42, 0.82);
+  --panel-strong: rgba(13, 24, 42, 0.94);
+  --line: rgba(255, 255, 255, 0.14);
+  --text: #eef6ff;
+  --muted: #9fb2c8;
+  --accent: #53e2a8;
+  --danger: #ff5f6d;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family:
+    Inter, "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.arena-shell {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background:
+    radial-gradient(
+      circle at 18% 20%,
+      rgba(83, 226, 168, 0.18),
+      transparent 28%
+    ),
+    radial-gradient(
+      circle at 84% 18%,
+      rgba(255, 188, 84, 0.12),
+      transparent 26%
+    ),
+    linear-gradient(135deg, #07111f 0%, #10182c 54%, #151128 100%);
+}
+
+#gameCanvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: crosshair;
+}
+
+.hud {
+  position: absolute;
+  z-index: 2;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(14px);
+}
+
+.hud-left {
+  top: 18px;
+  left: 18px;
+  width: min(330px, calc(100vw - 36px));
+  padding: 16px;
+  border-radius: 8px;
+  transition:
+    width 0.2s ease,
+    padding 0.2s ease;
+}
+
+.hud-left.collapsed {
+  width: 54px;
+  padding: 8px;
+}
+
+.hud-right {
+  top: 18px;
+  right: 18px;
+  width: min(260px, calc(100vw - 36px));
+  max-height: min(420px, calc(100vh - 150px));
+  overflow: auto;
+  padding: 14px;
+  border-radius: 8px;
+}
+
+.hud-bottom {
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: calc(100vw - 36px);
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 0.84rem;
+  color: var(--muted);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.hud-left.collapsed .brand {
+  justify-content: center;
+  margin-bottom: 0;
+}
+
+.brand-mark {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #53e2a8, #48a5ff), #53e2a8;
+  box-shadow: 0 0 28px rgba(83, 226, 168, 0.42);
+}
+
+.hud-toggle {
+  width: 34px;
+  height: 34px;
+  margin-left: auto;
+  padding: 0;
+  display: inline-grid;
+  place-content: center;
+  gap: 4px;
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  flex: 0 0 auto;
+}
+
+.hud-toggle span {
+  width: 15px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.hud-left.collapsed .brand-mark,
+.hud-left.collapsed .brand > div,
+.hud-left.collapsed .connect-form {
+  display: none;
+}
+
+.hud-left.collapsed .hud-toggle {
+  margin-left: 0;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 1.2rem;
+  letter-spacing: 0;
+}
+
+h2 {
+  margin-bottom: 10px;
+  font-size: 0.96rem;
+  letter-spacing: 0;
+}
+
+#connectionState {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.connect-form {
+  display: grid;
+  gap: 10px;
+}
+
+.connect-form label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.connect-form input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  padding: 10px 11px;
+  outline: 0;
+}
+
+.connect-form input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(83, 226, 168, 0.14);
+}
+
+.button-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+button {
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--accent);
+  color: #062016;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+button:hover {
+  filter: brightness(1.06);
+}
+
+#disconnectButton {
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+#scoreboard {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 22px;
+}
+
+#scoreboard li {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.score-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.score-dot {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+}
+
+.score-value {
+  float: right;
+  color: var(--accent);
+  font-weight: 900;
+}
+
+.center-message {
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  max-width: min(420px, calc(100vw - 36px));
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-strong);
+  color: var(--text);
+  text-align: center;
+  font-weight: 900;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.36);
+}
+
+.center-message.hidden {
+  display: none;
+}
+
+.net-info {
+  right: 18px;
+  bottom: 72px;
+  width: min(340px, calc(100vw - 36px));
+  padding: 12px;
+  border-radius: 8px;
+  transition:
+    width 0.2s ease,
+    padding 0.2s ease;
+}
+
+.net-info.collapsed {
+  width: 44px;
+  padding: 5px;
+}
+
+.net-info-toggle {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+  font-weight: 900;
+}
+
+.net-info:not(.collapsed) .net-info-toggle {
+  margin-bottom: 10px;
+}
+
+.net-info.collapsed .net-info-body {
+  display: none;
+}
+
+.net-info dl {
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr);
+  gap: 7px 10px;
+  margin: 0;
+  font-size: 0.76rem;
+}
+
+.net-info dt {
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.net-info dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--text);
+  font-weight: 800;
+  word-break: break-all;
+}
+
+#netInfoWarning {
+  margin-top: 10px;
+  color: #ffd166;
+  font-size: 0.76rem;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+#netInfoWarning:empty {
+  display: none;
+}
+
+#netInfoCopy {
+  width: 100%;
+  margin-top: 10px;
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+.fortress-shell {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: #5cb8ff;
+}
+
+.fortress-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: crosshair;
+}
+
+.fortress-panel {
+  top: 18px;
+  left: 18px;
+  width: min(380px, calc(100vw - 36px));
+  padding: 14px;
+  border-radius: 8px;
+  border: 2px solid rgba(245, 251, 255, 0.72);
+  background:
+    linear-gradient(180deg, rgba(20, 44, 64, 0.94), rgba(9, 24, 39, 0.94)),
+    var(--panel);
+  box-shadow:
+    inset 0 0 0 2px rgba(0, 0, 0, 0.24),
+    0 18px 50px rgba(0, 0, 0, 0.34);
+  transition:
+    width 0.2s ease,
+    padding 0.2s ease;
+}
+
+.fortress-panel.collapsed {
+  width: 54px;
+  padding: 8px;
+}
+
+.fortress-panel h1 {
+  margin-bottom: 4px;
+  color: #fff4b8;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.42);
+}
+
+.fortress-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.fortress-brand > div {
+  min-width: 0;
+}
+
+.fortress-panel.collapsed .fortress-brand {
+  justify-content: center;
+  margin-bottom: 0;
+}
+
+.fortress-panel.collapsed .fortress-brand > div,
+.fortress-panel.collapsed .fortress-readout,
+.fortress-panel.collapsed .fortress-buttons,
+.fortress-panel.collapsed .fortress-items,
+.fortress-panel.collapsed .fortress-weapons {
+  display: none;
+}
+
+.fortress-panel.collapsed .hud-toggle {
+  margin-left: 0;
+}
+
+.fortress-readout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.fortress-readout span {
+  display: block;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #afcbe0;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.fortress-readout strong {
+  display: block;
+  margin-top: 2px;
+  color: #fff4b8;
+  font-size: 1rem;
+}
+
+.fortress-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.fortress-buttons button {
+  min-height: 40px;
+  padding: 8px 10px;
+  border-color: rgba(255, 255, 255, 0.2);
+  background: linear-gradient(180deg, #ffe08a, #ffb347);
+  color: #3b2308;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.54),
+    0 3px 0 rgba(91, 47, 22, 0.72);
+}
+
+.fortress-buttons button:disabled {
+  cursor: not-allowed;
+  filter: grayscale(0.45);
+  opacity: 0.5;
+  box-shadow: none;
+}
+
+.fortress-items {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.fortress-weapons {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 8px;
+}
+
+.fortress-items button,
+.fortress-weapons button {
+  min-height: 42px;
+  padding: 8px 7px;
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(105, 220, 255, 0.12);
+  color: var(--text);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
+.fortress-weapons button {
+  min-height: 38px;
+  padding: 7px 5px;
+  font-size: 0.75rem;
+}
+
+.fortress-items button.active,
+.fortress-weapons button.active {
+  border-color: #ffe066;
+  background: rgba(255, 224, 102, 0.22);
+  color: #fff4b8;
+}
+
+.fortress-items button:disabled,
+.fortress-weapons button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.fortress-message {
+  right: 18px;
+  top: 18px;
+  width: min(300px, calc(100vw - 36px));
+  padding: 14px;
+  border-radius: 8px;
+  border: 2px solid rgba(245, 251, 255, 0.72);
+  background:
+    linear-gradient(180deg, rgba(20, 44, 64, 0.92), rgba(9, 24, 39, 0.92)),
+    var(--panel);
+  box-shadow:
+    inset 0 0 0 2px rgba(0, 0, 0, 0.24),
+    0 18px 50px rgba(0, 0, 0, 0.28);
+}
+
+.fortress-message h2 {
+  margin-bottom: 8px;
+  color: #fff4b8;
+}
+
+.fortress-message p {
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  font-weight: 800;
+}
+
+.fortress-message p + p {
+  margin-top: 8px;
+}
+
+.fortress-help {
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  max-width: calc(100vw - 36px);
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 2px solid rgba(245, 251, 255, 0.58);
+  background: rgba(9, 24, 39, 0.82);
+  color: #d8e9f5;
+  font-size: 0.8rem;
+  font-weight: 800;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.24);
+}
+
+@media (max-width: 760px) {
+  .hud-right {
+    top: auto;
+    right: 18px;
+    bottom: 78px;
+    width: min(260px, calc(100vw - 36px));
+  }
+
+  .hud-bottom {
+    font-size: 0.76rem;
+  }
+
+  .net-info {
+    right: 12px;
+    bottom: 72px;
+    width: min(320px, calc(100vw - 24px));
+  }
+
+  .fortress-panel,
+  .fortress-message {
+    left: 12px;
+    right: 12px;
+    width: auto;
+  }
+
+  .fortress-panel.collapsed {
+    right: auto;
+    width: 54px;
+  }
+
+  .fortress-message {
+    top: auto;
+    bottom: 84px;
+  }
+
+  .fortress-weapons {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .hud-left,
+  .hud-right {
+    left: 12px;
+    right: 12px;
+    width: auto;
+  }
+
+  .hud-left {
+    top: 12px;
+  }
+
+  .hud-right {
+    bottom: 88px;
+  }
+
+  .hud-left.collapsed {
+    right: auto;
+    width: 54px;
+  }
+}

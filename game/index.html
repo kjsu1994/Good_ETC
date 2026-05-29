@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LAN Arena</title>
+    <link rel="stylesheet" href="./style.css?v=20260529c" />
+  </head>
+  <body>
+    <main class="arena-shell">
+      <canvas id="gameCanvas" aria-label="LAN Arena game field"></canvas>
+
+      <section
+        class="hud hud-left"
+        id="connectionPanel"
+        aria-label="connection controls"
+      >
+        <div class="brand">
+          <span class="brand-mark"></span>
+          <div>
+            <h1>LAN Arena</h1>
+            <p id="connectionState">Disconnected</p>
+          </div>
+          <button
+            id="hudToggle"
+            class="hud-toggle"
+            type="button"
+            aria-label="Toggle connection panel"
+            aria-expanded="true"
+          >
+            <span></span>
+            <span></span>
+            <span></span>
+          </button>
+        </div>
+        <form id="connectForm" class="connect-form">
+          <label>
+            Player
+            <input
+              id="playerName"
+              name="playerName"
+              maxlength="18"
+              autocomplete="nickname"
+              placeholder="Player"
+            />
+          </label>
+          <label>
+            Server
+            <input
+              id="serverUrl"
+              name="serverUrl"
+              placeholder="ws://host:7000/ws"
+            />
+          </label>
+          <div class="button-row">
+            <button id="connectButton" type="submit">Connect</button>
+            <button id="disconnectButton" type="button">Disconnect</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="hud hud-right" aria-label="scoreboard">
+        <h2>Score</h2>
+        <ol id="scoreboard"></ol>
+      </section>
+
+      <section class="hud hud-bottom" aria-label="controls">
+        <span>WASD / Arrow: Move</span>
+        <span>Mouse: Aim</span>
+        <span>Click / Space: Fire</span>
+      </section>
+
+      <section
+        class="hud net-info collapsed"
+        id="netInfoPanel"
+        aria-label="network connection info"
+      >
+        <button
+          id="netInfoToggle"
+          class="net-info-toggle"
+          type="button"
+          aria-label="Toggle network info"
+          aria-expanded="false"
+          title="Connection info"
+        >
+          i
+        </button>
+        <div class="net-info-body">
+          <h2>Connection</h2>
+          <dl>
+            <dt>Game</dt>
+            <dd id="netInfoGame">-</dd>
+            <dt>Page</dt>
+            <dd id="netInfoPage">-</dd>
+            <dt>Server</dt>
+            <dd id="netInfoServer">-</dd>
+            <dt>Share</dt>
+            <dd id="netInfoShare">-</dd>
+          </dl>
+          <p id="netInfoWarning"></p>
+          <button id="netInfoCopy" type="button">Copy share URL</button>
+        </div>
+      </section>
+
+      <div id="centerMessage" class="center-message">
+        Connect to start the LAN match.
+      </div>
+    </main>
+
+    <script>
+      (() => {
+        const params = new URLSearchParams(window.location.search);
+        const version = encodeURIComponent(params.get("v") || "20260529c");
+        const script = document.createElement("script");
+        script.src =
+          params.get("game") === "fortress"
+            ? `./fortress.js?v=${version}`
+            : `./game.js?v=${version}`;
+        document.body.appendChild(script);
+      })();
+    </script>
+  </body>
+</html>

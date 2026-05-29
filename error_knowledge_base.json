@@ -1,0 +1,966 @@
+[
+    {
+        "keyword":  "NullReferenceException",
+        "category":  "C#",
+        "cause":  "null 객체의 멤버에 접근했을 가능성이 큽니다.",
+        "checks":  [
+                       "예외 발생 라인의 객체가 null인지 확인",
+                       "생성자와 초기화 순서 확인",
+                       "DI/서비스 주입 누락 여부 확인",
+                       "WPF Binding 대상 객체 생성 여부 확인"
+                   ],
+        "fix":  "null 체크를 추가하기 전에 왜 null 상태가 되었는지 초기화 흐름을 먼저 확인하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "ArgumentNullException",
+        "category":  "C#",
+        "cause":  "메서드 인자로 null이 전달되었습니다.",
+        "checks":  [
+                       "스택트레이스의 ParamName 확인",
+                       "호출부에서 인자 생성 여부 확인",
+                       "옵션/설정값이 비어 있는지 확인"
+                   ],
+        "fix":  "호출 전에 필수 인자를 보장하거나, 메서드 초입에서 명확한 예외 메시지를 남기세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "ArgumentOutOfRangeException",
+        "category":  "C#",
+        "cause":  "인덱스, 길이, 범위 값이 허용 범위를 벗어났습니다.",
+        "checks":  [
+                       "배열/List Count 확인",
+                       "Substring 시작 위치와 길이 확인",
+                       "타이머/페이지 인덱스 음수 여부 확인"
+                   ],
+        "fix":  "경계값을 먼저 검증하고, Count 기반 조건을 다시 확인하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "IndexOutOfRangeException",
+        "category":  "C#",
+        "cause":  "배열 인덱스가 범위를 벗어났습니다.",
+        "checks":  [
+                       "for 루프 종료 조건 확인",
+                       "Split 결과 개수 확인",
+                       "프로토콜 필드 길이와 실제 바이트 수 비교"
+                   ],
+        "fix":  "인덱스 접근 전에 Length/Count를 검증하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "InvalidOperationException",
+        "category":  "C#",
+        "cause":  "현재 객체 상태에서 허용되지 않는 작업을 수행했습니다.",
+        "checks":  [
+                       "컬렉션 순회 중 수정 여부 확인",
+                       "UI 스레드가 아닌 곳에서 UI 접근 여부 확인",
+                       "연결/초기화 전 메서드 호출 여부 확인"
+                   ],
+        "fix":  "상태 전이를 명확히 하고, UI 작업은 Dispatcher를 통해 실행하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "ObjectDisposedException",
+        "category":  "C#",
+        "cause":  "이미 Dispose된 객체에 접근했습니다.",
+        "checks":  [
+                       "using 블록 밖에서 객체 재사용 여부 확인",
+                       "Form/Window 종료 후 이벤트 콜백 발생 여부 확인",
+                       "Timer/Task가 닫힌 리소스를 참조하는지 확인"
+                   ],
+        "fix":  "Dispose 시점에 이벤트/타이머/Task를 정리하고 재사용하지 않도록 하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "TaskCanceledException",
+        "category":  "C#",
+        "cause":  "비동기 작업이 취소되었거나 HTTP/소켓 타임아웃이 발생했을 수 있습니다.",
+        "checks":  [
+                       "CancellationToken 취소 지점 확인",
+                       "HttpClient Timeout 확인",
+                       "네트워크 지연/서버 응답 여부 확인"
+                   ],
+        "fix":  "의도된 취소와 장애성 타임아웃을 로그에서 구분해 기록하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "AggregateException",
+        "category":  "C#",
+        "cause":  "Task 내부 예외가 래핑되어 전달되었습니다.",
+        "checks":  [
+                       "InnerException 확인",
+                       "await 누락 여부 확인",
+                       "Task.Wait/Result 사용 여부 확인"
+                   ],
+        "fix":  "가능하면 await를 사용하고 InnerException의 실제 예외를 기준으로 처리하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "FormatException",
+        "category":  "C#",
+        "cause":  "문자열을 숫자/날짜/Guid 등으로 변환하지 못했습니다.",
+        "checks":  [
+                       "입력 문자열 공백/콤마/단위 포함 여부 확인",
+                       "문화권에 따른 소수점 구분자 확인",
+                       "DateTime 포맷 확인"
+                   ],
+        "fix":  "TryParse 계열과 명시적 CultureInfo를 사용하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "OverflowException",
+        "category":  "C#",
+        "cause":  "변환하려는 숫자가 대상 타입 범위를 넘었습니다.",
+        "checks":  [
+                       "int/short 변환 범위 확인",
+                       "HEX/바이트 값 변환 확인",
+                       "DB 숫자 컬럼 범위 확인"
+                   ],
+        "fix":  "더 큰 타입을 사용하거나 변환 전 범위를 검사하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "UnauthorizedAccessException",
+        "category":  "C#",
+        "cause":  "파일/폴더/레지스트리 접근 권한이 없습니다.",
+        "checks":  [
+                       "CloudDoc/보안 정책 제한 확인",
+                       "관리자 권한 필요 여부 확인",
+                       "파일이 읽기 전용인지 확인",
+                       "다른 프로세스가 점유 중인지 확인"
+                   ],
+        "fix":  "회사 보안 정책 환경에서는 파일 쓰기 대신 클립보드/localStorage/허용 경로 사용을 우선하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "DirectoryNotFoundException",
+        "category":  "C#",
+        "cause":  "지정한 폴더 경로가 존재하지 않습니다.",
+        "checks":  [
+                       "상대경로 기준 위치 확인",
+                       "WSL/Windows 경로 혼용 확인",
+                       "배포 PC의 폴더 구조 확인"
+                   ],
+        "fix":  "절대 경로와 실행 기준 경로를 로그에 남기고, 폴더 존재 여부를 먼저 확인하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "FileNotFoundException",
+        "category":  "C#",
+        "cause":  "파일 또는 어셈블리를 찾지 못했습니다.",
+        "checks":  [
+                       "파일 배포 여부 확인",
+                       "Copy to Output Directory 확인",
+                       "참조 DLL 버전/경로 확인",
+                       "실행 폴더 확인"
+                   ],
+        "fix":  "실행 위치 기준으로 파일이 있는지 확인하고 필요한 파일은 배포 항목에 포함하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "IOException",
+        "category":  "C#",
+        "cause":  "파일/스트림/포트 입출력 중 오류가 발생했습니다.",
+        "checks":  [
+                       "파일 잠금 여부 확인",
+                       "시리얼 포트 중복 오픈 여부 확인",
+                       "네트워크 드라이브/CloudDoc 제한 확인"
+                   ],
+        "fix":  "리소스 점유와 권한 문제를 먼저 확인하고 using/Dispose 처리를 점검하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "The process cannot access the file",
+        "category":  "C#",
+        "cause":  "다른 프로세스가 파일을 사용 중입니다.",
+        "checks":  [
+                       "로그 파일을 다른 프로그램이 열고 있는지 확인",
+                       "FileShare 옵션 확인",
+                       "이전 스트림 Dispose 누락 확인"
+                   ],
+        "fix":  "파일 접근 범위를 줄이고, 읽기 전용이면 FileShare.ReadWrite를 검토하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "Cross-thread operation not valid",
+        "category":  "WinForms",
+        "cause":  "UI 스레드가 아닌 스레드에서 컨트롤에 접근했습니다.",
+        "checks":  [
+                       "백그라운드 Task/Thread에서 Control 접근 여부 확인",
+                       "InvokeRequired 확인",
+                       "타이머 종류 확인"
+                   ],
+        "fix":  "Control.Invoke/BeginInvoke 또는 SynchronizationContext를 통해 UI 스레드에서 갱신하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "Collection was modified",
+        "category":  "C#",
+        "cause":  "컬렉션을 순회하는 중 수정했습니다.",
+        "checks":  [
+                       "foreach 내부 Add/Remove 여부 확인",
+                       "이벤트 콜백에서 같은 컬렉션 수정 여부 확인",
+                       "멀티스레드 접근 여부 확인"
+                   ],
+        "fix":  "ToList() 복사본 순회, lock, Concurrent 컬렉션 사용을 검토하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "Sequence contains no elements",
+        "category":  "LINQ",
+        "cause":  "First/Single/Max/Min 등이 빈 시퀀스에 호출되었습니다.",
+        "checks":  [
+                       "Where 조건 결과가 비었는지 확인",
+                       "FirstOrDefault 사용 가능 여부 확인",
+                       "데이터 로딩 순서 확인"
+                   ],
+        "fix":  "빈 결과가 가능한 흐름이면 Any 또는 기본값 처리를 추가하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "Sequence contains more than one element",
+        "category":  "LINQ",
+        "cause":  "Single 조건에 여러 항목이 매칭되었습니다.",
+        "checks":  [
+                       "키 중복 여부 확인",
+                       "Where 조건이 충분히 좁은지 확인",
+                       "DB/설정 데이터 중복 확인"
+                   ],
+        "fix":  "정말 단일이어야 한다면 데이터 중복을 제거하고, 아니면 FirstOrDefault로 의도를 바꾸세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "System.Windows.Data Error",
+        "category":  "WPF",
+        "cause":  "WPF Binding 실패입니다.",
+        "checks":  [
+                       "Output 창의 BindingExpression path error 확인",
+                       "DataContext 설정 여부 확인",
+                       "Binding Path 오타 확인",
+                       "public property 여부 확인"
+                   ],
+        "fix":  "Binding 에러의 property 이름과 실제 ViewModel 속성명을 먼저 대조하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "BindingExpression path error",
+        "category":  "WPF",
+        "cause":  "Binding Path에 해당하는 속성을 찾지 못했습니다.",
+        "checks":  [
+                       "속성명 오타 확인",
+                       "DataContext 타입 확인",
+                       "속성이 public인지 확인",
+                       "필드가 아니라 property인지 확인"
+                   ],
+        "fix":  "Output 창에 표시된 대상 타입과 실제 ViewModel 타입이 맞는지 확인하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "Cannot find source",
+        "category":  "WPF",
+        "cause":  "RelativeSource/ElementName/Ancestor 바인딩 대상을 찾지 못했습니다.",
+        "checks":  [
+                       "ElementName 오타 확인",
+                       "VisualTree/LogicalTree 위치 확인",
+                       "AncestorType이 실제 부모에 있는지 확인"
+                   ],
+        "fix":  "복잡한 템플릿 안에서는 바인딩 기준이 달라질 수 있으니 실제 트리를 확인하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "DataContext",
+        "category":  "WPF",
+        "cause":  "DataContext가 null이거나 예상 타입이 아닐 수 있습니다.",
+        "checks":  [
+                       "Window/UserControl DataContext 설정 위치 확인",
+                       "InitializeComponent 전후 순서 확인",
+                       "탭/동적 컨트롤 생성 시점 확인"
+                   ],
+        "fix":  "DataContext 타입을 로그/디버거로 확인하고, View 생성 흐름을 정리하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "XamlParseException",
+        "category":  "WPF",
+        "cause":  "XAML 로딩/파싱 중 예외가 발생했습니다.",
+        "checks":  [
+                       "InnerException 확인",
+                       "StaticResource 키 존재 여부 확인",
+                       "컨버터/리소스 생성자 예외 확인",
+                       "잘못된 enum/속성 값 확인"
+                   ],
+        "fix":  "XamlParseException 자체보다 InnerException의 메시지를 기준으로 원인을 추적하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "InitializeComponent",
+        "category":  "WPF",
+        "cause":  "XAML 초기화 중 리소스, 이벤트, 생성자 문제가 발생했을 수 있습니다.",
+        "checks":  [
+                       "XAML 리소스 키 확인",
+                       "이벤트 핸들러 이름 확인",
+                       "코드비하인드 partial/class 이름 확인"
+                   ],
+        "fix":  "최근 수정한 XAML과 코드비하인드의 x:Class, 이벤트명을 먼저 확인하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "StaticResource",
+        "category":  "WPF",
+        "cause":  "정적 리소스 키를 찾지 못했거나 선언 순서 문제가 있습니다.",
+        "checks":  [
+                       "ResourceDictionary 병합 여부 확인",
+                       "키 이름 오타 확인",
+                       "사용 위치보다 먼저 선언됐는지 확인"
+                   ],
+        "fix":  "동적 로딩/순환 참조가 있으면 DynamicResource 또는 리소스 위치 조정을 검토하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "ICommand",
+        "category":  "WPF",
+        "cause":  "Command 바인딩 대상이 null이거나 CanExecute가 false일 수 있습니다.",
+        "checks":  [
+                       "Command 속성이 public인지 확인",
+                       "DataContext 확인",
+                       "CanExecute 조건 확인",
+                       "RaiseCanExecuteChanged 호출 여부 확인"
+                   ],
+        "fix":  "버튼이 비활성화되면 CanExecute와 바인딩 경로를 먼저 확인하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "INotifyPropertyChanged",
+        "category":  "WPF",
+        "cause":  "속성 변경 알림이 없어 UI가 갱신되지 않을 수 있습니다.",
+        "checks":  [
+                       "PropertyChanged 이벤트 발생 여부 확인",
+                       "속성명 문자열 오타 확인",
+                       "컬렉션이면 ObservableCollection 사용 여부 확인"
+                   ],
+        "fix":  "setter에서 값 변경 시 OnPropertyChanged를 호출하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "ObservableCollection",
+        "category":  "WPF",
+        "cause":  "컬렉션 변경 알림 또는 스레드 문제가 있을 수 있습니다.",
+        "checks":  [
+                       "List 대신 ObservableCollection 사용 여부 확인",
+                       "UI 스레드에서 컬렉션 수정 여부 확인",
+                       "Reset/대량 변경 처리 확인"
+                   ],
+        "fix":  "백그라운드 수신 데이터는 Dispatcher를 통해 컬렉션에 반영하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "Dispatcher",
+        "category":  "WPF",
+        "cause":  "UI 스레드 전환이 필요한 작업일 수 있습니다.",
+        "checks":  [
+                       "수신 스레드에서 UI 속성/컬렉션 변경 여부 확인",
+                       "Dispatcher.Invoke로 데드락 가능성 확인",
+                       "BeginInvoke 필요 여부 확인"
+                   ],
+        "fix":  "UI 갱신은 Dispatcher.InvokeAsync/BeginInvoke로 넘기고 긴 작업은 UI 스레드에서 하지 마세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "SocketException",
+        "category":  "Network",
+        "cause":  "소켓 연결/송수신 중 네트워크 오류가 발생했습니다.",
+        "checks":  [
+                       "IP/Port 확인",
+                       "방화벽 확인",
+                       "대상 프로세스 실행 여부 확인",
+                       "동일 포트 중복 사용 확인"
+                   ],
+        "fix":  "에러 코드와 메시지를 같이 보고 연결 거부/타임아웃/리셋을 구분하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "Connection refused",
+        "category":  "Network",
+        "cause":  "대상 IP/Port에 서비스가 열려 있지 않습니다.",
+        "checks":  [
+                       "서버/장비 프로세스 실행 여부 확인",
+                       "포트 번호 확인",
+                       "방화벽/보안 정책 확인",
+                       "Docker 포트 매핑 확인"
+                   ],
+        "fix":  "대상에서 listen 상태인지 먼저 확인하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "Connection reset",
+        "category":  "Network",
+        "cause":  "상대가 연결을 강제로 종료했습니다.",
+        "checks":  [
+                       "프로토콜 순서 위반 여부 확인",
+                       "상대 장비 로그 확인",
+                       "패킷 길이/CRC 오류 확인",
+                       "Idle timeout 확인"
+                   ],
+        "fix":  "연결 직전/직후 송신 프레임과 장비 로그를 같이 확인하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "No route to host",
+        "category":  "Network",
+        "cause":  "네트워크 경로가 없거나 라우팅/방화벽 문제가 있습니다.",
+        "checks":  [
+                       "IP 대역 확인",
+                       "VPN/사내망 연결 확인",
+                       "게이트웨이/라우팅 확인",
+                       "ping 가능 여부 확인"
+                   ],
+        "fix":  "애플리케이션보다 네트워크 경로와 보안 정책을 먼저 확인하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "A connection attempt failed",
+        "category":  "Network",
+        "cause":  "연결 시도가 시간 내 성공하지 못했습니다.",
+        "checks":  [
+                       "IP/Port 오타 확인",
+                       "대상 장비 전원/네트워크 확인",
+                       "방화벽 확인",
+                       "타임아웃 값 확인"
+                   ],
+        "fix":  "같은 PC에서 telnet/Test-NetConnection 등으로 포트 연결성을 먼저 확인하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "TimeoutException",
+        "category":  "Communication",
+        "cause":  "응답 대기 시간이 초과되었습니다.",
+        "checks":  [
+                       "장비 응답 여부 확인",
+                       "요청 프레임 정상 여부 확인",
+                       "타임아웃 설정이 너무 짧은지 확인",
+                       "이전 요청과 응답이 꼬였는지 확인"
+                   ],
+        "fix":  "송신 시간, 수신 시간, 요청 ID를 함께 로그에 남겨 흐름을 확인하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "CRC",
+        "category":  "Communication",
+        "cause":  "프레임 무결성 검증에 실패했을 수 있습니다.",
+        "checks":  [
+                       "CRC 알고리즘/초기값/Endian 확인",
+                       "CRC 계산 범위 확인",
+                       "STX/ETX 포함 여부 확인",
+                       "HEX 문자열 파싱 오류 확인"
+                   ],
+        "fix":  "샘플 프레임으로 계산 결과를 수동 검증하고 범위/Endian을 먼저 맞추세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "Checksum",
+        "category":  "Communication",
+        "cause":  "체크섬 계산 또는 수신 데이터 손상이 의심됩니다.",
+        "checks":  [
+                       "합산 범위 확인",
+                       "1바이트/2바이트 모듈러 기준 확인",
+                       "ASCII HEX와 raw byte 혼동 확인"
+                   ],
+        "fix":  "프로토콜 문서의 계산 범위를 기준으로 테스트 벡터를 만드세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "STX",
+        "category":  "Communication",
+        "cause":  "프레임 시작 문자가 누락되었거나 위치가 맞지 않을 수 있습니다.",
+        "checks":  [
+                       "수신 버퍼 앞부분 쓰레기 데이터 확인",
+                       "프레임 동기화 로직 확인",
+                       "HEX 0x02 여부 확인"
+                   ],
+        "fix":  "STX 탐색 후 그 이전 바이트를 버리는 동기화 처리를 검토하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "ETX",
+        "category":  "Communication",
+        "cause":  "프레임 종료 문자가 누락되었거나 Payload 안 값과 혼동될 수 있습니다.",
+        "checks":  [
+                       "ETX 0x03 위치 확인",
+                       "Length 기반 파싱인지 종료문자 기반 파싱인지 확인",
+                       "분할 수신 처리 확인"
+                   ],
+        "fix":  "TCP는 패킷 경계가 없으므로 누적 버퍼 기반으로 프레임을 조립하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "SerialPort",
+        "category":  "Communication",
+        "cause":  "시리얼 포트 설정 또는 점유 문제가 있을 수 있습니다.",
+        "checks":  [
+                       "COM 포트 번호 확인",
+                       "BaudRate/DataBits/Parity/StopBits 확인",
+                       "다른 프로그램 점유 여부 확인",
+                       "DTR/RTS 필요 여부 확인"
+                   ],
+        "fix":  "포트 설정을 장비 문서와 맞추고, Open/Close 시점과 Dispose를 확인하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "Access to the port",
+        "category":  "Communication",
+        "cause":  "COM 포트가 없거나 다른 프로세스가 사용 중입니다.",
+        "checks":  [
+                       "장치관리자 COM 번호 확인",
+                       "터미널 프로그램 종료 여부 확인",
+                       "권한/보안 프로그램 확인"
+                   ],
+        "fix":  "포트를 사용하는 모든 프로그램을 종료하고 다시 연결하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "ORA-01017",
+        "category":  "Oracle",
+        "cause":  "Oracle 사용자명 또는 비밀번호가 올바르지 않습니다.",
+        "checks":  [
+                       "계정/비밀번호 확인",
+                       "대소문자 확인",
+                       "접속 DB/PDB 확인",
+                       "계정 잠금 여부 확인"
+                   ],
+        "fix":  "접속 문자열이 원하는 DB/PDB를 가리키는지 확인한 뒤 계정 상태를 점검하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "ORA-12154",
+        "category":  "Oracle",
+        "cause":  "TNS 별칭을 해석하지 못했습니다.",
+        "checks":  [
+                       "tnsnames.ora 별칭 확인",
+                       "TNS_ADMIN 환경변수 확인",
+                       "접속 문자열 오타 확인",
+                       "EZCONNECT 형식 사용 가능 여부 확인"
+                   ],
+        "fix":  "가능하면 host:port/service_name 형식으로 먼저 연결을 검증하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "ORA-12514",
+        "category":  "Oracle",
+        "cause":  "Listener가 요청한 서비스명을 알지 못합니다.",
+        "checks":  [
+                       "service_name 확인",
+                       "PDB 서비스명 확인",
+                       "listener 상태 확인",
+                       "컨테이너 DB 기동 여부 확인"
+                   ],
+        "fix":  "SERVICE_NAME과 SID를 혼동하지 않았는지 확인하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "ORA-12541",
+        "category":  "Oracle",
+        "cause":  "Listener가 실행 중이지 않거나 포트가 닫혀 있습니다.",
+        "checks":  [
+                       "Listener 실행 여부 확인",
+                       "포트 번호 확인",
+                       "Docker 포트 매핑 확인",
+                       "방화벽 확인"
+                   ],
+        "fix":  "컨테이너/서버에서 리스너가 실제 listen 중인지 먼저 확인하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "ORA-00942",
+        "category":  "Oracle",
+        "cause":  "테이블 또는 뷰가 없거나 권한이 없습니다.",
+        "checks":  [
+                       "스키마명 확인",
+                       "권한 확인",
+                       "동의어 존재 여부 확인",
+                       "대소문자 따옴표 객체명 확인"
+                   ],
+        "fix":  "OWNER.TABLE_NAME으로 직접 조회해 객체 존재와 권한을 확인하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "ORA-00001",
+        "category":  "Oracle",
+        "cause":  "Unique 제약 조건 위반입니다.",
+        "checks":  [
+                       "중복 키 값 확인",
+                       "시퀀스 값 꼬임 확인",
+                       "업서트 로직 확인",
+                       "제약 조건명으로 컬럼 확인"
+                   ],
+        "fix":  "제약 조건명으로 대상 컬럼을 찾고 중복 데이터 발생 경로를 확인하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "ORA-01400",
+        "category":  "Oracle",
+        "cause":  "NOT NULL 컬럼에 null을 넣으려 했습니다.",
+        "checks":  [
+                       "INSERT 컬럼 목록 확인",
+                       "DTO/파라미터 매핑 확인",
+                       "기본값/트리거 여부 확인"
+                   ],
+        "fix":  "필수 컬럼 매핑과 DB 기본값 기대 여부를 확인하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "ORA-01722",
+        "category":  "Oracle",
+        "cause":  "숫자 변환이 불가능한 문자열이 숫자 컬럼/연산에 사용되었습니다.",
+        "checks":  [
+                       "문자열 숫자 여부 확인",
+                       "암묵적 형변환 발생 여부 확인",
+                       "콤마/공백 포함 여부 확인"
+                   ],
+        "fix":  "명시적 변환과 입력 검증을 사용하고, 숫자 컬럼 비교에 문자열을 섞지 마세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "ORA-28000",
+        "category":  "Oracle",
+        "cause":  "계정이 잠겼습니다.",
+        "checks":  [
+                       "계정 상태 확인",
+                       "로그인 실패 횟수 확인",
+                       "DBA 권한 필요 여부 확인"
+                   ],
+        "fix":  "관리자 계정으로 unlock하거나 비밀번호 정책을 확인하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "ORA-03113",
+        "category":  "Oracle",
+        "cause":  "DB 연결이 예기치 않게 종료되었습니다.",
+        "checks":  [
+                       "DB 서버 로그 확인",
+                       "네트워크 끊김 확인",
+                       "쿼리 실행 중 DB 프로세스 종료 여부 확인"
+                   ],
+        "fix":  "클라이언트 로그만 보지 말고 DB alert/log도 같이 확인하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "ORA-01008",
+        "category":  "Oracle",
+        "cause":  "SQL 바인드 변수가 모두 바인딩되지 않았습니다.",
+        "checks":  [
+                       "SQL의 :파라미터 목록 확인",
+                       "코드에서 모든 파라미터 추가 여부 확인",
+                       "파라미터 이름 오타 확인"
+                   ],
+        "fix":  "SQL 파라미터명과 코드 바인딩명을 1:1로 대조하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "ORA-06502",
+        "category":  "Oracle",
+        "cause":  "PL/SQL 숫자 또는 문자열 값 오류입니다.",
+        "checks":  [
+                       "변수 길이 부족 확인",
+                       "숫자 변환 확인",
+                       "OUT 파라미터 크기 확인"
+                   ],
+        "fix":  "PL/SQL 변수 타입/길이와 전달 값 크기를 확인하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "port is already allocated",
+        "category":  "Docker",
+        "cause":  "Docker가 매핑하려는 호스트 포트가 이미 사용 중입니다.",
+        "checks":  [
+                       "동일 포트 사용 컨테이너 확인",
+                       "로컬 프로세스 포트 점유 확인",
+                       "docker ps 확인"
+                   ],
+        "fix":  "기존 컨테이너를 중지하거나 compose 포트 매핑을 변경하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "bind: address already in use",
+        "category":  "Docker",
+        "cause":  "포트가 이미 사용 중입니다.",
+        "checks":  [
+                       "netstat/Get-NetTCPConnection으로 점유 프로세스 확인",
+                       "기존 서비스 종료 여부 확인",
+                       "중복 compose 실행 여부 확인"
+                   ],
+        "fix":  "점유 프로세스를 종료하거나 외부 포트를 변경하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "permission denied",
+        "category":  "Docker/Linux",
+        "cause":  "권한 부족 또는 볼륨/파일 접근 제한입니다.",
+        "checks":  [
+                       "볼륨 경로 권한 확인",
+                       "회사 보안 정책/CloudDoc 제한 확인",
+                       "컨테이너 사용자 권한 확인"
+                   ],
+        "fix":  "허용된 경로로 볼륨을 옮기거나 권한/사용자를 조정하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "no such file or directory",
+        "category":  "Docker/Linux",
+        "cause":  "지정한 파일/경로가 컨테이너 또는 호스트에 없습니다.",
+        "checks":  [
+                       "볼륨 마운트 경로 확인",
+                       "working_dir 확인",
+                       "대소문자 확인",
+                       "Windows/WSL 경로 차이 확인"
+                   ],
+        "fix":  "컨테이너 내부 경로 기준으로 파일이 보이는지 확인하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "network not found",
+        "category":  "Docker",
+        "cause":  "Docker 네트워크가 존재하지 않습니다.",
+        "checks":  [
+                       "compose project 이름 변경 여부 확인",
+                       "외부 네트워크 생성 여부 확인",
+                       "docker network ls 확인"
+                   ],
+        "fix":  "네트워크를 생성하거나 compose 네트워크 설정을 제거/수정하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "container name is already in use",
+        "category":  "Docker",
+        "cause":  "같은 이름의 컨테이너가 이미 존재합니다.",
+        "checks":  [
+                       "docker ps -a 확인",
+                       "이전 컨테이너 삭제 필요 여부 확인",
+                       "container_name 중복 확인"
+                   ],
+        "fix":  "기존 컨테이너를 제거하거나 container_name을 바꾸세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "CORS",
+        "category":  "Web",
+        "cause":  "브라우저 보안 정책으로 다른 출처 응답 접근이 차단되었습니다.",
+        "checks":  [
+                       "요청 URL 출처 확인",
+                       "Access-Control-Allow-Origin 헤더 확인",
+                       "프론트에서 직접 호출 가능한 API인지 확인"
+                   ],
+        "fix":  "서버에서 CORS를 허용하거나 백엔드 프록시를 사용하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "404",
+        "category":  "Web",
+        "cause":  "요청한 리소스 경로가 없습니다.",
+        "checks":  [
+                       "URL 경로 확인",
+                       "nginx root/alias 확인",
+                       "파일명 대소문자 확인",
+                       "라우팅 설정 확인"
+                   ],
+        "fix":  "브라우저 주소와 서버 실제 파일 경로를 대조하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "500 Internal Server Error",
+        "category":  "Web",
+        "cause":  "서버 내부 예외가 발생했습니다.",
+        "checks":  [
+                       "서버 로그 확인",
+                       "요청 파라미터 확인",
+                       "DB 연결/권한 확인",
+                       "최근 배포 변경 확인"
+                   ],
+        "fix":  "클라이언트 메시지보다 서버 로그의 첫 예외를 기준으로 추적하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "ERR_CONNECTION_REFUSED",
+        "category":  "Web/Network",
+        "cause":  "대상 포트에 연결할 서비스가 없습니다.",
+        "checks":  [
+                       "서버 실행 여부 확인",
+                       "포트 매핑 확인",
+                       "방화벽 확인",
+                       "localhost와 컨테이너 내부 주소 혼동 확인"
+                   ],
+        "fix":  "서비스가 실제 listen 중인지 먼저 확인하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "ERR_NAME_NOT_RESOLVED",
+        "category":  "Web/Network",
+        "cause":  "DNS 이름을 해석하지 못했습니다.",
+        "checks":  [
+                       "도메인 오타 확인",
+                       "VPN/사내 DNS 연결 확인",
+                       "hosts 설정 확인"
+                   ],
+        "fix":  "IP로 직접 접속 가능 여부와 DNS 환경을 확인하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "ERR_CERT_AUTHORITY_INVALID",
+        "category":  "Web",
+        "cause":  "인증서를 신뢰할 수 없습니다.",
+        "checks":  [
+                       "사내 인증서 설치 여부 확인",
+                       "인증서 만료 여부 확인",
+                       "프록시/보안 장비 인증서 확인"
+                   ],
+        "fix":  "회사 보안 프록시 환경이면 루트 인증서 정책을 확인하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "JSON.parse",
+        "category":  "JavaScript",
+        "cause":  "JSON 문자열 형식이 올바르지 않습니다.",
+        "checks":  [
+                       "따옴표가 double quote인지 확인",
+                       "마지막 콤마 제거",
+                       "제어문자/개행 이스케이프 확인"
+                   ],
+        "fix":  "JSON 포맷터로 먼저 검증하고, 객체 리터럴과 JSON을 혼동하지 마세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "Unexpected token",
+        "category":  "JavaScript",
+        "cause":  "문법 오류 또는 JSON 파싱 오류일 수 있습니다.",
+        "checks":  [
+                       "오류 위치 주변 따옴표/괄호 확인",
+                       "HTML 안 script 문자열 이스케이프 확인",
+                       "JSON trailing comma 확인"
+                   ],
+        "fix":  "오류 라인 바로 앞의 문자열/괄호 닫힘을 먼저 확인하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "Cannot read properties of undefined",
+        "category":  "JavaScript",
+        "cause":  "undefined 값의 속성에 접근했습니다.",
+        "checks":  [
+                       "DOM id 존재 여부 확인",
+                       "querySelector 결과 null 여부 확인",
+                       "비동기 데이터 로딩 전 접근 여부 확인"
+                   ],
+        "fix":  "값 존재 여부와 초기화 순서를 확인하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "is not a function",
+        "category":  "JavaScript",
+        "cause":  "함수로 호출한 값이 실제 함수가 아닙니다.",
+        "checks":  [
+                       "함수명 오타 확인",
+                       "동일 이름 변수로 덮어쓰기 확인",
+                       "스크립트 로딩 순서 확인"
+                   ],
+        "fix":  "콘솔에서 typeof 대상값을 확인하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "git conflict",
+        "category":  "Git",
+        "cause":  "병합 충돌이 발생했습니다.",
+        "checks":  [
+                       "충돌 파일 확인",
+                       "\u003c\u003c\u003c\u003c\u003c\u003c\u003c 표시 제거",
+                       "양쪽 변경 의도 확인"
+                   ],
+        "fix":  "충돌 마커를 제거하고 빌드/테스트로 의미를 확인하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "non-fast-forward",
+        "category":  "Git",
+        "cause":  "원격 브랜치가 로컬보다 앞서 있습니다.",
+        "checks":  [
+                       "git fetch 후 로그 확인",
+                       "pull/rebase 필요 여부 확인",
+                       "다른 사람 커밋 확인"
+                   ],
+        "fix":  "원격 변경을 먼저 통합한 뒤 push 하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "Authentication failed",
+        "category":  "Git/Auth",
+        "cause":  "인증 정보가 틀렸거나 토큰이 만료되었습니다.",
+        "checks":  [
+                       "PAT 만료 여부 확인",
+                       "권한 scope 확인",
+                       "Credential Manager 캐시 확인"
+                   ],
+        "fix":  "저장된 인증 정보를 갱신하고 토큰 권한을 확인하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "MinIO",
+        "category":  "Storage",
+        "cause":  "MinIO 연결 또는 인증 문제가 있을 수 있습니다.",
+        "checks":  [
+                       "9000 API/9001 Console 포트 확인",
+                       "Access Key/Secret 확인",
+                       "버킷 존재 여부 확인",
+                       "Docker 볼륨 권한 확인"
+                   ],
+        "fix":  "콘솔 접속과 API 접속을 분리해서 확인하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "AccessDenied",
+        "category":  "Storage/Auth",
+        "cause":  "스토리지 또는 API 권한이 부족합니다.",
+        "checks":  [
+                       "계정 권한 확인",
+                       "버킷 정책 확인",
+                       "토큰 만료 확인",
+                       "경로 prefix 권한 확인"
+                   ],
+        "fix":  "인증 성공과 리소스 권한을 분리해서 확인하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "ollama",
+        "category":  "LLM/Local",
+        "cause":  "Ollama 서버 또는 모델 호출 문제가 있을 수 있습니다.",
+        "checks":  [
+                       "ollama serve 실행 여부 확인",
+                       "11434 포트 확인",
+                       "모델 이름 확인",
+                       "브라우저 CORS 허용 여부 확인"
+                   ],
+        "fix":  "curl 또는 PowerShell로 /api/tags 호출부터 확인하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "model not found",
+        "category":  "LLM/Local",
+        "cause":  "요청한 Ollama 모델이 로컬에 없습니다.",
+        "checks":  [
+                       "ollama list 확인",
+                       "모델명 태그 오타 확인",
+                       "pull 완료 여부 확인"
+                   ],
+        "fix":  "정확한 모델명을 확인하고 필요한 경우 ollama pull을 실행하세요.",
+        "note":  ""
+    },
+    {
+        "keyword":  "CloudDoc",
+        "category":  "Security/Environment",
+        "cause":  "회사 보안 정책으로 파일 접근이 제한될 수 있습니다.",
+        "checks":  [
+                       "허용된 저장 위치 확인",
+                       "탐색기/브라우저 파일 선택 제한 확인",
+                       "다운로드 차단 여부 확인"
+                   ],
+        "fix":  "파일 기반 흐름 대신 클립보드, localStorage, 허용된 컨테이너 볼륨을 우선 사용하세요.",
+        "note":  ""
+    }
+]

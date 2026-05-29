@@ -1,0 +1,53 @@
+services:
+  game-server:
+    image: python:3.12-slim
+    container_name: lan_arena_game
+    working_dir: /app
+    command: python game/server.py --host 0.0.0.0 --port 7000
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+    ports:
+      - "7000:7000"
+    volumes:
+      - .:/app:ro
+    restart: always
+
+  web-server:
+    image: nginx:latest
+    container_name: nginx_js
+    depends_on:
+      - game-server
+    ports:
+      - "8080:80"
+    volumes:
+      - .:/usr/share/nginx/html
+    restart: always
+
+
+
+  # minio:
+  #   image: minio/minio
+  #   container_name: minio
+  #   ports:
+  #     - "9000:9000"    # API 접속 포트
+  #     - "9001:9001"    # 콘솔(웹 UI) 접속 포트
+  #   environment:
+  #     MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+  #     MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+  #   volumes:
+  #     - ~/minio/data:/data
+  #   command: server /data --console-address ":9001"
+  #   restart: always
+
+  # oracle: #컨테이너 내부 주소 jdbc:oracle:thin:@//oracle:1521/XEPDB1
+  #   image: gvenzl/oracle-xe:21-slim
+  #   container_name: oracle
+  #   restart: unless-stopped
+  #   environment:
+  #     ORACLE_PASSWORD: ${ORACLE_PASSWORD}
+  #     APP_USER: ${APP_USER}
+  #     APP_USER_PASSWORD: ${APP_USER_PASSWORD}
+  #   ports:
+  #     - "1522:1521"  #외부 1522 : 내부 1521
+  #   volumes:
+  #     - ./oracle-data:/opt/oracle/oradata
