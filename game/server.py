@@ -32,6 +32,7 @@ FIRE_COOLDOWN = 0.22
 RESPAWN_DELAY = 1.8
 TICK_RATE = 30
 ARENA_PICKUP_TARGET = 28
+RPG_SAVE_LIMIT = 2_000_000
 ARENA_WEAPONS: dict[str, dict[str, Any]] = {
     "blaster": {
         "damage": 25,
@@ -3468,8 +3469,15 @@ class ArenaServer:
         self.party_rooms: dict[str, PartyRoom] = {}
         self.hub_clients: dict[str, HubClient] = {}
         self.hub_rooms: dict[str, HubRoom] = {}
+        self.rpg_save_path = self.default_user_data_dir() / "saves" / "rpg_save.json"
         self.next_hub_client_id = 1
         self.running = True
+
+    def default_user_data_dir(self) -> Path:
+        if os.name == "nt":
+            base = os.environ.get("APPDATA") or str(Path.home() / "AppData" / "Roaming")
+            return Path(base) / "Good_ETC"
+        return Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")) / "good_etc"
 
     def clean_room_id(self, value: Any, fallback: str = "MAIN") -> str:
         raw = str(value or "").strip().upper()
@@ -3555,6 +3563,26 @@ class ArenaServer:
                 await self.handle_websocket(reader, writer, headers, parsed.query)
             return
 
+        parsed = urlparse(path)
+        if parsed.path == "/api/rpg/save":
+            body = b""
+            if method.upper() in {"POST", "PUT"}:
+                try:
+                    length = int(headers.get("content-length", "0") or "0")
+                except ValueError:
+                    length = 0
+                if length > RPG_SAVE_LIMIT:
+                    await self.write_json_response(
+                        writer,
+                        413,
+                        {"ok": False, "message": "저장 데이터가 너무 큽니다."},
+                    )
+                    return
+                if length:
+                    body = await reader.readexactly(length)
+            await self.handle_rpg_save_api(writer, method, body)
+            return
+
         await self.serve_static(writer, method, path)
 
     def parse_headers(self, request: bytes) -> tuple[tuple[str, str, str] | None, dict[str, str]]:
@@ -3586,6 +3614,77 @@ class ArenaServer:
         body = b"" if method.upper() == "HEAD" else file_path.read_bytes()
         content_type = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
         await self.write_response(writer, 200, body, content_type)
+
+    async def handle_rpg_save_api(
+        self, writer: asyncio.StreamWriter, method: str, body: bytes
+    ) -> None:
+        verb = method.upper()
+        if verb in {"GET", "HEAD"}:
+            if self.rpg_save_path.is_file():
+                try:
+                    payload = json.loads(self.rpg_save_path.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    payload = None
+                await self.write_json_response(
+                    writer,
+                    200,
+                    {"ok": True, "save": payload, "path": str(self.rpg_save_path)},
+                )
+            else:
+                await self.write_json_response(
+                    writer,
+                    200,
+                    {"ok": True, "save": None, "path": str(self.rpg_save_path)},
+                )
+            return
+        if verb == "DELETE":
+            try:
+                if self.rpg_save_path.exists():
+                    self.rpg_save_path.unlink()
+            except OSError as exc:
+                await self.write_json_response(writer, 500, {"ok": False, "message": str(exc)})
+                return
+            await self.write_json_response(writer, 200, {"ok": True, "deleted": True})
+            return
+        if verb not in {"POST", "PUT"}:
+            await self.write_json_response(
+                writer,
+                405,
+                {"ok": False, "message": "지원하지 않는 저장 요청입니다."},
+            )
+            return
+        try:
+            payload = json.loads(body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            await self.write_json_response(
+                writer,
+                400,
+                {"ok": False, "message": "저장 데이터 형식이 올바르지 않습니다."},
+            )
+            return
+        if not isinstance(payload, dict):
+            await self.write_json_response(
+                writer,
+                400,
+                {"ok": False, "message": "저장 데이터는 객체여야 합니다."},
+            )
+            return
+        try:
+            self.rpg_save_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp_path = self.rpg_save_path.with_suffix(".tmp")
+            tmp_path.write_text(
+                json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+                encoding="utf-8",
+            )
+            tmp_path.replace(self.rpg_save_path)
+        except OSError as exc:
+            await self.write_json_response(writer, 500, {"ok": False, "message": str(exc)})
+            return
+        await self.write_json_response(
+            writer,
+            200,
+            {"ok": True, "path": str(self.rpg_save_path)},
+        )
 
     def resolve_static_path(self, path: str) -> Path | None:
         if path == "/home.html":
@@ -3620,7 +3719,15 @@ class ArenaServer:
         body: bytes,
         content_type: str,
     ) -> None:
-        reason = {200: "OK", 403: "Forbidden", 404: "Not Found"}.get(status, "OK")
+        reason = {
+            200: "OK",
+            400: "Bad Request",
+            403: "Forbidden",
+            404: "Not Found",
+            405: "Method Not Allowed",
+            413: "Payload Too Large",
+            500: "Internal Server Error",
+        }.get(status, "OK")
         headers = [
             f"HTTP/1.1 {status} {reason}",
             f"Content-Type: {content_type}; charset=utf-8",
@@ -3634,6 +3741,16 @@ class ArenaServer:
         await writer.drain()
         writer.close()
         await writer.wait_closed()
+
+    async def write_json_response(
+        self, writer: asyncio.StreamWriter, status: int, payload: dict[str, Any]
+    ) -> None:
+        await self.write_response(
+            writer,
+            status,
+            json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            "application/json",
+        )
 
     async def handle_websocket(
         self,

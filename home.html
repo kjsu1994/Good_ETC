@@ -2392,6 +2392,9 @@
         <button type="button" class="ck" id="gameTabCoin" data-game-tab="coin">
           코인 러시
         </button>
+        <button type="button" class="ck" id="gameTabRpg" data-game-tab="rpg">
+          서약의 연대기
+        </button>
       </div>
       <div class="game-pane active" id="gameArenaPane" data-game-pane="arena">
         <div class="c1e feature-help" id="gameHelp">
@@ -2558,7 +2561,34 @@
           </div>
         </div>
       </div>
-      <div class="c2c">
+      <div class="game-pane" id="gameRpgPane" data-game-pane="rpg">
+        <div class="c1e feature-help" id="rpgHelp">
+          <div>
+            <strong>서약의 연대기</strong>는 소켓을 사용하지 않는 혼자하기
+            RPG입니다. 대화, 장기 메인 퀘스트, 필드 전투, 보스, 상점, 장비,
+            물약, 저장을 지원합니다.
+          </div>
+          <div>
+            <code>RPG 시작</code>을 누르면 현재 브라우저 또는 EXE 안에서 바로
+            실행됩니다. WASD/방향키로 이동하고,
+            <code>J</code>/<code>Space</code>는 기본 공격, <code>K</code>는
+            서약기, <code>E</code>는 대화/상점/포털, <code>1</code>은
+            회복약입니다.
+          </div>
+          <div>
+            EXE 또는 로컬 서버로 실행하면 저장 파일은 사용자 데이터 폴더의
+            <code>Good_ETC/saves/rpg_save.json</code>에 저장됩니다. HTML 파일을
+            직접 연 경우에는 브라우저 <code>localStorage</code>에 저장됩니다.
+          </div>
+          <div>
+            최종 장은 5시간 이상의 플레이 기록이 있어야 열리도록 설계되어 긴
+            스토리 플레이를 전제로 합니다. 퀘스트 기록과 저장 상태는 게임 화면의
+            <code>?</code>, <code>퀘스트</code>, <code>저장</code> 버튼에서
+            확인할 수 있습니다.
+          </div>
+        </div>
+      </div>
+      <div class="c2c" id="gameNetworkFields">
         <div>
           <span class="c1g">호스트 IP</span>
           <input
@@ -2582,7 +2612,7 @@
           <i class="fas fa-user"></i> 포트리스 혼자하기
         </button>
       </div>
-      <div class="c2c">
+      <div class="c2c" id="gameFirewallFields">
         <div>
           <span class="c1g">허용할 원격 IP</span>
           <input
@@ -2602,7 +2632,7 @@
         readonly
         spellcheck="false"
       ></textarea>
-      <div class="c1j">
+      <div class="c1j" id="gameFirewallActions">
         <button class="ck" type="button" id="gameCopyFirewall">
           <i class="fas fa-copy"></i> bat 내용 복사</button
         ><button class="ck" type="button" id="gameDownloadFirewall">
@@ -4353,14 +4383,16 @@
     function gameSyncFirewallCommand() {
       try {
         const e =
-          "fortress" === gameActiveTab
-            ? "포트리스 호스트/입장하기는 WebSocket 멀티 모드, 포트리스 혼자하기는 로컬 모드입니다."
-            : "defense" === gameActiveTab
-              ? "웨이브 디펜스 호스트/입장하기는 WebSocket 멀티 모드, 디펜스 혼자하기는 서버 없는 로컬 모드입니다."
-              : PARTY_GAME_TYPES.includes(gameActiveTab)
-                ? PARTY_GAME_LABELS[gameActiveTab] +
-                  " 호스트/입장하기는 WebSocket 멀티 모드, 혼자하기는 서버 없는 로컬 모드입니다."
-                : "bat 내용을 관리자 권한으로 실행하면 지정 IP/포트의 인바운드가 허용됩니다.";
+          "rpg" === gameActiveTab
+            ? "서약의 연대기는 소켓 없이 혼자 플레이하는 RPG입니다. 저장은 EXE/로컬 서버에서는 사용자 데이터 폴더, 직접 HTML 실행에서는 브라우저 저장소를 사용합니다."
+            : "fortress" === gameActiveTab
+              ? "포트리스 호스트/입장하기는 WebSocket 멀티 모드, 포트리스 혼자하기는 로컬 모드입니다."
+              : "defense" === gameActiveTab
+                ? "웨이브 디펜스 호스트/입장하기는 WebSocket 멀티 모드, 디펜스 혼자하기는 서버 없는 로컬 모드입니다."
+                : PARTY_GAME_TYPES.includes(gameActiveTab)
+                  ? PARTY_GAME_LABELS[gameActiveTab] +
+                    " 호스트/입장하기는 WebSocket 멀티 모드, 혼자하기는 서버 없는 로컬 모드입니다."
+                  : "bat 내용을 관리자 권한으로 실행하면 지정 IP/포트의 인바운드가 허용됩니다.";
         ((t("gameFirewallCommand").value = gameFirewallScript()),
           (t("gameStatus").innerText = e));
         gameSyncConnectionInfo();
@@ -4406,6 +4438,9 @@
         e.searchParams.set("game", "fortress");
         e.searchParams.set("mode", "multi");
         e.searchParams.set("role", "client");
+      } else if ("rpg" === gameActiveTab) {
+        e.searchParams.set("game", "rpg");
+        e.searchParams.set("mode", "solo");
       } else if ("defense" === gameActiveTab) {
         e.searchParams.set("game", "defense");
         e.searchParams.set("mode", "multi");
@@ -4422,6 +4457,11 @@
     function gameSyncConnectionInfo() {
       const e = t("gameConnectionInfo");
       if (!e) return;
+      if ("rpg" === gameActiveTab) {
+        e.innerHTML =
+          "서약의 연대기는 소켓/LAN 연결을 사용하지 않습니다.<br>EXE/로컬 서버 저장: <code>Good_ETC/saves/rpg_save.json</code><br>직접 HTML 실행 저장: <code>localStorage</code>";
+        return;
+      }
       try {
         const n = gameLanShareUrl(),
           i = [],
@@ -4445,7 +4485,7 @@
         e.textContent = "Connection info unavailable: " + n.message;
       }
     }
-    const GAME_ASSET_VERSION = "20260530ba";
+    const GAME_ASSET_VERSION = "20260530bb";
     const PARTY_GAME_LABELS = {
       kart: "카트 랠리",
       bomb: "폭탄 그리드",
@@ -4453,6 +4493,8 @@
       coin: "코인 러시",
     };
     const PARTY_GAME_TYPES = Object.keys(PARTY_GAME_LABELS);
+    const SOLO_GAME_LABELS = { rpg: "서약의 연대기" };
+    const SOLO_GAME_TYPES = Object.keys(SOLO_GAME_LABELS);
     let gameActiveTab = "arena";
     function gameIsLauncherShell() {
       return "exe" === gameLauncherParams().launcher || !!window.pywebview;
@@ -4626,7 +4668,23 @@
       (e.searchParams.set("game", game), e.searchParams.set("mode", "solo"));
       return gameApplyClientParams(e, !1);
     }
+    function gameRpgUrl() {
+      const n = gameLauncherParams(),
+        i =
+          n.gameUrl ||
+          ("exe" === n.launcher
+            ? "http://" +
+              gameHostValue() +
+              ":" +
+              gamePortValue() +
+              "/game/index.html"
+            : "game/index.html"),
+        e = new URL(i, window.location.href);
+      (e.searchParams.set("game", "rpg"), e.searchParams.set("mode", "solo"));
+      return gameApplyClientParams(e, !1);
+    }
     function gameSelectedHostUrl() {
+      if ("rpg" === gameActiveTab) return gameRpgUrl();
       if ("fortress" === gameActiveTab) {
         return "exe" === gameLauncherParams().launcher
           ? gameFortressServerUrl("host")
@@ -4647,6 +4705,7 @@
         : gameLocalClientUrl(!0);
     }
     function gameSelectedJoinUrl() {
+      if ("rpg" === gameActiveTab) return gameRpgUrl();
       if ("fortress" === gameActiveTab) {
         return "exe" === gameLauncherParams().launcher
           ? gameFortressServerUrl("client")
@@ -4666,7 +4725,27 @@
         ? gameServerClientUrl()
         : gameLocalClientUrl();
     }
+    function gameSyncNetworkControls() {
+      const e = "rpg" === gameActiveTab;
+      [
+        "gameNetworkFields",
+        "gameFirewallFields",
+        "gameFirewallActions",
+      ].forEach((n) => {
+        const i = t(n);
+        i && (i.style.display = e ? "none" : "");
+      });
+      t("gameFirewallCommand").style.display = e ? "none" : "";
+    }
     function gameSyncGameButtons() {
+      if ("rpg" === gameActiveTab) {
+        t("gameOpenServer").innerHTML =
+          '<i class="fas fa-book-open"></i> RPG 시작';
+        t("gameOpenLocal").innerHTML =
+          '<i class="fas fa-save"></i> 저장 이어하기';
+        t("gameOpenSolo").style.display = "none";
+        return;
+      }
       if ("fortress" === gameActiveTab) {
         t("gameOpenServer").innerHTML =
           '<i class="fas fa-play"></i> 포트리스 호스트';
@@ -4710,6 +4789,7 @@
         "arena",
         "fortress",
         "defense",
+        ...SOLO_GAME_TYPES,
         ...PARTY_GAME_TYPES,
       ].includes(e)
         ? e
@@ -4734,12 +4814,16 @@
         (i.dataset.helpTarget =
           "fortress" === gameActiveTab
             ? "fortressHelp"
-            : "defense" === gameActiveTab
-              ? "defenseHelp"
-              : PARTY_GAME_TYPES.includes(gameActiveTab)
-                ? "partyHelp"
-                : "gameHelp");
-      (gameSyncGameButtons(), gameSyncFirewallCommand());
+            : "rpg" === gameActiveTab
+              ? "rpgHelp"
+              : "defense" === gameActiveTab
+                ? "defenseHelp"
+                : PARTY_GAME_TYPES.includes(gameActiveTab)
+                  ? "partyHelp"
+                  : "gameHelp");
+      (gameSyncNetworkControls(),
+        gameSyncGameButtons(),
+        gameSyncFirewallCommand());
     }
     function gameLauncherParams() {
       const n = window.GOOD_ETC_LAUNCHER_CONFIG || {},

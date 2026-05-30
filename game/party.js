@@ -2,7 +2,7 @@
   const params = new URLSearchParams(window.location.search);
   const gameKey = params.get("game") || "kart";
   const isSolo = ["solo", "local"].includes(params.get("mode") || "");
-  const assetVersion = params.get("v") || "20260530ba";
+  const assetVersion = params.get("v") || "20260530bb";
   const world = { width: 5200, height: 3200 };
   const SNAKE_TRAIL_POINT_GAP = 8;
   const SNAKE_SELF_SAFE_POINTS = 6;
