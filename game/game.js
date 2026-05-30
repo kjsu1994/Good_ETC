@@ -25,7 +25,7 @@ const camera = { x: 0, y: 0 };
 let socket = null;
 let playerId = "";
 let latestState = {
-  arena: { width: 1600, height: 1000 },
+  arena: { width: 2200, height: 1400 },
   players: [],
   bullets: [],
 };
@@ -102,7 +102,7 @@ function safeUrl(value) {
 }
 
 function currentAssetVersion() {
-  return new URLSearchParams(window.location.search).get("v") || "20260530f";
+  return new URLSearchParams(window.location.search).get("v") || "20260530h";
 }
 
 function escapeHtml(value) {
@@ -391,15 +391,24 @@ function escapeHtml(value) {
 }
 
 function drawGrid() {
-  const arena = latestState.arena || { width: 1600, height: 1000 };
-  ctx.fillStyle = "rgba(3, 8, 16, 0.72)";
+  const arena = latestState.arena || { width: 2200, height: 1400 };
+  const bg = ctx.createLinearGradient(
+    0,
+    0,
+    window.innerWidth,
+    window.innerHeight,
+  );
+  bg.addColorStop(0, "#07111f");
+  bg.addColorStop(0.55, "#101a2f");
+  bg.addColorStop(1, "#171129");
+  ctx.fillStyle = bg;
   ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
 
-  const grid = 80;
+  const grid = 64;
   const startX = -((camera.x % grid) + grid);
   const startY = -((camera.y % grid) + grid);
   ctx.lineWidth = 1;
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.055)";
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.045)";
   for (let x = startX; x < window.innerWidth + grid; x += grid) {
     ctx.beginPath();
     ctx.moveTo(x, 0);
@@ -413,9 +422,35 @@ function drawGrid() {
     ctx.stroke();
   }
 
-  ctx.strokeStyle = "rgba(83, 226, 168, 0.48)";
-  ctx.lineWidth = 4;
+  drawArenaScenery(arena);
+
+  ctx.strokeStyle = "rgba(83, 226, 168, 0.56)";
+  ctx.lineWidth = 5;
   ctx.strokeRect(-camera.x, -camera.y, arena.width, arena.height);
+}
+
+function drawArenaScenery(arena) {
+  for (let index = 0; index < 42; index += 1) {
+    const worldX = 140 + ((index * 389) % (arena.width - 280));
+    const worldY = 140 + ((index * 257) % (arena.height - 280));
+    const x = worldX - camera.x;
+    const y = worldY - camera.y;
+    if (
+      x < -120 ||
+      y < -120 ||
+      x > window.innerWidth + 120 ||
+      y > window.innerHeight + 120
+    ) {
+      continue;
+    }
+    ctx.fillStyle =
+      index % 3 === 0 ? "rgba(83,226,168,.13)" : "rgba(72,165,255,.11)";
+    ctx.fillRect(x - 34, y - 24, 68, 48);
+    ctx.strokeStyle = "rgba(245,251,255,.12)";
+    ctx.strokeRect(x - 34, y - 24, 68, 48);
+    ctx.fillStyle = "rgba(0,0,0,.2)";
+    ctx.fillRect(x - 22, y - 12, 44, 24);
+  }
 }
 
 function drawBullet(bullet) {
@@ -451,6 +486,18 @@ function drawPlayer(player) {
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(player.angle || 0);
+  ctx.fillStyle = "rgba(0,0,0,.34)";
+  ctx.beginPath();
+  ctx.ellipse(
+    0,
+    radius * 0.85,
+    radius * 1.25,
+    radius * 0.45,
+    0,
+    0,
+    Math.PI * 2,
+  );
+  ctx.fill();
   ctx.fillStyle = player.color;
   ctx.shadowColor = player.color;
   ctx.shadowBlur = player.id === playerId ? 22 : 10;
@@ -458,6 +505,10 @@ function drawPlayer(player) {
   ctx.arc(0, 0, radius, 0, Math.PI * 2);
   ctx.fill();
   ctx.shadowBlur = 0;
+  ctx.fillStyle = "rgba(255,255,255,.2)";
+  ctx.beginPath();
+  ctx.arc(-5, -6, radius * 0.48, 0, Math.PI * 2);
+  ctx.fill();
   ctx.fillStyle = "rgba(255, 255, 255, 0.88)";
   ctx.fillRect(5, -4, radius + 16, 8);
   ctx.restore();

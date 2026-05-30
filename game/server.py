@@ -21,8 +21,8 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 ROOT = Path(__file__).resolve().parent
-ARENA_WIDTH = 1600
-ARENA_HEIGHT = 1000
+ARENA_WIDTH = 2200
+ARENA_HEIGHT = 1400
 PLAYER_RADIUS = 18
 PLAYER_SPEED = 260
 BULLET_RADIUS = 5
@@ -42,11 +42,11 @@ COLORS = [
     "#ff8fd4",
 ]
 
-FORTRESS_WIDTH = 1400
-FORTRESS_HEIGHT = 760
+FORTRESS_WIDTH = 2200
+FORTRESS_HEIGHT = 920
 FORTRESS_GRAVITY = 300
 FORTRESS_TICK_RATE = 30
-FORTRESS_MOVE_BUDGET_MAX = 100
+FORTRESS_MOVE_BUDGET_MAX = 130
 FORTRESS_MOVE_COST = 10
 FORTRESS_DEFAULT_WEAPON = "standard"
 FORTRESS_WEAPONS: dict[str, dict[str, Any]] = {
@@ -96,9 +96,9 @@ FORTRESS_WEAPONS: dict[str, dict[str, Any]] = {
     },
 }
 
-DEFENSE_WIDTH = 960
-DEFENSE_HEIGHT = 640
-DEFENSE_CELL = 40
+DEFENSE_WIDTH = 1280
+DEFENSE_HEIGHT = 832
+DEFENSE_CELL = 32
 DEFENSE_COLUMNS = DEFENSE_WIDTH // DEFENSE_CELL
 DEFENSE_ROWS = DEFENSE_HEIGHT // DEFENSE_CELL
 DEFENSE_MAX_WAVE = 15
@@ -112,19 +112,19 @@ DEFENSE_MAPS: dict[str, dict[str, Any]] = {
         "name": "기본 우회로",
         "baseHealth": 20,
         "startResources": 180,
-        "pathPoints": [(0, 7), (5, 7), (5, 3), (12, 3), (12, 11), (20, 11), (20, 6), (23, 6)],
+        "pathPoints": [(0, 12), (8, 12), (8, 5), (18, 5), (18, 18), (30, 18), (30, 10), (39, 10)],
     },
     "harbor": {
         "name": "항구 지그재그",
         "baseHealth": 22,
         "startResources": 170,
-        "pathPoints": [(0, 4), (4, 4), (4, 12), (9, 12), (9, 5), (15, 5), (15, 10), (23, 10)],
+        "pathPoints": [(0, 6), (7, 6), (7, 20), (15, 20), (15, 8), (25, 8), (25, 17), (39, 17)],
     },
     "lava": {
         "name": "용암 협곡",
         "baseHealth": 18,
         "startResources": 200,
-        "pathPoints": [(0, 10), (3, 10), (3, 2), (8, 2), (8, 13), (14, 13), (14, 6), (19, 6), (19, 9), (23, 9)],
+        "pathPoints": [(0, 18), (5, 18), (5, 4), (13, 4), (13, 22), (23, 22), (23, 10), (32, 10), (32, 15), (39, 15)],
     },
 }
 DEFENSE_PATH_POINTS = list(DEFENSE_MAPS[DEFENSE_DEFAULT_MAP_ID]["pathPoints"])
@@ -249,8 +249,8 @@ def build_defense_path_cells(points: list[tuple[int, int]]) -> set[tuple[int, in
 DEFENSE_PATH_CELLS = build_defense_path_cells(DEFENSE_PATH_POINTS)
 DEFENSE_PATH_PIXELS = [defense_cell_center(x, y) for x, y in DEFENSE_PATH_POINTS]
 
-PARTY_WIDTH = 1200
-PARTY_HEIGHT = 760
+PARTY_WIDTH = 2200
+PARTY_HEIGHT = 1400
 PARTY_PLAYER_RADIUS = 18
 PARTY_GAME_TYPES = {"kart", "bomb", "snake", "coin"}
 PARTY_GAME_CONFIGS: dict[str, dict[str, Any]] = {
@@ -261,14 +261,14 @@ PARTY_GAME_CONFIGS: dict[str, dict[str, Any]] = {
         "laps": 3,
         "speed": 360,
         "track": [
-            [150, 380],
-            [310, 160],
-            [620, 120],
-            [960, 190],
-            [1040, 430],
-            [830, 620],
-            [470, 650],
-            [220, 540],
+            [260, 720],
+            [470, 330],
+            [980, 190],
+            [1640, 310],
+            [1900, 720],
+            [1540, 1120],
+            [820, 1210],
+            [340, 980],
         ],
     },
     "bomb": {
@@ -565,8 +565,8 @@ class FortressMatch:
 
     def reset(self) -> None:
         self.players = [
-            self.create_player("P1", "#53e2a8", 170, 45, 8, 82),
-            self.create_player("P2", "#ffbc54", 1230, 135, 98, 172),
+            self.create_player("P1", "#53e2a8", 260, 45, 8, 82),
+            self.create_player("P2", "#ffbc54", 1940, 135, 98, 172),
         ]
         self.build_terrain()
         self.place_players()
@@ -611,12 +611,12 @@ class FortressMatch:
         self.terrain = []
         for x in range(FORTRESS_WIDTH + 1):
             y = (
-                535
-                + math.sin(x / 105) * 48
-                + math.sin(x / 47) * 21
-                + math.sin(x / 230) * 34
+                660
+                + math.sin(x / 135) * 62
+                + math.sin(x / 57) * 28
+                + math.sin(x / 310) * 48
             )
-            self.terrain.append(self.clamp(round(y), 390, 660))
+            self.terrain.append(self.clamp(round(y), 500, 835))
         for _ in range(4):
             for x in range(1, len(self.terrain) - 1):
                 self.terrain[x] = round(
@@ -1632,8 +1632,8 @@ class PartyRoom:
     def place_client(self, client: PartyClient) -> None:
         index = max(0, self.next_client_id - 1)
         if self.game_type == "kart":
-            client.x = 135 + (index % 4) * 38
-            client.y = 365 + (index // 4) * 42
+            client.x = 230 + (index % 4) * 42
+            client.y = 695 + (index // 4) * 46
             client.angle = 0
         else:
             margin = 90
@@ -1913,14 +1913,19 @@ class PartyRoom:
         phase = now - self.started_at
         return [
             {
-                "x": 320 + math.sin(phase * 0.72) * 190,
-                "y": 260 + math.cos(phase * 0.5) * 120,
-                "radius": 54,
+                "x": PARTY_WIDTH * 0.28 + math.sin(phase * 0.72) * 320,
+                "y": PARTY_HEIGHT * 0.28 + math.cos(phase * 0.5) * 210,
+                "radius": 64,
             },
             {
-                "x": 850 + math.cos(phase * 0.55) * 210,
-                "y": 500 + math.sin(phase * 0.68) * 130,
-                "radius": 64,
+                "x": PARTY_WIDTH * 0.72 + math.cos(phase * 0.55) * 360,
+                "y": PARTY_HEIGHT * 0.68 + math.sin(phase * 0.68) * 260,
+                "radius": 76,
+            },
+            {
+                "x": PARTY_WIDTH * 0.5 + math.sin(phase * 0.42) * 430,
+                "y": PARTY_HEIGHT * 0.52 + math.cos(phase * 0.61) * 300,
+                "radius": 58,
             },
         ]
 

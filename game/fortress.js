@@ -11,10 +11,10 @@
       : requestedRole === "spectator"
         ? "spectator"
         : "client";
-  const assetVersion = params.get("v") || "20260530f";
-  const world = { width: 1400, height: 760 };
+  const assetVersion = params.get("v") || "20260530h";
+  const world = { width: 2200, height: 920 };
   const gravity = 300;
-  const moveBudgetMax = 100;
+  const moveBudgetMax = 130;
   const moveCost = 10;
   const defaultWeapon = "standard";
   const weaponOrder = ["standard", "impact", "burst", "split", "drill"];
@@ -244,6 +244,7 @@
   let state = createInitialState();
   let latestShareUrl = "";
   let netInfoCopyTimer = 0;
+  const camera = { x: 0, y: 0, scale: 1 };
 
   function weaponConfig(key) {
     return weapons[key] || weapons[defaultWeapon];
@@ -276,8 +277,8 @@
 
   function createInitialState() {
     const players = [
-      createPlayer("P1", "#53e2a8", 170, 45, 8, 82),
-      createPlayer("P2", "#ffbc54", 1230, 135, 98, 172),
+      createPlayer("P1", "#53e2a8", 260, 45, 8, 82),
+      createPlayer("P2", "#ffbc54", 1940, 135, 98, 172),
     ];
     const terrain = buildTerrain();
     placePlayers(players, terrain);
@@ -328,11 +329,11 @@
     const terrain = [];
     for (let x = 0; x <= world.width; x += 1) {
       const y =
-        535 +
-        Math.sin(x / 105) * 48 +
-        Math.sin(x / 47) * 21 +
-        Math.sin(x / 230) * 34;
-      terrain.push(clamp(Math.round(y), 390, 660));
+        660 +
+        Math.sin(x / 135) * 62 +
+        Math.sin(x / 57) * 28 +
+        Math.sin(x / 310) * 48;
+      terrain.push(clamp(Math.round(y), 500, 835));
     }
     for (let pass = 0; pass < 4; pass += 1) {
       for (let x = 1; x < terrain.length - 1; x += 1) {
@@ -986,15 +987,41 @@
   }
 
   function getView() {
-    const scale = Math.min(
-      window.innerWidth / world.width,
-      window.innerHeight / world.height,
-    );
+    const scale = camera.scale || 1;
     return {
       scale,
-      x: (window.innerWidth - world.width * scale) / 2,
-      y: (window.innerHeight - world.height * scale) / 2,
+      x: -camera.x * scale,
+      y: -camera.y * scale,
     };
+  }
+
+  function viewTarget() {
+    const projectile = (state.projectiles || [])[0] || state.projectile;
+    if (projectile) return { x: projectile.x, y: projectile.y };
+    if (state.explosion) return { x: state.explosion.x, y: state.explosion.y };
+    return currentPlayer() || { x: world.width / 2, y: world.height / 2 };
+  }
+
+  function updateCamera() {
+    const target = viewTarget();
+    camera.scale =
+      window.innerWidth <= 560 ? 0.58 : window.innerWidth <= 900 ? 0.72 : 0.9;
+    const viewWidth = window.innerWidth / camera.scale;
+    const viewHeight = window.innerHeight / camera.scale;
+    const maxX = Math.max(0, world.width - viewWidth);
+    const maxY = Math.max(0, world.height - viewHeight);
+    const targetX = clamp(
+      (target.x || world.width / 2) - viewWidth / 2,
+      0,
+      maxX,
+    );
+    const targetY = clamp(
+      (target.y || world.height / 2) - viewHeight / 2,
+      0,
+      maxY,
+    );
+    camera.x += (targetX - camera.x) * 0.13;
+    camera.y += (targetY - camera.y) * 0.13;
   }
 
   function toScreen(x, y) {
@@ -1010,31 +1037,31 @@
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
 
-    drawMountainLayer(455, "#7aa9a1", [
+    drawMountainLayer(565, "#7aa9a1", [
       [0, 0],
-      [120, -58],
-      [260, -18],
-      [420, -86],
-      [600, -28],
-      [800, -94],
-      [1030, -24],
-      [1220, -72],
-      [1400, -16],
+      [180, -72],
+      [390, -24],
+      [650, -104],
+      [920, -34],
+      [1240, -116],
+      [1580, -28],
+      [1900, -92],
+      [world.width, -20],
     ]);
-    drawMountainLayer(500, "#4e8376", [
-      [0, -18],
-      [170, -74],
-      [360, -28],
-      [540, -98],
-      [760, -36],
-      [930, -82],
-      [1130, -26],
-      [1320, -72],
-      [1400, -38],
+    drawMountainLayer(620, "#4e8376", [
+      [0, -22],
+      [240, -94],
+      [520, -36],
+      [780, -118],
+      [1080, -42],
+      [1390, -96],
+      [1690, -34],
+      [1970, -86],
+      [world.width, -46],
     ]);
 
     const view = getView();
-    const sun = toScreen(1160, 120);
+    const sun = toScreen(1780, 140);
     ctx.fillStyle = "rgba(255, 235, 137, 0.26)";
     ctx.beginPath();
     ctx.arc(sun.x, sun.y, 72 * view.scale, 0, Math.PI * 2);
@@ -1043,10 +1070,11 @@
     ctx.beginPath();
     ctx.arc(sun.x, sun.y, 38 * view.scale, 0, Math.PI * 2);
     ctx.fill();
-    drawCloud(230, 150, 1.2);
-    drawCloud(520, 92, 0.72);
-    drawCloud(870, 95, 1);
-    drawCloud(1090, 205, 0.86);
+    drawCloud(240, 170, 1.2);
+    drawCloud(620, 108, 0.72);
+    drawCloud(1120, 110, 1);
+    drawCloud(1580, 235, 0.86);
+    drawCloud(1980, 148, 1.05);
     drawWindIndicator();
   }
 
@@ -1201,6 +1229,18 @@
       ctx.beginPath();
       ctx.arc(point.x, point.y, Math.max(1, 2.6 * view.scale), 0, Math.PI * 2);
       ctx.fill();
+    }
+
+    ctx.fillStyle = "rgba(255,255,255,.12)";
+    for (let x = 90; x < world.width; x += 150) {
+      const y = terrainAt(state.terrain, x) - 13;
+      const point = toScreen(x, y);
+      ctx.fillRect(
+        point.x - 6 * view.scale,
+        point.y,
+        12 * view.scale,
+        18 * view.scale,
+      );
     }
   }
 
@@ -1501,6 +1541,7 @@
 
   function draw() {
     resizeCanvas();
+    updateCamera();
     drawSky();
     const shake = state.explosion
       ? Math.pow(Math.max(0, 1 - state.explosion.age / 0.55), 2) * 5

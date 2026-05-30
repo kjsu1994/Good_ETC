@@ -1,22 +1,22 @@
 (() => {
   const params = new URLSearchParams(window.location.search);
   const isSolo = ["solo", "local"].includes(params.get("mode") || "");
-  const assetVersion = params.get("v") || "20260530f";
-  const world = { width: 960, height: 640, cell: 40, columns: 24, rows: 16 };
+  const assetVersion = params.get("v") || "20260530h";
+  const world = { width: 1280, height: 832, cell: 32, columns: 40, rows: 26 };
   let defenseMaps = {
     classic: {
       name: "기본 우회로",
       baseHealth: 20,
       startResources: 180,
       pathPoints: [
-        [0, 7],
-        [5, 7],
-        [5, 3],
-        [12, 3],
-        [12, 11],
-        [20, 11],
-        [20, 6],
-        [23, 6],
+        [0, 12],
+        [8, 12],
+        [8, 5],
+        [18, 5],
+        [18, 18],
+        [30, 18],
+        [30, 10],
+        [39, 10],
       ],
     },
     harbor: {
@@ -24,14 +24,14 @@
       baseHealth: 22,
       startResources: 170,
       pathPoints: [
-        [0, 4],
-        [4, 4],
-        [4, 12],
-        [9, 12],
-        [9, 5],
-        [15, 5],
-        [15, 10],
-        [23, 10],
+        [0, 6],
+        [7, 6],
+        [7, 20],
+        [15, 20],
+        [15, 8],
+        [25, 8],
+        [25, 17],
+        [39, 17],
       ],
     },
     lava: {
@@ -39,16 +39,16 @@
       baseHealth: 18,
       startResources: 200,
       pathPoints: [
-        [0, 10],
-        [3, 10],
-        [3, 2],
-        [8, 2],
-        [8, 13],
-        [14, 13],
-        [14, 6],
-        [19, 6],
-        [19, 9],
-        [23, 9],
+        [0, 18],
+        [5, 18],
+        [5, 4],
+        [13, 4],
+        [13, 22],
+        [23, 22],
+        [23, 10],
+        [32, 10],
+        [32, 15],
+        [39, 15],
       ],
     },
   };
@@ -1199,14 +1199,27 @@
   }
 
   function drawBoard() {
-    ctx.fillStyle = "#152033";
+    const backdrop = ctx.createLinearGradient(
+      0,
+      0,
+      window.innerWidth,
+      window.innerHeight,
+    );
+    backdrop.addColorStop(0, "#101827");
+    backdrop.addColorStop(0.55, "#142139");
+    backdrop.addColorStop(1, "#21172e");
+    ctx.fillStyle = backdrop;
     ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
     const topLeft = toScreen(0, 0);
     ctx.save();
     ctx.translate(topLeft.x, topLeft.y);
     ctx.scale(camera.scale, camera.scale);
-    ctx.fillStyle = "#23344b";
+    const ground = ctx.createLinearGradient(0, 0, world.width, world.height);
+    ground.addColorStop(0, "#21344b");
+    ground.addColorStop(1, "#1b273d");
+    ctx.fillStyle = ground;
     ctx.fillRect(0, 0, world.width, world.height);
+    drawMapDecor();
     drawGrid();
     drawPath();
     drawPlacementPreview();
@@ -1219,7 +1232,7 @@
   }
 
   function drawGrid() {
-    ctx.strokeStyle = "rgba(255,255,255,.08)";
+    ctx.strokeStyle = "rgba(255,255,255,.055)";
     ctx.lineWidth = 1;
     for (let x = 0; x <= world.columns; x += 1) {
       ctx.beginPath();
@@ -1235,9 +1248,28 @@
     }
   }
 
+  function drawMapDecor() {
+    for (let index = 0; index < 52; index += 1) {
+      const x = 36 + ((index * 151) % (world.width - 72));
+      const y = 36 + ((index * 97) % (world.height - 72));
+      if (
+        pathCells.has(
+          `${Math.floor(x / world.cell)},${Math.floor(y / world.cell)}`,
+        )
+      ) {
+        continue;
+      }
+      ctx.fillStyle =
+        index % 4 === 0 ? "rgba(98,230,255,.08)" : "rgba(255,255,255,.045)";
+      ctx.fillRect(x - 12, y - 9, 24, 18);
+      ctx.strokeStyle = "rgba(0,0,0,.18)";
+      ctx.strokeRect(x - 12, y - 9, 24, 18);
+    }
+  }
+
   function drawPath() {
-    ctx.strokeStyle = "#d0a85c";
-    ctx.lineWidth = 34;
+    ctx.strokeStyle = "rgba(50,31,16,.62)";
+    ctx.lineWidth = world.cell * 1.12;
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
     ctx.beginPath();
@@ -1245,19 +1277,26 @@
       index ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y),
     );
     ctx.stroke();
-    ctx.strokeStyle = "rgba(72,48,23,.4)";
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = "#d0a85c";
+    ctx.lineWidth = world.cell * 0.82;
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(255,238,184,.35)";
+    ctx.lineWidth = 3;
     ctx.stroke();
   }
 
   function drawBase() {
     const end = pathPixels[pathPixels.length - 1];
+    ctx.fillStyle = "rgba(0,0,0,.28)";
+    ctx.fillRect(end.x - 27, end.y - 16, 54, 36);
     ctx.fillStyle = "#f6f3c8";
-    ctx.fillRect(end.x - 24, end.y - 28, 48, 56);
+    ctx.fillRect(end.x - 24, end.y - 34, 48, 58);
+    ctx.fillStyle = "#8be66f";
+    ctx.fillRect(end.x - 13, end.y - 48, 26, 16);
     ctx.fillStyle = "#ff6a6a";
     ctx.fillRect(
       end.x - 16,
-      end.y - 44,
+      end.y - 58,
       32 * ((state.baseHealth || 0) / (state.baseHealthMax || 20)),
       6,
     );
@@ -1283,15 +1322,21 @@
     ctx.beginPath();
     ctx.arc(center.x, center.y, tower.range || config.range, 0, Math.PI * 2);
     if (selected) ctx.fill();
+    ctx.fillStyle = "rgba(0,0,0,.32)";
+    ctx.beginPath();
+    ctx.ellipse(center.x, center.y + 13, 19, 8, 0, 0, Math.PI * 2);
+    ctx.fill();
     ctx.fillStyle = "#101827";
-    ctx.fillRect(center.x - 16, center.y - 16, 32, 32);
+    ctx.fillRect(center.x - 15, center.y - 15, 30, 30);
     ctx.fillStyle = config.color;
     if (config.boost) {
       ctx.beginPath();
-      ctx.arc(center.x, center.y, 13, 0, Math.PI * 2);
+      ctx.arc(center.x, center.y, 12, 0, Math.PI * 2);
       ctx.fill();
     } else {
-      ctx.fillRect(center.x - 11, center.y - 11, 22, 22);
+      ctx.fillRect(center.x - 10, center.y - 10, 20, 20);
+      ctx.fillStyle = "rgba(255,255,255,.28)";
+      ctx.fillRect(center.x - 5, center.y - 15, 10, 8);
     }
     ctx.fillStyle = "#fff";
     ctx.font = "bold 13px monospace";
@@ -1302,19 +1347,42 @@
 
   function drawEnemy(enemy) {
     const config = enemyTypes[enemy.type] || enemyTypes.normal;
+    const size = enemy.type === "boss" ? 34 : 22;
+    ctx.save();
+    ctx.fillStyle = "rgba(0,0,0,.28)";
+    ctx.beginPath();
+    ctx.ellipse(
+      enemy.x,
+      enemy.y + size * 0.46,
+      size * 0.62,
+      size * 0.25,
+      0,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
     ctx.fillStyle =
       enemy.slowed || enemy.slowUntil > 0 ? "#88e66f" : config.color;
-    const size = enemy.type === "boss" ? 36 : 24;
-    ctx.fillRect(enemy.x - size / 2, enemy.y - size / 2, size, size);
+    ctx.beginPath();
+    ctx.arc(enemy.x, enemy.y, size / 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,.25)";
+    ctx.beginPath();
+    ctx.arc(
+      enemy.x - size * 0.18,
+      enemy.y - size * 0.2,
+      size * 0.2,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+    ctx.restore();
     if (enemy.shield > 0) {
       ctx.strokeStyle = "#6fe8ff";
       ctx.lineWidth = 3;
-      ctx.strokeRect(
-        enemy.x - size / 2 - 4,
-        enemy.y - size / 2 - 4,
-        size + 8,
-        size + 8,
-      );
+      ctx.beginPath();
+      ctx.arc(enemy.x, enemy.y, size / 2 + 6, 0, Math.PI * 2);
+      ctx.stroke();
     }
     ctx.fillStyle = "#0b1220";
     ctx.fillRect(enemy.x - 16, enemy.y - 22, 32, 5);

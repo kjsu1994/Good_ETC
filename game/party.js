@@ -2,8 +2,8 @@
   const params = new URLSearchParams(window.location.search);
   const gameKey = params.get("game") || "kart";
   const isSolo = ["solo", "local"].includes(params.get("mode") || "");
-  const assetVersion = params.get("v") || "20260530f";
-  const world = { width: 1200, height: 760 };
+  const assetVersion = params.get("v") || "20260530h";
+  const world = { width: 2200, height: 1400 };
   const gameTypes = {
     kart: {
       name: "카트 랠리",
@@ -11,14 +11,14 @@
       action: "Space: 부스터",
       accent: "#42d7ff",
       track: [
-        [150, 380],
-        [310, 160],
-        [620, 120],
-        [960, 190],
-        [1040, 430],
-        [830, 620],
-        [470, 650],
-        [220, 540],
+        [260, 720],
+        [470, 330],
+        [980, 190],
+        [1640, 310],
+        [1900, 720],
+        [1540, 1120],
+        [820, 1210],
+        [340, 980],
       ],
     },
     bomb: {
@@ -167,8 +167,8 @@
       id: "local",
       name: localStorage.getItem("party_name") || "Player",
       color: config.accent,
-      x: 150,
-      y: 380,
+      x: 250,
+      y: 720,
       vx: 0,
       vy: 0,
       angle: 0,
@@ -182,8 +182,8 @@
       isHost: true,
     };
     if (game !== "kart") {
-      player.x = 220;
-      player.y = 220;
+      player.x = 420;
+      player.y = 420;
     }
     return {
       type: "party_state",
@@ -660,14 +660,19 @@
     const t = performance.now() / 1000;
     state.hazards = [
       {
-        x: 320 + Math.sin(t * 0.72) * 190,
-        y: 260 + Math.cos(t * 0.5) * 120,
-        radius: 54,
+        x: world.width * 0.28 + Math.sin(t * 0.72) * 320,
+        y: world.height * 0.28 + Math.cos(t * 0.5) * 210,
+        radius: 64,
       },
       {
-        x: 850 + Math.cos(t * 0.55) * 210,
-        y: 500 + Math.sin(t * 0.68) * 130,
-        radius: 64,
+        x: world.width * 0.72 + Math.cos(t * 0.55) * 360,
+        y: world.height * 0.68 + Math.sin(t * 0.68) * 260,
+        radius: 76,
+      },
+      {
+        x: world.width * 0.5 + Math.sin(t * 0.42) * 430,
+        y: world.height * 0.52 + Math.cos(t * 0.61) * 300,
+        radius: 58,
       },
     ];
     state.hazards.forEach((hazard) => {
@@ -712,10 +717,46 @@
     const dt = Math.min(0.05, (now - lastFrame) / 1000);
     lastFrame = now;
     updateLocal(dt);
+    updateCamera();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawWorld();
     renderHud();
     requestAnimationFrame(draw);
+  }
+
+  function cameraFocus() {
+    return (
+      state.players?.find((player) => player.id === clientId) ||
+      state.players?.[0] || { x: world.width / 2, y: world.height / 2 }
+    );
+  }
+
+  function updateCamera() {
+    const focus = cameraFocus();
+    const viewWidth = window.innerWidth / camera.scale;
+    const viewHeight = window.innerHeight / camera.scale;
+    const maxX = Math.max(0, world.width - viewWidth);
+    const maxY = Math.max(0, world.height - viewHeight);
+    const targetX = clamp(
+      (focus.x || world.width / 2) - viewWidth / 2,
+      0,
+      maxX,
+    );
+    const targetY = clamp(
+      (focus.y || world.height / 2) - viewHeight / 2,
+      0,
+      maxY,
+    );
+    const nextOffsetX = -targetX * camera.scale;
+    const nextOffsetY = -targetY * camera.scale;
+    camera.offsetX += (nextOffsetX - camera.offsetX) * 0.16;
+    camera.offsetY += (nextOffsetY - camera.offsetY) * 0.16;
+    if (world.width * camera.scale < window.innerWidth) {
+      camera.offsetX = (window.innerWidth - world.width * camera.scale) / 2;
+    }
+    if (world.height * camera.scale < window.innerHeight) {
+      camera.offsetY = (window.innerHeight - world.height * camera.scale) / 2;
+    }
   }
 
   function drawWorld() {
@@ -741,26 +782,77 @@
   }
 
   function drawArena() {
-    ctx.fillStyle = "#223044";
+    const theme =
+      game === "kart"
+        ? ["#1c2a3b", "#26394e"]
+        : game === "bomb"
+          ? ["#241c2f", "#332243"]
+          : game === "snake"
+            ? ["#11261d", "#1d3c2a"]
+            : ["#1b2138", "#2a2e51"];
+    const ground = ctx.createLinearGradient(0, 0, world.width, world.height);
+    ground.addColorStop(0, theme[0]);
+    ground.addColorStop(1, theme[1]);
+    ctx.fillStyle = ground;
     ctx.fillRect(0, 0, world.width, world.height);
-    ctx.strokeStyle = "rgba(255,255,255,.07)";
+
+    ctx.strokeStyle = "rgba(255,255,255,.045)";
     ctx.lineWidth = 1;
-    for (let x = 0; x <= world.width; x += 40) {
+    for (let x = 0; x <= world.width; x += 32) {
       ctx.beginPath();
       ctx.moveTo(x, 0);
       ctx.lineTo(x, world.height);
       ctx.stroke();
     }
-    for (let y = 0; y <= world.height; y += 40) {
+    for (let y = 0; y <= world.height; y += 32) {
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(world.width, y);
       ctx.stroke();
     }
+    drawWorldDecorations();
+    ctx.strokeStyle = "rgba(255,255,255,.18)";
+    ctx.lineWidth = 10;
+    ctx.strokeRect(5, 5, world.width - 10, world.height - 10);
     if (game !== "kart") return;
+    drawKartTrack();
+  }
+
+  function drawWorldDecorations() {
+    for (let index = 0; index < 34; index += 1) {
+      const x = 120 + ((index * 317) % (world.width - 240));
+      const y = 120 + ((index * 211) % (world.height - 240));
+      if (game === "kart") {
+        ctx.fillStyle =
+          index % 2 ? "rgba(66,215,255,.18)" : "rgba(255,186,90,.16)";
+        ctx.fillRect(x - 18, y - 18, 36, 36);
+        ctx.strokeStyle = "rgba(255,255,255,.16)";
+        ctx.strokeRect(x - 18, y - 18, 36, 36);
+      } else if (game === "snake") {
+        ctx.fillStyle = "rgba(139,230,111,.16)";
+        ctx.beginPath();
+        ctx.ellipse(x, y, 34, 16, (index % 5) * 0.6, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (game === "bomb") {
+        ctx.fillStyle = "rgba(255,186,90,.13)";
+        ctx.fillRect(x - 30, y - 20, 60, 40);
+        ctx.fillStyle = "rgba(0,0,0,.18)";
+        ctx.fillRect(x - 22, y - 13, 44, 26);
+      } else {
+        ctx.fillStyle = "rgba(208,140,255,.14)";
+        ctx.beginPath();
+        ctx.arc(x, y, 28 + (index % 4) * 5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+
+  function drawKartTrack() {
     const track = state.config?.track || config.track;
-    ctx.strokeStyle = "rgba(255,255,255,.2)";
-    ctx.lineWidth = 94;
+    ctx.shadowColor = "rgba(0,0,0,.55)";
+    ctx.shadowBlur = 24;
+    ctx.strokeStyle = "rgba(12,18,28,.74)";
+    ctx.lineWidth = 136;
     ctx.lineJoin = "round";
     ctx.beginPath();
     track.forEach(([x, y], index) =>
@@ -768,12 +860,24 @@
     );
     ctx.closePath();
     ctx.stroke();
-    ctx.strokeStyle = "#2c384b";
-    ctx.lineWidth = 62;
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = "#536072";
+    ctx.lineWidth = 100;
     ctx.stroke();
+    ctx.strokeStyle = "#263244";
+    ctx.lineWidth = 74;
+    ctx.stroke();
+    ctx.setLineDash([34, 28]);
+    ctx.strokeStyle = "rgba(245,251,255,.42)";
+    ctx.lineWidth = 4;
+    ctx.stroke();
+    ctx.setLineDash([]);
     track.forEach(([x, y], index) => {
       ctx.fillStyle = index === 0 ? "#f8f871" : config.accent;
-      ctx.fillRect(x - 12, y - 12, 24, 24);
+      ctx.fillRect(x - 15, y - 15, 30, 30);
+      ctx.strokeStyle = "rgba(0,0,0,.45)";
+      ctx.lineWidth = 3;
+      ctx.strokeRect(x - 15, y - 15, 30, 30);
     });
   }
 
@@ -839,20 +943,53 @@
     ctx.translate(player.x, player.y);
     ctx.rotate(player.angle || 0);
     ctx.globalAlpha = player.alive ? 1 : 0.38;
+    ctx.shadowColor = "rgba(0,0,0,.45)";
+    ctx.shadowBlur = 10;
+    ctx.fillStyle = "rgba(0,0,0,.32)";
+    ctx.beginPath();
+    ctx.ellipse(0, 16, 30, 11, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
     if (game === "kart") {
-      ctx.fillStyle = "#0b1220";
-      ctx.fillRect(-22, -14, 44, 28);
+      ctx.fillStyle = "#07111f";
+      ctx.fillRect(-28, -16, 56, 32);
+      ctx.fillStyle = "rgba(255,255,255,.16)";
+      ctx.fillRect(-19, -22, 23, 10);
       ctx.fillStyle = player.color;
-      ctx.fillRect(-14, -10, 24, 20);
+      ctx.fillRect(-16, -12, 30, 24);
+      ctx.fillStyle = "#0b1220";
+      ctx.fillRect(-25, -20, 10, 7);
+      ctx.fillRect(-25, 13, 10, 7);
+      ctx.fillRect(15, -20, 10, 7);
+      ctx.fillRect(15, 13, 10, 7);
       ctx.fillStyle = player.boosted ? "#f8f871" : "#f5fbff";
-      ctx.fillRect(10, -5, 10, 10);
+      ctx.fillRect(14, -5, 13, 10);
+      if (player.boosted) {
+        ctx.fillStyle = "rgba(255,186,90,.75)";
+        ctx.beginPath();
+        ctx.moveTo(-30, -8);
+        ctx.lineTo(-55, 0);
+        ctx.lineTo(-30, 8);
+        ctx.fill();
+      }
     } else {
+      ctx.fillStyle = "rgba(255,255,255,.18)";
+      ctx.beginPath();
+      ctx.arc(0, 0, 24, 0, Math.PI * 2);
+      ctx.fill();
       ctx.fillStyle = player.color;
       ctx.beginPath();
       ctx.arc(0, 0, 18, 0, Math.PI * 2);
       ctx.fill();
       ctx.fillStyle = "#0b1220";
       ctx.fillRect(5, -4, 13, 8);
+      if (game === "bomb") {
+        ctx.strokeStyle = "#ffba5a";
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(-2, 0, 25, -0.7, 0.7);
+        ctx.stroke();
+      }
     }
     ctx.restore();
     ctx.fillStyle = "#f5fbff";
@@ -898,12 +1035,8 @@
     canvas.style.height = `${window.innerHeight}px`;
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     camera.scale =
-      Math.min(
-        window.innerWidth / world.width,
-        window.innerHeight / world.height,
-      ) * 0.94;
-    camera.offsetX = (window.innerWidth - world.width * camera.scale) / 2;
-    camera.offsetY = (window.innerHeight - world.height * camera.scale) / 2;
+      window.innerWidth <= 560 ? 0.52 : window.innerWidth <= 900 ? 0.68 : 0.86;
+    updateCamera();
   }
 
   function cleanName(value) {
