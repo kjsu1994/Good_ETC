@@ -2565,14 +2565,14 @@
         <div class="c1e feature-help" id="rpgHelp">
           <div>
             <strong>서약의 연대기</strong>는 소켓을 사용하지 않는 혼자하기
-            RPG입니다. 대화, 장기 메인 퀘스트, 필드 전투, 보스, 상점, 장비,
-            물약, 저장을 지원합니다.
+            RPG입니다. 말풍선 대화, 장기 메인 퀘스트, 필드 전투, 보스, 상점,
+            장비/부적, 성장 포인트, 서고 기록, 물약, 저장을 지원합니다.
           </div>
           <div>
             <code>RPG 시작</code>을 누르면 현재 브라우저 또는 EXE 안에서 바로
-            실행됩니다. WASD/방향키로 이동하고,
-            <code>J</code>/<code>Space</code>는 기본 공격, <code>K</code>는
-            서약기, <code>E</code>는 대화/상점/포털, <code>1</code>은
+            실행됩니다. WASD/방향키로 이동하고, <code>J</code>는 기본 공격, NPC
+            앞 <code>Space</code> 또는 <code>E</code>는 말풍선 대화/상점/포털,
+            <code>K</code>는 서약기, <code>Shift</code>는 회피, <code>1</code>은
             회복약입니다.
           </div>
           <div>
@@ -2582,8 +2582,9 @@
           </div>
           <div>
             최종 장은 5시간 이상의 플레이 기록이 있어야 열리도록 설계되어 긴
-            스토리 플레이를 전제로 합니다. 퀘스트 기록과 저장 상태는 게임 화면의
-            <code>?</code>, <code>퀘스트</code>, <code>저장</code> 버튼에서
+            스토리 플레이를 전제로 합니다. 퀘스트의 이유/보상, 성장, 서고, 저장
+            상태는 게임 화면의 <code>?</code>, <code>퀘스트</code>,
+            <code>성장</code>, <code>서고</code>, <code>저장</code> 버튼에서
             확인할 수 있습니다.
           </div>
         </div>
@@ -4384,7 +4385,7 @@
       try {
         const e =
           "rpg" === gameActiveTab
-            ? "서약의 연대기는 소켓 없이 혼자 플레이하는 RPG입니다. 저장은 EXE/로컬 서버에서는 사용자 데이터 폴더, 직접 HTML 실행에서는 브라우저 저장소를 사용합니다."
+            ? "서약의 연대기는 소켓 없이 혼자 플레이하는 RPG입니다. 말풍선 대화, 성장/장비/서고를 사용하며 저장은 EXE/로컬 서버에서는 사용자 데이터 폴더, 직접 HTML 실행에서는 브라우저 저장소를 사용합니다."
             : "fortress" === gameActiveTab
               ? "포트리스 호스트/입장하기는 WebSocket 멀티 모드, 포트리스 혼자하기는 로컬 모드입니다."
               : "defense" === gameActiveTab
@@ -4459,7 +4460,7 @@
       if (!e) return;
       if ("rpg" === gameActiveTab) {
         e.innerHTML =
-          "서약의 연대기는 소켓/LAN 연결을 사용하지 않습니다.<br>EXE/로컬 서버 저장: <code>Good_ETC/saves/rpg_save.json</code><br>직접 HTML 실행 저장: <code>localStorage</code>";
+          "서약의 연대기는 소켓/LAN 연결을 사용하지 않습니다.<br>말풍선 대화, 성장 포인트, 장비/부적, 서고 기록은 같은 저장 데이터에 포함됩니다.<br>EXE/로컬 서버 저장: <code>Good_ETC/saves/rpg_save.json</code><br>직접 HTML 실행 저장: <code>localStorage</code>";
         return;
       }
       try {
@@ -4485,7 +4486,7 @@
         e.textContent = "Connection info unavailable: " + n.message;
       }
     }
-    const GAME_ASSET_VERSION = "20260530bb";
+    const GAME_ASSET_VERSION = "20260530bc";
     const PARTY_GAME_LABELS = {
       kart: "카트 랠리",
       bomb: "폭탄 그리드",

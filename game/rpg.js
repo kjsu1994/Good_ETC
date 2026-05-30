@@ -1,6 +1,6 @@
 (() => {
   const params = new URLSearchParams(window.location.search);
-  const assetVersion = params.get("v") || "20260530bb";
+  const assetVersion = params.get("v") || "20260530bc";
   const SAVE_KEY = "good_etc_rpg_save_v1";
   const SAVE_API = "/api/rpg/save";
   const MIN_FINAL_PLAY_SECONDS = 5 * 60 * 60;
@@ -114,7 +114,7 @@
       .rpg-xp span { background: linear-gradient(90deg, #53e2a8, #f8f871); }
       .rpg-actions {
         display: grid;
-        grid-template-columns: repeat(4, 1fr);
+        grid-template-columns: repeat(3, 1fr);
         gap: 8px;
         margin-top: 12px;
       }
@@ -192,6 +192,23 @@
         gap: 8px;
         margin-top: 14px;
       }
+      .rpg-modal .item-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        gap: 10px;
+        margin-top: 14px;
+      }
+      .rpg-modal .item-card {
+        display: grid;
+        gap: 7px;
+        border: 1px solid rgba(255,255,255,.12);
+        border-radius: 8px;
+        padding: 10px;
+        background: rgba(255,255,255,.055);
+      }
+      .rpg-modal .item-card button {
+        width: 100%;
+      }
       .rpg-toast {
         position: absolute;
         left: 50%;
@@ -234,6 +251,8 @@
         <button type="button" class="primary" id="rpgSave">저장</button>
         <button type="button" id="rpgQuest">퀘스트</button>
         <button type="button" id="rpgBag">가방</button>
+        <button type="button" id="rpgStatsButton">성장</button>
+        <button type="button" id="rpgJournal">서고</button>
         <button type="button" id="rpgHelp">?</button>
       </div>
       <p class="rpg-muted" id="rpgSaveStatus">저장 준비 중</p>
@@ -246,9 +265,10 @@
     </section>
     <section class="rpg-panel rpg-bottom" aria-label="조작">
       <span>WASD/방향키 이동</span>
-      <span>J/Space 기본공격</span>
+      <span>J 공격 · NPC 앞 Space 대화</span>
       <span>K 서약기</span>
       <span>E 대화/포털/상점</span>
+      <span>Shift 회피</span>
       <span>1 물약</span>
       <span>Ctrl+S 저장</span>
     </section>
@@ -275,14 +295,167 @@
   };
 
   const ITEMS = {
-    smallPotion: { name: "하급 회복약", type: "potion", heal: 120, price: 35 },
-    manaDew: { name: "마나 이슬", type: "mana", mana: 90, price: 42 },
-    oathTonic: { name: "서약 강장제", type: "buff", price: 130 },
-    ironBlade: { name: "무쇠 장검", type: "weapon", atk: 7, price: 210 },
-    moonBlade: { name: "월광검", type: "weapon", atk: 18, price: 740 },
-    guardCoat: { name: "수호자의 코트", type: "armor", def: 7, price: 260 },
-    runeMail: { name: "룬 메일", type: "armor", def: 16, price: 840 },
+    smallPotion: {
+      name: "하급 회복약",
+      type: "potion",
+      heal: 120,
+      price: 35,
+      rarity: "common",
+      desc: "전투 중 잃은 HP를 빠르게 회복합니다.",
+    },
+    manaDew: {
+      name: "마나 이슬",
+      type: "mana",
+      mana: 90,
+      price: 42,
+      rarity: "common",
+      desc: "서약기 사용에 필요한 MP를 회복합니다.",
+    },
+    oathTonic: {
+      name: "서약 강장제",
+      type: "buff",
+      price: 130,
+      rarity: "rare",
+      desc: "HP/MP를 회복하고 짧은 보호막 시간을 얻습니다.",
+    },
+    ironBlade: {
+      name: "무쇠 장검",
+      type: "weapon",
+      atk: 7,
+      price: 210,
+      rarity: "common",
+      desc: "루멘 대장간의 표준 장검입니다.",
+    },
+    moonBlade: {
+      name: "월광검",
+      type: "weapon",
+      atk: 18,
+      agi: 1,
+      price: 740,
+      rarity: "rare",
+      desc: "월식의 빛을 받아 검격이 조금 더 빨라집니다.",
+    },
+    emberBlade: {
+      name: "잿불 절단검",
+      type: "weapon",
+      atk: 28,
+      str: 2,
+      price: 1280,
+      rarity: "epic",
+      desc: "강한 일격에 특화된 붉은 광맥의 검입니다.",
+    },
+    starforgedBlade: {
+      name: "성련검",
+      type: "weapon",
+      atk: 42,
+      str: 3,
+      agi: 2,
+      price: 0,
+      rarity: "legend",
+      desc: "기원의 탑에서만 완성되는 서약자의 검입니다.",
+    },
+    guardCoat: {
+      name: "수호자의 코트",
+      type: "armor",
+      def: 7,
+      price: 260,
+      rarity: "common",
+      desc: "가벼운 방어구라 초반 탐험에 적합합니다.",
+    },
+    runeMail: {
+      name: "룬 메일",
+      type: "armor",
+      def: 16,
+      vit: 1,
+      price: 840,
+      rarity: "rare",
+      desc: "각인된 룬이 충격을 흘려보냅니다.",
+    },
+    oathMantle: {
+      name: "서약의 망토",
+      type: "armor",
+      def: 25,
+      wis: 2,
+      price: 0,
+      rarity: "epic",
+      desc: "오래 버틴 서약자에게만 반응하는 망토입니다.",
+    },
+    greenSigil: {
+      name: "녹음 인장",
+      type: "charm",
+      vit: 2,
+      price: 0,
+      rarity: "rare",
+      desc: "숲의 생명력으로 방어와 체력을 보조합니다.",
+    },
+    tideCharm: {
+      name: "푸른 조류 부적",
+      type: "charm",
+      wis: 2,
+      price: 0,
+      rarity: "rare",
+      desc: "MP 회복과 서약기 운용을 돕는 항구의 부적입니다.",
+    },
+    emberCore: {
+      name: "잿불 핵",
+      type: "charm",
+      str: 2,
+      price: 0,
+      rarity: "epic",
+      desc: "기본 공격의 체감 화력을 끌어올립니다.",
+    },
+    snowSigil: {
+      name: "설휘 각인",
+      type: "charm",
+      def: 4,
+      wis: 1,
+      price: 0,
+      rarity: "epic",
+      desc: "강한 보스전에서 버티기 쉬운 방어형 부적입니다.",
+    },
+    eclipseRing: {
+      name: "월식 반지",
+      type: "charm",
+      atk: 8,
+      agi: 2,
+      price: 0,
+      rarity: "legend",
+      desc: "연속 공격과 회피 플레이에 맞춘 반지입니다.",
+    },
+    dawnRelic: {
+      name: "새벽 성물",
+      type: "charm",
+      atk: 10,
+      def: 6,
+      str: 2,
+      vit: 2,
+      wis: 2,
+      agi: 2,
+      price: 0,
+      rarity: "legend",
+      desc: "모든 장을 관통하는 최종 보상 성물입니다.",
+    },
   };
+
+  const RARITY = {
+    common: { label: "일반", color: "#a8bdd5" },
+    rare: { label: "희귀", color: "#48a5ff" },
+    epic: { label: "영웅", color: "#d08cff" },
+    legend: { label: "전설", color: "#f8f871" },
+  };
+
+  const BOSS_REWARDS = [
+    "greenSigil",
+    "tideCharm",
+    "emberBlade",
+    "snowSigil",
+    "oathMantle",
+    "eclipseRing",
+    "starforgedBlade",
+    "dawnRelic",
+    "oathTonic",
+    "dawnRelic",
+  ];
 
   const ZONES = [
     {
@@ -515,7 +688,7 @@
 
   const SHOPS = {
     apothecary: ["smallPotion", "manaDew", "oathTonic"],
-    forge: ["ironBlade", "guardCoat", "moonBlade", "runeMail"],
+    forge: ["ironBlade", "guardCoat", "moonBlade", "runeMail", "emberBlade"],
   };
 
   const ACTS = [
@@ -626,6 +799,7 @@
         required: 1,
         intro: [act.line, "대화를 끝까지 듣고 다음 목적지를 확인하세요."],
         done: ["좋습니다. 이제 흔적을 따라 움직일 시간입니다."],
+        reason: "단서를 들어야 현재 장의 목적과 다음 전장을 알 수 있습니다.",
         reward: { xp: 40 + base * 4, gold: 30 + base },
       },
       {
@@ -644,6 +818,7 @@
         done: [
           "검의 흔적이 길을 열었습니다. 하지만 더 깊은 곳에서 낯선 기척이 납니다.",
         ],
+        reason: "적을 줄이면 NPC가 움직일 수 있고 새 지역의 증언이 열립니다.",
         reward: { xp: 130 + base * 10, gold: 70 + base * 4 },
       },
       {
@@ -660,6 +835,8 @@
           "빛나는 잔해는 전장 곳곳에 흩어져 있습니다.",
         ],
         done: ["조각이 맞물리자 오래된 문장이 다시 숨을 쉽니다."],
+        reason:
+          "흩어진 물증을 모으면 서약의 문장이 복구되어 결계가 약해집니다.",
         reward: {
           xp: 160 + base * 12,
           gold: 95 + base * 5,
@@ -691,10 +868,13 @@
               "당신의 이름이 마지막 영웅서기에 새겨졌습니다.",
             ]
           : ["결계가 깨졌습니다. 다음 장의 길이 열렸습니다."],
+        reason: act.final
+          ? "최종 집행자를 쓰러뜨려 사라진 영웅서기의 마지막 빈 칸을 채워야 합니다."
+          : "수호자를 쓰러뜨려 다음 장으로 이어지는 길과 장비 보상을 엽니다.",
         reward: {
           xp: 260 + base * 20,
           gold: 160 + base * 8,
-          item: rank > 4 ? "oathTonic" : "smallPotion",
+          item: BOSS_REWARDS[rank - 1] || "oathTonic",
         },
         final: act.final,
       },
@@ -709,6 +889,7 @@
   let toastTimer = 0;
   let attackFlash = 0;
   let modalMode = "";
+  let speechBubble = null;
   let state = null;
 
   function xpForLevel(level) {
@@ -739,10 +920,27 @@
         facing: 0,
         attackCd: 0,
         skillCd: 0,
+        dashCd: 0,
+        dashTime: 0,
+        dashVx: 0,
+        dashVy: 0,
         invuln: 0,
-        equipment: { weapon: "", armor: "" },
+        combo: 0,
+        comboTimer: 0,
+        statPoints: 0,
+        skillPoints: 0,
+        skillRank: 0,
+        renown: 0,
+        baseStats: { str: 5, vit: 5, wis: 4, agi: 4 },
+        equipment: { weapon: "", armor: "", charm: "" },
         inventory: { smallPotion: 5, manaDew: 2 },
       },
+      journal: [
+        {
+          title: "서약의 시작",
+          text: "루멘 성소의 불씨에서 영웅들의 이름이 하나씩 사라지고 있다.",
+        },
+      ],
       questIndex: 0,
       questProgress: 0,
       enemies: [],
@@ -794,9 +992,34 @@
       ...fresh.player.equipment,
       ...(save?.player?.equipment || {}),
     };
+    next.player.baseStats = {
+      ...fresh.player.baseStats,
+      ...(save?.player?.baseStats || {}),
+    };
+    next.player.statPoints = Number.isFinite(next.player.statPoints)
+      ? next.player.statPoints
+      : 0;
+    next.player.skillPoints = Number.isFinite(next.player.skillPoints)
+      ? next.player.skillPoints
+      : 0;
+    next.player.skillRank = Number.isFinite(next.player.skillRank)
+      ? next.player.skillRank
+      : 0;
+    next.player.renown = Number.isFinite(next.player.renown)
+      ? next.player.renown
+      : 0;
+    next.player.combo = 0;
+    next.player.comboTimer = 0;
+    next.player.dashCd = 0;
+    next.player.dashTime = 0;
+    next.player.dashVx = 0;
+    next.player.dashVy = 0;
     next.unlockedZones = Array.isArray(next.unlockedZones)
       ? [...new Set(["lumen", ...next.unlockedZones])]
       : fresh.unlockedZones;
+    next.journal = Array.isArray(next.journal)
+      ? next.journal.slice(0, 80)
+      : fresh.journal;
     next.enemies = [];
     next.drops = Array.isArray(next.drops) ? next.drops.slice(0, 60) : [];
     next.effects = [];
@@ -885,38 +1108,51 @@
   function advanceQuest() {
     const quest = currentQuest();
     if (!quest || !questReady(quest)) return;
-    giveReward(quest.reward);
-    unlockNextZone(quest);
     showDialogue(quest.final ? "엔딩" : "퀘스트 완료", quest.done, [
       {
         label: quest.final ? "엔딩 기록 저장" : "다음 장으로",
-        action: () => {
-          closeModal();
-          if (quest.final) {
-            state.completed = true;
-            toast("서약의 연대기를 완료했습니다.");
-          } else {
-            state.questIndex += 1;
-            state.questProgress = 0;
-            moveToQuestZone();
-            const next = currentQuest();
-            next &&
-              showDialogue(next.title, next.intro, [
-                { label: "출발", action: closeModal },
-              ]);
-          }
-          saveGame(false);
-        },
+        action: () => completeQuest(quest, true),
       },
     ]);
+  }
+
+  function completeQuest(quest = currentQuest(), closeCurrentModal = false) {
+    if (!quest || !questReady(quest)) return;
+    giveReward(quest.reward);
+    unlockNextZone(quest);
+    addJournalEntry(quest);
+    if (closeCurrentModal) closeModal();
+    if (quest.final) {
+      state.completed = true;
+      toast("서약의 연대기를 완료했습니다.");
+    } else {
+      state.questIndex += 1;
+      state.questProgress = 0;
+      moveToQuestZone();
+      const next = currentQuest();
+      next &&
+        startSpeechBubble(findNpcById(next.npc), next.intro, () =>
+          toast("새 퀘스트가 시작되었습니다."),
+        );
+    }
+    saveGame(false);
   }
 
   function giveReward(reward = {}) {
     const player = state.player;
     player.gold += reward.gold || 0;
     player.xp += reward.xp || 0;
-    if (reward.item)
+    if (reward.item) {
       player.inventory[reward.item] = (player.inventory[reward.item] || 0) + 1;
+      if (["weapon", "armor", "charm"].includes(ITEMS[reward.item]?.type))
+        equipItem(reward.item);
+    }
+    if (Array.isArray(reward.items)) {
+      reward.items.forEach((id) => {
+        player.inventory[id] = (player.inventory[id] || 0) + 1;
+      });
+    }
+    player.renown += reward.renown || 1;
     let leveled = false;
     while (player.xp >= xpForLevel(player.level)) {
       player.xp -= xpForLevel(player.level);
@@ -925,6 +1161,8 @@
       player.maxMp += 14;
       player.atk += 4;
       player.def += 2;
+      player.statPoints += 3;
+      player.skillPoints += 1;
       player.hp = player.maxHp;
       player.mp = player.maxMp;
       leveled = true;
@@ -932,8 +1170,17 @@
     toast(
       `보상: 경험치 ${reward.xp || 0}, 골드 ${reward.gold || 0}` +
         (reward.item ? `, ${ITEMS[reward.item].name}` : "") +
-        (leveled ? " · 레벨 업!" : ""),
+        (leveled ? " · 레벨 업! 성장 포인트 +3, 서약 포인트 +1" : ""),
     );
+  }
+
+  function addJournalEntry(quest) {
+    const title = quest.final ? "서약 완성" : quest.title;
+    const text = quest.done.join(" ");
+    state.journal = [
+      { title, text, time: formatTime(state.playSeconds) },
+      ...(state.journal || []),
+    ].slice(0, 80);
   }
 
   function unlockNextZone(quest) {
@@ -1012,6 +1259,7 @@
       boss,
       hit: 0,
       attackCd: 0,
+      windup: 0,
     });
   }
 
@@ -1030,8 +1278,12 @@
     const player = state.player;
     player.attackCd = Math.max(0, player.attackCd - dt);
     player.skillCd = Math.max(0, player.skillCd - dt);
+    player.dashCd = Math.max(0, (player.dashCd || 0) - dt);
+    player.dashTime = Math.max(0, (player.dashTime || 0) - dt);
     player.invuln = Math.max(0, player.invuln - dt);
     player.mp = Math.min(player.maxMp, player.mp + dt * 3.5);
+    player.comboTimer = Math.max(0, (player.comboTimer || 0) - dt);
+    if (player.comboTimer <= 0) player.combo = 0;
     updatePlayer(dt);
     if (Math.random() < dt * 2.1) spawnEnemies();
     updateEnemies(dt);
@@ -1057,8 +1309,13 @@
     dx /= len;
     dy /= len;
     if (dx || dy) player.facing = Math.atan2(dy, dx);
-    const speed = 245;
+    let speed = 245 + statValue("agi") * 3;
     const zone = currentZone();
+    if (player.dashTime > 0) {
+      dx = player.dashVx || Math.cos(player.facing);
+      dy = player.dashVy || Math.sin(player.facing);
+      speed = 720 + statValue("agi") * 10;
+    }
     player.x = clamp(player.x + dx * speed * dt, 40, zone.w - 40);
     player.y = clamp(player.y + dy * speed * dt, 40, zone.h - 40);
   }
@@ -1068,15 +1325,20 @@
     state.enemies.forEach((enemy) => {
       enemy.hit = Math.max(0, enemy.hit - dt);
       enemy.attackCd = Math.max(0, enemy.attackCd - dt);
+      const windupBefore = enemy.windup || 0;
+      enemy.windup = Math.max(0, windupBefore - dt);
       const gap = distance(enemy.x, enemy.y, player.x, player.y);
       if (gap < 720) {
         const angle = Math.atan2(player.y - enemy.y, player.x - enemy.x);
-        const speed = enemy.boss ? 110 : 135;
+        const speed = enemy.windup > 0 ? 18 : enemy.boss ? 110 : 135;
         enemy.x += Math.cos(angle) * speed * dt;
         enemy.y += Math.sin(angle) * speed * dt;
       }
-      if (gap < 44 && enemy.attackCd <= 0) {
+      if (gap < 58 && enemy.attackCd <= 0 && enemy.windup <= 0) {
+        enemy.windup = enemy.boss ? 0.62 : 0.42;
         enemy.attackCd = enemy.boss ? 1.1 : 1.35;
+      }
+      if (windupBefore > 0 && enemy.windup <= 0 && gap < 72) {
         hurtPlayer(Math.max(6, enemy.atk - totalDef()));
       }
     });
@@ -1102,24 +1364,55 @@
     });
   }
 
+  function dash() {
+    if (modalMode || speechBubble) return;
+    const player = state.player;
+    if ((player.dashCd || 0) > 0) return;
+    let dx =
+      Number(keys.has("arrowright") || keys.has("d")) -
+      Number(keys.has("arrowleft") || keys.has("a"));
+    let dy =
+      Number(keys.has("arrowdown") || keys.has("s")) -
+      Number(keys.has("arrowup") || keys.has("w"));
+    const len = Math.hypot(dx, dy);
+    if (len) {
+      dx /= len;
+      dy /= len;
+    } else {
+      dx = Math.cos(player.facing);
+      dy = Math.sin(player.facing);
+    }
+    player.dashVx = dx;
+    player.dashVy = dy;
+    player.dashTime = 0.18;
+    player.dashCd = Math.max(0.75, 1.05 - statValue("agi") * 0.02);
+    player.invuln = Math.max(player.invuln, 0.22);
+    showEffect(player.x, player.y - 44, "회피", "#48a5ff");
+  }
+
   function attack(skill = false) {
-    if (modalMode) return;
+    if (modalMode || speechBubble) return;
     const player = state.player;
     if (skill) {
       if (player.skillCd > 0)
         return toast("서약기가 아직 준비되지 않았습니다.");
-      if (player.mp < 36) return toast("마나가 부족합니다.");
-      player.mp -= 36;
-      player.skillCd = 5.5;
+      const cost = Math.max(
+        20,
+        36 - statValue("wis") - (player.skillRank || 0),
+      );
+      if (player.mp < cost) return toast("마나가 부족합니다.");
+      player.mp -= cost;
+      player.skillCd = Math.max(3.2, 5.5 - (player.skillRank || 0) * 0.24);
     } else {
       if (player.attackCd > 0) return;
-      player.attackCd = 0.34;
+      player.attackCd = Math.max(0.22, 0.34 - statValue("agi") * 0.006);
     }
     attackFlash = skill ? 0.34 : 0.18;
     const range = skill ? 180 : 92;
     const arc = skill ? 1.35 : 0.9;
     const damage = Math.round(
-      totalAtk() * (skill ? 2.4 : 1) + Math.random() * 12,
+      totalAtk() * (skill ? 2.4 + (player.skillRank || 0) * 0.18 : 1) +
+        Math.random() * 12,
     );
     let hitCount = 0;
     state.enemies.forEach((enemy) => {
@@ -1142,12 +1435,19 @@
     });
     if (hitCount && skill)
       showEffect(player.x, player.y - 52, "서약기", "#d08cff");
+    if (hitCount) {
+      player.combo = Math.min(99, (player.combo || 0) + hitCount);
+      player.comboTimer = 4.5;
+      if (player.combo >= 8)
+        showEffect(player.x, player.y - 72, `${player.combo}연격`, "#53e2a8");
+    }
   }
 
   function killEnemy(enemy) {
     const spec = ENEMIES[enemy.type];
-    const xp = Math.round(spec.xp * (enemy.boss ? 4.2 : 1));
-    const gold = Math.round(spec.gold * (enemy.boss ? 3.6 : 1));
+    const comboBonus = 1 + Math.min(0.28, (state.player.combo || 0) * 0.012);
+    const xp = Math.round(spec.xp * (enemy.boss ? 4.2 : 1) * comboBonus);
+    const gold = Math.round(spec.gold * (enemy.boss ? 3.6 : 1) * comboBonus);
     giveReward({ xp, gold });
     const quest = currentQuest();
     if (
@@ -1159,16 +1459,24 @@
     }
     if (Math.random() < 0.22 || quest?.type === "collect") {
       const collectQuest = currentQuest();
+      const rareItem =
+        collectQuest?.type !== "collect" && !enemy.boss && Math.random() < 0.08
+          ? Math.random() < 0.55
+            ? "smallPotion"
+            : "manaDew"
+          : "";
       state.drops.push({
         zone: state.zone,
         x: enemy.x + Math.random() * 38 - 19,
         y: enemy.y + Math.random() * 38 - 19,
-        kind:
-          collectQuest?.type === "collect" && collectQuest.zone === state.zone
+        kind: rareItem
+          ? "item"
+          : collectQuest?.type === "collect" && collectQuest.zone === state.zone
             ? "quest"
             : "gold",
         value: Math.max(8, Math.round(gold * 0.45)),
-        label: collectQuest?.item || "골드",
+        item: rareItem,
+        label: rareItem ? ITEMS[rareItem].name : collectQuest?.item || "골드",
       });
     }
   }
@@ -1182,6 +1490,8 @@
     if (player.hp <= 0) {
       player.hp = Math.round(player.maxHp * 0.62);
       player.mp = Math.round(player.maxMp * 0.55);
+      player.combo = 0;
+      player.comboTimer = 0;
       player.gold = Math.max(
         0,
         player.gold - Math.max(20, Math.round(player.gold * 0.08)),
@@ -1195,17 +1505,21 @@
 
   function interact() {
     if (modalMode) return;
-    const zone = currentZone();
-    const npc = nearestNpc();
-    if (npc && distance(state.player.x, state.player.y, npc.x, npc.y) < 90) {
-      if (npc.shop) return openShop(npc);
-      return talkToNpc(npc);
-    }
-    const portal = zone.portals.find(
-      (item) => distance(state.player.x, state.player.y, item.x, item.y) < 95,
-    );
-    if (portal) return openTravel(portal.to);
+    if (speechBubble) return advanceSpeechBubble();
+    const target = interactionTarget();
+    if (target?.type === "npc") return talkToNpc(target.npc);
+    if (target?.type === "portal") return openTravel(target.portal.to);
     toast("가까운 대상이 없습니다.");
+  }
+
+  function interactionTarget() {
+    const npc = nearestNpc();
+    if (npc && npc.d < 96) return { type: "npc", npc };
+    const portal = currentZone().portals.find(
+      (item) => distance(state.player.x, state.player.y, item.x, item.y) < 105,
+    );
+    if (portal) return { type: "portal", portal };
+    return null;
   }
 
   function nearestNpc() {
@@ -1219,25 +1533,74 @@
 
   function talkToNpc(npc) {
     const quest = currentQuest();
-    if (quest && quest.npc === npc.id) {
-      if (quest.type === "talk" && state.questProgress < quest.required) {
-        state.questProgress = quest.required;
-      }
-      if (questReady(quest)) return advanceQuest();
-      return showDialogue(
-        npc.name,
-        quest.intro.concat([`현재 목표: ${questObjectiveText(quest)}`]),
-        [{ label: "확인", action: closeModal }],
+    if (npc.shop) {
+      return startSpeechBubble(
+        npc,
+        [
+          `${npc.role} ${npc.name}: 필요한 장비와 소모품을 준비해 두었습니다.`,
+          "보스 보상으로 얻은 장비는 가방에서 다시 착용할 수 있습니다.",
+        ],
+        () => openShop(npc),
       );
     }
-    showDialogue(
-      npc.name,
-      [
-        `${npc.role} ${npc.name}: 지금은 ${currentZone().name}의 상황을 살피고 있습니다.`,
-        "퀘스트 목표를 따라가면 다시 도움이 필요할 때가 올 겁니다.",
-      ],
-      [{ label: "닫기", action: closeModal }],
-    );
+    if (quest && quest.npc === npc.id) {
+      if (quest.type === "talk" && state.questProgress < quest.required) {
+        return startSpeechBubble(npc, quest.intro, () => {
+          state.questProgress = quest.required;
+          completeQuest(quest);
+        });
+      }
+      if (questReady(quest))
+        return startSpeechBubble(npc, quest.done, () => completeQuest(quest));
+      return startSpeechBubble(
+        npc,
+        quest.intro.concat([
+          `현재 목표: ${questObjectiveText(quest)}`,
+          `왜 해야 하나: ${quest.reason || "다음 장을 열기 위한 핵심 단계입니다."}`,
+          `예상 보상: ${rewardText(quest.reward)}`,
+        ]),
+      );
+    }
+    startSpeechBubble(npc, [
+      `${npc.role} ${npc.name}: 지금은 ${currentZone().name}의 상황을 살피고 있습니다.`,
+      "퀘스트 목표를 따라가면 다시 도움이 필요할 때가 올 겁니다.",
+    ]);
+  }
+
+  function startSpeechBubble(npc, lines = [], onDone = null) {
+    const speaker = npc || {
+      id: "system",
+      name: "서약",
+      role: "기록",
+      x: state.player.x,
+      y: state.player.y,
+    };
+    speechBubble = {
+      npcId: speaker.id,
+      name: speaker.name || "서약",
+      role: speaker.role || "",
+      x: speaker.x,
+      y: speaker.y,
+      lines: lines.filter(Boolean),
+      index: 0,
+      onDone,
+    };
+  }
+
+  function advanceSpeechBubble() {
+    if (!speechBubble) return false;
+    if (speechBubble.index < speechBubble.lines.length - 1) {
+      speechBubble.index += 1;
+      return true;
+    }
+    const done = speechBubble.onDone;
+    speechBubble = null;
+    done?.();
+    return true;
+  }
+
+  function findNpcById(id) {
+    return currentZone().npc.find((npc) => npc.id === id) || null;
   }
 
   function openShop(npc) {
@@ -1245,22 +1608,21 @@
     const list = SHOPS[npc.shop] || [];
     ui.modal.innerHTML = `
       <h2>${npc.name}의 상점</h2>
-      <p class="rpg-muted">보유 골드: ${state.player.gold}G · 장비는 구매 즉시 착용합니다.</p>
-      <div class="choice-grid">
+      <p class="rpg-muted">보유 골드: ${state.player.gold}G · 장비는 구매 후 가방에 보관되고 즉시 착용됩니다.</p>
+      <div class="item-grid">
         ${list
           .map((id) => {
             const item = ITEMS[id];
-            const stats = [
-              item.atk ? `공격 +${item.atk}` : "",
-              item.def ? `방어 +${item.def}` : "",
-              item.heal ? `HP +${item.heal}` : "",
-              item.mana ? `MP +${item.mana}` : "",
-            ]
-              .filter(Boolean)
-              .join(" · ");
-            return `<button type="button" data-buy="${id}">${item.name} · ${item.price}G ${stats ? `· ${stats}` : ""}</button>`;
+            return `<div class="item-card">
+              <strong>${escapeHtml(item.name)} <span style="color:${rarityInfo(item).color}">[${rarityInfo(item).label}]</span></strong>
+              <span>${escapeHtml(item.desc || "")}</span>
+              <span class="rpg-muted">${itemStatsText(item)}</span>
+              <button type="button" data-buy="${id}">${item.price}G 구매</button>
+            </div>`;
           })
           .join("")}
+      </div>
+      <div class="choice-grid">
         <button type="button" data-close>닫기</button>
       </div>`;
     ui.modalWrap.classList.add("show");
@@ -1291,9 +1653,34 @@
     );
     ui.modal.innerHTML = `
       <h2>가방</h2>
-      <p class="rpg-muted">회복 아이템은 여기서도 사용할 수 있습니다. 장비는 상점에서 구매하면 즉시 착용됩니다.</p>
+      <p class="rpg-muted">소모품은 사용하고, 무기/방어구/부적은 원하는 장비로 바꿔 착용할 수 있습니다.</p>
+      <div class="item-grid">
+        ${
+          inv.length
+            ? inv
+                .map(([id, count]) => {
+                  const item = ITEMS[id] || { name: id, type: "misc" };
+                  const equipped =
+                    state.player.equipment?.[item.type] === id
+                      ? " · 착용 중"
+                      : "";
+                  const action = ["weapon", "armor", "charm"].includes(
+                    item.type,
+                  )
+                    ? `<button type="button" data-equip="${id}">착용</button>`
+                    : `<button type="button" data-use="${id}">사용</button>`;
+                  return `<div class="item-card">
+                    <strong>${escapeHtml(item.name)} x${count}${equipped}</strong>
+                    <span>${escapeHtml(item.desc || "")}</span>
+                    <span class="rpg-muted">${itemStatsText(item)}</span>
+                    ${action}
+                  </div>`;
+                })
+                .join("")
+            : "<p>가방이 비어 있습니다.</p>"
+        }
+      </div>
       <div class="choice-grid">
-        ${inv.length ? inv.map(([id, count]) => `<button type="button" data-use="${id}">${ITEMS[id]?.name || id} x${count}</button>`).join("") : "<p>가방이 비어 있습니다.</p>"}
         <button type="button" data-close>닫기</button>
       </div>`;
     ui.modalWrap.classList.add("show");
@@ -1308,6 +1695,8 @@
       <div class="lines">
         <p><strong>현재:</strong> ${quest ? quest.title : "완료"}</p>
         <p>${questObjectiveText(quest)}</p>
+        ${quest ? `<p><strong>왜 해야 하나:</strong> ${escapeHtml(quest.reason || "다음 장을 열기 위한 핵심 단계입니다.")}</p>` : ""}
+        ${quest ? `<p><strong>예상 보상:</strong> ${rewardText(quest.reward)}</p>` : ""}
         <p>전체 진행: ${Math.min(state.questIndex + 1, QUESTS.length)} / ${QUESTS.length} · 플레이 기록 ${formatTime(state.playSeconds)}</p>
         <p>목표 분량: 최종 장은 ${formatTime(MIN_FINAL_PLAY_SECONDS)} 이상의 플레이 기록을 요구합니다.</p>
         ${finished.length ? `<p><strong>최근 완료</strong><br>${finished.map((item) => item.title).join("<br>")}</p>` : ""}
@@ -1316,11 +1705,93 @@
     ui.modalWrap.classList.add("show");
   }
 
+  function openStats() {
+    modalMode = "stats";
+    const player = state.player;
+    const stats = [
+      ["str", "힘", "공격 피해가 오릅니다."],
+      ["vit", "체력", "최대 HP와 방어 안정성이 오릅니다."],
+      ["wis", "지혜", "최대 MP와 서약기 효율이 오릅니다."],
+      ["agi", "민첩", "이동/공격/회피 흐름이 빨라집니다."],
+    ];
+    ui.modal.innerHTML = `
+      <h2>성장</h2>
+      <p class="rpg-muted">성장 포인트 ${player.statPoints || 0} · 서약 포인트 ${player.skillPoints || 0} · 명성 ${player.renown || 0}</p>
+      <div class="item-grid">
+        ${stats
+          .map(
+            ([id, label, desc]) => `<div class="item-card">
+              <strong>${label} ${statValue(id)}</strong>
+              <span>${desc}</span>
+              <button type="button" data-stat="${id}" ${(player.statPoints || 0) <= 0 ? "disabled" : ""}>+1 투자</button>
+            </div>`,
+          )
+          .join("")}
+        <div class="item-card">
+          <strong>서약기 Lv.${player.skillRank || 0}</strong>
+          <span>서약기의 피해량을 올리고 재사용 대기시간과 MP 부담을 낮춥니다.</span>
+          <button type="button" data-skill-up ${(player.skillPoints || 0) <= 0 ? "disabled" : ""}>서약 포인트 투자</button>
+        </div>
+      </div>
+      <div class="choice-grid"><button type="button" data-close>닫기</button></div>`;
+    ui.modalWrap.classList.add("show");
+  }
+
+  function openJournal() {
+    modalMode = "journal";
+    const entries = (state.journal || []).slice(0, 12);
+    ui.modal.innerHTML = `
+      <h2>서약 서고</h2>
+      <p class="rpg-muted">완료한 장의 기록과 지금까지 왜 싸워왔는지 확인합니다.</p>
+      <div class="lines">
+        ${
+          entries.length
+            ? entries
+                .map(
+                  (entry) =>
+                    `<p><strong>${escapeHtml(entry.title)}</strong>${entry.time ? ` · ${escapeHtml(entry.time)}` : ""}<br>${escapeHtml(entry.text)}</p>`,
+                )
+                .join("")
+            : "<p>아직 기록된 서약이 없습니다.</p>"
+        }
+      </div>
+      <div class="choice-grid"><button type="button" data-close>닫기</button></div>`;
+    ui.modalWrap.classList.add("show");
+  }
+
+  function addStatPoint(stat) {
+    const player = state.player;
+    if ((player.statPoints || 0) <= 0) return;
+    player.baseStats[stat] = (player.baseStats[stat] || 0) + 1;
+    player.statPoints -= 1;
+    if (stat === "vit") {
+      player.maxHp += 18;
+      player.hp = Math.min(player.maxHp, player.hp + 18);
+    }
+    if (stat === "wis") {
+      player.maxMp += 10;
+      player.mp = Math.min(player.maxMp, player.mp + 10);
+    }
+    toast("성장 포인트를 투자했습니다.");
+    openStats();
+  }
+
+  function upgradeSkill() {
+    const player = state.player;
+    if ((player.skillPoints || 0) <= 0) return;
+    player.skillPoints -= 1;
+    player.skillRank = (player.skillRank || 0) + 1;
+    toast("서약기가 강화되었습니다.");
+    openStats();
+  }
+
   function openHelp() {
     showDialogue("사용 방법", [
       "서약의 연대기는 소켓을 사용하지 않는 혼자하기 액션 RPG입니다.",
-      "WASD/방향키로 이동하고 J 또는 Space로 기본 공격, K로 서약기를 사용합니다. E는 NPC 대화, 상점, 포털 이용이고 Ctrl+S는 수동 저장입니다.",
-      "상점에서 물약과 장비를 구매하고, 퀘스트 목표를 따라 지역을 해금하세요. 오른쪽 패널에서 현재 목표와 진행률을 확인할 수 있습니다.",
+      "WASD/방향키로 이동하고 J로 공격합니다. NPC 가까이에서는 Space 또는 E로 말풍선 대화를 진행하고, K는 서약기, Shift는 짧은 회피 대시입니다.",
+      "퀘스트에는 왜 해야 하는지와 예상 보상이 표시됩니다. 화면의 방향선과 미니맵을 보고 NPC, 수집품, 보스 위치로 이동하세요.",
+      "상점에서 물약과 장비를 구매하고, 보스 보상으로 얻은 무기/방어구/부적을 가방에서 바꿔 착용하세요. 성장 메뉴에서 레벨업 포인트를 힘/체력/지혜/민첩과 서약기에 투자할 수 있습니다.",
+      "서고에는 완료한 장의 기록이 쌓여 다음에 이어 할 때도 이야기의 목적을 다시 확인할 수 있습니다.",
       "EXE 또는 로컬 서버에서 실행하면 저장 파일은 사용자 데이터 폴더의 Good_ETC/saves/rpg_save.json에 저장됩니다. 파일로 직접 열면 브라우저 localStorage에 저장됩니다.",
       "최종 장은 5시간 이상의 플레이 기록이 쌓여야 열리도록 설계되어 장기 플레이를 전제로 합니다.",
     ]);
@@ -1354,11 +1825,23 @@
     if (!item) return;
     if (state.player.gold < item.price) return toast("골드가 부족합니다.");
     state.player.gold -= item.price;
-    if (item.type === "weapon") state.player.equipment.weapon = id;
-    else if (item.type === "armor") state.player.equipment.armor = id;
-    else state.player.inventory[id] = (state.player.inventory[id] || 0) + 1;
+    state.player.inventory[id] = Math.max(
+      state.player.inventory[id] || 0,
+      ["weapon", "armor", "charm"].includes(item.type)
+        ? 1
+        : (state.player.inventory[id] || 0) + 1,
+    );
+    if (["weapon", "armor", "charm"].includes(item.type)) equipItem(id);
     toast(`${item.name}을 구매했습니다.`);
     openShop(nearestNpc() || { name: "상점", shop: "apothecary" });
+  }
+
+  function equipItem(id) {
+    const item = ITEMS[id];
+    if (!item || !["weapon", "armor", "charm"].includes(item.type)) return;
+    state.player.equipment[item.type] = id;
+    toast(`${item.name} 착용`);
+    if (modalMode === "inventory") openInventory();
   }
 
   function useItem(id) {
@@ -1377,14 +1860,61 @@
     if (modalMode === "inventory") openInventory();
   }
 
+  function statValue(stat) {
+    return (state.player.baseStats?.[stat] || 0) + itemBonus(stat);
+  }
+
+  function itemBonus(field) {
+    const equipment = state.player.equipment || {};
+    return Object.values(equipment).reduce(
+      (sum, id) => sum + (ITEMS[id]?.[field] || 0),
+      0,
+    );
+  }
+
   function totalAtk() {
-    const weapon = ITEMS[state.player.equipment.weapon];
-    return state.player.atk + (weapon?.atk || 0);
+    return (
+      state.player.atk +
+      itemBonus("atk") +
+      Math.floor(statValue("str") * 1.8) +
+      Math.floor(statValue("agi") * 0.6)
+    );
   }
 
   function totalDef() {
-    const armor = ITEMS[state.player.equipment.armor];
-    return state.player.def + (armor?.def || 0);
+    return (
+      state.player.def + itemBonus("def") + Math.floor(statValue("vit") * 1.4)
+    );
+  }
+
+  function rarityInfo(item) {
+    return RARITY[item?.rarity || "common"] || RARITY.common;
+  }
+
+  function itemStatsText(item = {}) {
+    return [
+      item.atk ? `공격 +${item.atk}` : "",
+      item.def ? `방어 +${item.def}` : "",
+      item.str ? `힘 +${item.str}` : "",
+      item.vit ? `체력 +${item.vit}` : "",
+      item.wis ? `지혜 +${item.wis}` : "",
+      item.agi ? `민첩 +${item.agi}` : "",
+      item.heal ? `HP +${item.heal}` : "",
+      item.mana ? `MP +${item.mana}` : "",
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  }
+
+  function rewardText(reward = {}) {
+    return [
+      reward.xp ? `경험치 ${reward.xp}` : "",
+      reward.gold ? `골드 ${reward.gold}` : "",
+      reward.item ? ITEMS[reward.item]?.name || reward.item : "",
+      reward.renown ? `명성 ${reward.renown}` : "",
+    ]
+      .filter(Boolean)
+      .join(" · ");
   }
 
   function renderHud() {
@@ -1401,9 +1931,12 @@
       <span>골드<br><strong>${player.gold}G</strong></span>
       <span>공격<br><strong>${totalAtk()}</strong></span>
       <span>방어<br><strong>${totalDef()}</strong></span>
+      <span>연격<br><strong>${player.combo || 0}</strong></span>
+      <span>성장<br><strong>${player.statPoints || 0}P</strong></span>
+      <span>서약기<br><strong>Lv.${player.skillRank || 0}</strong></span>
       <span>기록<br><strong>${formatTime(state.playSeconds)}</strong></span>`;
     ui.quest.innerHTML = quest
-      ? `<h2>${quest.title}</h2><p>${questObjectiveText(quest)}</p><p class="rpg-muted">${quest.intro[0]}</p>`
+      ? `<h2>${quest.title}</h2><p>${questObjectiveText(quest)}</p><p class="rpg-muted">${quest.reason || quest.intro[0]}</p><p class="rpg-muted">보상: ${rewardText(quest.reward)}</p>`
       : "<h2>완료</h2><p>모든 장을 완료했습니다.</p>";
     const inv = Object.entries(player.inventory).filter(
       ([, count]) => count > 0,
@@ -1415,6 +1948,12 @@
           `<span class="rpg-pill">${ITEMS[id]?.name || id} x${count}</span>`,
       )
       .join("");
+    const equipped = ["weapon", "armor", "charm"]
+      .map((slot) => ITEMS[player.equipment?.[slot]]?.name)
+      .filter(Boolean)
+      .join(" · ");
+    if (equipped)
+      ui.inventory.innerHTML += `<span class="rpg-pill">착용: ${equipped}</span>`;
   }
 
   function resize() {
@@ -1436,14 +1975,17 @@
     ctx.scale(camera.scale, camera.scale);
     ctx.translate(-camera.x, -camera.y);
     drawWorld();
+    drawQuestCompass();
     drawDrops();
     drawPortals();
     drawNpcs();
     drawEnemies();
     drawPlayer();
     drawEffects();
+    drawSpeechBubble();
     ctx.restore();
     drawMinimap();
+    drawBossBar();
     renderHud();
     requestAnimationFrame(draw);
   }
@@ -1493,6 +2035,164 @@
       ctx.ellipse(x, y, 18 + (i % 5) * 7, 8 + (i % 3) * 4, i, 0, Math.PI * 2);
       ctx.fill();
     }
+    drawZoneLandmarks(zone);
+    drawWeather(zone);
+  }
+
+  function drawZoneLandmarks(zone) {
+    ctx.save();
+    ctx.globalAlpha = 0.78;
+    ctx.strokeStyle = `${zone.accent}55`;
+    ctx.lineWidth = 18;
+    ctx.setLineDash([42, 28]);
+    ctx.beginPath();
+    ctx.moveTo(160, zone.h * 0.52);
+    ctx.bezierCurveTo(
+      zone.w * 0.28,
+      zone.h * 0.34,
+      zone.w * 0.58,
+      zone.h * 0.72,
+      zone.w - 160,
+      zone.h * 0.5,
+    );
+    ctx.stroke();
+    ctx.setLineDash([]);
+    const seed = zone.id
+      .split("")
+      .reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
+    for (let i = 0; i < 34; i += 1) {
+      const x = ((seed * 97 + i * 311) % (zone.w - 180)) + 90;
+      const y = ((seed * 53 + i * 197) % (zone.h - 180)) + 90;
+      if (zone.id === "lumen") drawBuilding(x, y, zone.accent);
+      else if (zone.id === "greenwood") drawTreeCluster(x, y, zone.accent);
+      else if (zone.id === "saltwind") drawDockCrate(x, y, zone.accent);
+      else if (zone.id === "embermine") drawMineDetail(x, y, zone.accent);
+      else if (zone.id === "snowveil") drawSnowStone(x, y, zone.accent);
+      else if (zone.id === "veilkeep") drawKeepPillar(x, y, zone.accent);
+      else if (zone.id === "eclipse") drawCrystal(x, y, zone.accent);
+      else drawRuneCircle(x, y, zone.accent);
+    }
+    ctx.restore();
+  }
+
+  function drawBuilding(x, y, color) {
+    ctx.fillStyle = "rgba(9,18,31,.62)";
+    ctx.fillRect(x - 34, y - 24, 68, 52);
+    ctx.fillStyle = `${color}55`;
+    ctx.beginPath();
+    ctx.moveTo(x - 44, y - 24);
+    ctx.lineTo(x, y - 58);
+    ctx.lineTo(x + 44, y - 24);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function drawTreeCluster(x, y, color) {
+    ctx.fillStyle = "rgba(12,30,22,.72)";
+    ctx.fillRect(x - 6, y - 10, 12, 34);
+    ctx.fillStyle = `${color}88`;
+    [-18, 0, 18].forEach((offset) => {
+      ctx.beginPath();
+      ctx.arc(x + offset, y - 20, 22, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+
+  function drawDockCrate(x, y, color) {
+    ctx.fillStyle = "rgba(7,24,38,.66)";
+    ctx.fillRect(x - 40, y - 8, 80, 16);
+    ctx.fillStyle = `${color}77`;
+    ctx.fillRect(x - 22, y - 34, 44, 30);
+    ctx.strokeStyle = "rgba(255,255,255,.18)";
+    ctx.strokeRect(x - 22, y - 34, 44, 30);
+  }
+
+  function drawMineDetail(x, y, color) {
+    ctx.strokeStyle = `${color}66`;
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(x - 38, y + 28);
+    ctx.lineTo(x + 38, y - 28);
+    ctx.stroke();
+    ctx.fillStyle = "rgba(255,122,62,.2)";
+    ctx.beginPath();
+    ctx.arc(x, y, 22, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function drawSnowStone(x, y, color) {
+    ctx.fillStyle = "rgba(240,249,255,.18)";
+    ctx.beginPath();
+    ctx.ellipse(x, y, 36, 18, -0.4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = `${color}77`;
+    ctx.stroke();
+  }
+
+  function drawKeepPillar(x, y, color) {
+    ctx.fillStyle = "rgba(25,25,48,.72)";
+    ctx.fillRect(x - 14, y - 54, 28, 88);
+    ctx.fillStyle = `${color}55`;
+    ctx.fillRect(x - 28, y - 62, 56, 14);
+  }
+
+  function drawCrystal(x, y, color) {
+    ctx.fillStyle = `${color}66`;
+    ctx.beginPath();
+    ctx.moveTo(x, y - 48);
+    ctx.lineTo(x + 24, y - 6);
+    ctx.lineTo(x + 8, y + 38);
+    ctx.lineTo(x - 24, y + 4);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function drawRuneCircle(x, y, color) {
+    ctx.strokeStyle = `${color}88`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(x, y, 36, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = `${color}55`;
+    ctx.fillRect(x - 4, y - 28, 8, 56);
+  }
+
+  function drawWeather(zone) {
+    const now = performance.now() / 1000;
+    const kind =
+      zone.id === "snowveil"
+        ? "snow"
+        : zone.id === "embermine"
+          ? "ember"
+          : zone.id === "greenwood"
+            ? "leaf"
+            : zone.id === "eclipse"
+              ? "ash"
+              : "";
+    if (!kind) return;
+    for (let i = 0; i < 42; i += 1) {
+      const x = (i * 173 + now * (kind === "snow" ? 36 : 58)) % zone.w;
+      const y = (i * 251 + now * (kind === "snow" ? 62 : 34)) % zone.h;
+      ctx.fillStyle =
+        kind === "snow"
+          ? "rgba(235,250,255,.55)"
+          : kind === "ember"
+            ? "rgba(255,186,90,.45)"
+            : kind === "leaf"
+              ? "rgba(139,230,111,.35)"
+              : "rgba(208,140,255,.28)";
+      ctx.beginPath();
+      ctx.ellipse(
+        x,
+        y,
+        kind === "snow" ? 3 : 5,
+        kind === "leaf" ? 9 : 3,
+        now + i,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+    }
   }
 
   function drawPortals() {
@@ -1521,12 +2221,28 @@
       ctx.save();
       ctx.translate(npc.x, npc.y);
       drawShadow(0, 20, 28);
-      ctx.fillStyle = npc.shop ? "#ffba5a" : "#53e2a8";
-      ctx.fillRect(-14, -34, 28, 54);
+      const near = distance(state.player.x, state.player.y, npc.x, npc.y) < 96;
+      ctx.fillStyle = npc.shop ? "#ffba5a" : currentZone().accent;
+      ctx.beginPath();
+      ctx.roundRect(-18, -36, 36, 58, 8);
+      ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,.2)";
+      ctx.fillRect(-14, -28, 28, 9);
       ctx.fillStyle = "#f8dcc4";
       ctx.beginPath();
       ctx.arc(0, -44, 14, 0, Math.PI * 2);
       ctx.fill();
+      ctx.fillStyle = npc.shop ? "#7a4218" : "#263a4d";
+      ctx.fillRect(-12, -56, 24, 7);
+      if (near) {
+        ctx.strokeStyle = `${currentZone().accent}cc`;
+        ctx.lineWidth = 3;
+        ctx.setLineDash([6, 5]);
+        ctx.beginPath();
+        ctx.arc(0, -10, 48, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
       ctx.fillStyle = "#eef6ff";
       ctx.font = "800 14px Malgun Gothic, sans-serif";
       ctx.textAlign = "center";
@@ -1534,6 +2250,11 @@
       ctx.fillStyle = "#a8bdd5";
       ctx.font = "12px Malgun Gothic, sans-serif";
       ctx.fillText(npc.shop ? "상점" : npc.role, 0, 38);
+      if (near) {
+        ctx.fillStyle = "#fff7b3";
+        ctx.font = "900 12px Malgun Gothic, sans-serif";
+        ctx.fillText("Space/E", 0, 56);
+      }
       ctx.restore();
     });
   }
@@ -1563,6 +2284,15 @@
       ctx.save();
       ctx.translate(enemy.x, enemy.y);
       drawShadow(0, 22, enemy.boss ? 44 : 30);
+      if (enemy.windup > 0) {
+        ctx.strokeStyle = "rgba(255,95,109,.72)";
+        ctx.fillStyle = "rgba(255,95,109,.14)";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(0, -8, enemy.boss ? 76 : 54, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
       ctx.fillStyle = enemy.hit > 0 ? "#fff" : enemy.color;
       ctx.beginPath();
       ctx.roundRect(
@@ -1576,6 +2306,18 @@
       ctx.strokeStyle = "rgba(0,0,0,.36)";
       ctx.lineWidth = 4;
       ctx.stroke();
+      ctx.fillStyle = "rgba(255,255,255,.26)";
+      ctx.fillRect(
+        enemy.boss ? -20 : -14,
+        enemy.boss ? -34 : -24,
+        enemy.boss ? 40 : 28,
+        9,
+      );
+      ctx.fillStyle = "#101827";
+      ctx.beginPath();
+      ctx.arc(-8, enemy.boss ? -16 : -12, 3, 0, Math.PI * 2);
+      ctx.arc(10, enemy.boss ? -16 : -12, 3, 0, Math.PI * 2);
+      ctx.fill();
       ctx.fillStyle = "#111827";
       ctx.fillRect(-24, -58, 48, 6);
       ctx.fillStyle = "#ff5f6d";
@@ -1604,17 +2346,36 @@
       ctx.stroke();
       ctx.setLineDash([]);
     }
+    if (p.dashTime > 0) {
+      ctx.strokeStyle = "rgba(72,165,255,.45)";
+      ctx.lineWidth = 8;
+      ctx.beginPath();
+      ctx.moveTo(-p.dashVx * 70, -p.dashVy * 70 - 6);
+      ctx.lineTo(0, -6);
+      ctx.stroke();
+    }
     ctx.rotate(p.facing);
-    ctx.fillStyle = "#263a4d";
-    ctx.fillRect(-14, -24, 30, 48);
-    ctx.fillStyle = "#53e2a8";
-    ctx.fillRect(-6, -32, 12, 18);
+    ctx.fillStyle = "#1c293d";
+    ctx.beginPath();
+    ctx.roundRect(-18, -28, 36, 54, 8);
+    ctx.fill();
+    ctx.fillStyle = currentZone().accent;
+    ctx.fillRect(-8, -34, 16, 20);
+    ctx.fillStyle = "#d08cff";
+    ctx.fillRect(-18, -10, 7, 26);
+    ctx.fillRect(11, -10, 7, 26);
     ctx.fillStyle = "#d9b08c";
     ctx.beginPath();
     ctx.arc(0, -42, 13, 0, Math.PI * 2);
     ctx.fill();
+    ctx.fillStyle = "#2c1f31";
+    ctx.beginPath();
+    ctx.arc(0, -47, 14, Math.PI, Math.PI * 2);
+    ctx.fill();
     ctx.fillStyle = "#eef6ff";
-    ctx.fillRect(18, -5, 45, 7);
+    ctx.beginPath();
+    ctx.roundRect(18, -5, 46, 7, 4);
+    ctx.fill();
     if (attackFlash > 0) {
       attackFlash = Math.max(0, attackFlash - 0.04);
       ctx.strokeStyle = "rgba(248,248,113,.75)";
@@ -1624,6 +2385,68 @@
       ctx.stroke();
     }
     ctx.restore();
+  }
+
+  function drawQuestCompass() {
+    const target = questTarget();
+    if (!target) return;
+    const player = state.player;
+    ctx.save();
+    ctx.strokeStyle = "rgba(248,248,113,.42)";
+    ctx.fillStyle = "rgba(248,248,113,.2)";
+    ctx.lineWidth = 3;
+    ctx.setLineDash([16, 12]);
+    ctx.beginPath();
+    ctx.moveTo(player.x, player.y - 24);
+    ctx.lineTo(target.x, target.y - 24);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    const pulse = 1 + Math.sin(performance.now() / 220) * 0.12;
+    ctx.beginPath();
+    ctx.arc(target.x, target.y - 28, 42 * pulse, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = currentZone().accent;
+    ctx.stroke();
+    ctx.fillStyle = "#fff7b3";
+    ctx.font = "900 14px Malgun Gothic, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(target.label, target.x, target.y - 78);
+    ctx.restore();
+  }
+
+  function questTarget() {
+    const quest = currentQuest();
+    if (!quest) return null;
+    if (quest.zone !== state.zone) {
+      const direct = currentZone().portals.find(
+        (portal) => portal.to === quest.zone,
+      );
+      const portal = direct || currentZone().portals[0];
+      return portal
+        ? {
+            x: portal.x,
+            y: portal.y,
+            label: `${zoneMap[quest.zone]?.name || "다음 지역"} 방향`,
+          }
+        : null;
+    }
+    if (quest.type === "talk") {
+      const npc = findNpcById(quest.npc);
+      return npc ? { x: npc.x, y: npc.y, label: `${npc.name}와 대화` } : null;
+    }
+    if (quest.type === "collect") {
+      const drop = state.drops.find(
+        (item) => item.zone === state.zone && item.kind === "quest",
+      );
+      if (drop) return { x: drop.x, y: drop.y, label: quest.item };
+      const anyEnemy = state.enemies[0];
+      if (anyEnemy)
+        return { x: anyEnemy.x, y: anyEnemy.y, label: "수집품 단서" };
+    }
+    const enemy = state.enemies.find((item) => item.type === quest.enemy);
+    if (enemy) return { x: enemy.x, y: enemy.y, label: enemy.name };
+    const npc = findNpcById(quest.npc);
+    return npc ? { x: npc.x, y: npc.y, label: "의뢰인" } : null;
   }
 
   function drawEffects() {
@@ -1636,6 +2459,80 @@
       ctx.fillText(effect.text, effect.x, effect.y - (1 - effect.ttl) * 36);
       ctx.restore();
     });
+  }
+
+  function drawSpeechBubble() {
+    if (!speechBubble) return;
+    const npc = findNpcById(speechBubble.npcId);
+    const x = npc?.x ?? speechBubble.x ?? state.player.x;
+    const y = npc?.y ?? speechBubble.y ?? state.player.y;
+    const line = speechBubble.lines[speechBubble.index] || "";
+    const lines = wrapCanvasText(line, 320);
+    const width = 360;
+    const height = 68 + lines.length * 22;
+    const bx = x - width / 2;
+    const by = y - 150 - lines.length * 8;
+    ctx.save();
+    ctx.fillStyle = "rgba(8,17,30,.94)";
+    ctx.strokeStyle = `${currentZone().accent}cc`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(bx, by, width, height, 8);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x - 12, by + height);
+    ctx.lineTo(x, by + height + 18);
+    ctx.lineTo(x + 12, by + height);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = currentZone().accent;
+    ctx.font = "900 14px Malgun Gothic, sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText(
+      `${speechBubble.name}${speechBubble.role ? ` · ${speechBubble.role}` : ""}`,
+      bx + 18,
+      by + 24,
+    );
+    ctx.fillStyle = "#eef6ff";
+    ctx.font = "700 16px Malgun Gothic, sans-serif";
+    lines.forEach((text, index) =>
+      ctx.fillText(text, bx + 18, by + 54 + index * 22),
+    );
+    ctx.fillStyle = "#a8bdd5";
+    ctx.font = "12px Malgun Gothic, sans-serif";
+    ctx.textAlign = "right";
+    ctx.fillText("Space/E 다음", bx + width - 18, by + height - 14);
+    ctx.restore();
+  }
+
+  function drawBossBar() {
+    const boss = state.enemies.find((enemy) => enemy.boss);
+    if (!boss) return;
+    const width = Math.min(620, window.innerWidth - 40);
+    const x = (window.innerWidth - width) / 2;
+    const y = 18;
+    ctx.save();
+    ctx.fillStyle = "rgba(9,18,31,.84)";
+    ctx.strokeStyle = "rgba(255,255,255,.18)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(x, y, width, 38, 8);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#ff5f6d";
+    ctx.fillRect(
+      x + 12,
+      y + 22,
+      (width - 24) * Math.max(0, boss.hp / boss.maxHp),
+      8,
+    );
+    ctx.fillStyle = "#eef6ff";
+    ctx.font = "900 15px Malgun Gothic, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(boss.name, x + width / 2, y + 16);
+    ctx.restore();
   }
 
   function drawMinimap() {
@@ -1733,6 +2630,23 @@
     );
   }
 
+  function wrapCanvasText(text, maxWidth) {
+    const words = String(text || "").split(" ");
+    const lines = [];
+    let line = "";
+    words.forEach((word) => {
+      const test = line ? `${line} ${word}` : word;
+      if (ctx.measureText(test).width > maxWidth && line) {
+        lines.push(line);
+        line = word;
+      } else {
+        line = test;
+      }
+    });
+    if (line) lines.push(line);
+    return lines.length ? lines : [""];
+  }
+
   function bindEvents() {
     window.addEventListener("resize", resize);
     window.addEventListener("keydown", (event) => {
@@ -1745,17 +2659,28 @@
           "arrowright",
           " ",
           "spacebar",
+          "shift",
         ].includes(key) ||
         ((event.ctrlKey || event.metaKey) && key === "s")
       )
         event.preventDefault();
       keys.add(key);
+      if ((key === " " || key === "e") && speechBubble) {
+        advanceSpeechBubble();
+        return;
+      }
+      if (key === " " && interactionTarget()) {
+        interact();
+        return;
+      }
       if (key === "j" || key === " ") attack(false);
       if (key === "k") attack(true);
       if (key === "e") interact();
+      if (key === "shift") dash();
       if (key === "1") useItem("smallPotion");
       if (key === "i") openInventory();
       if (key === "q") openQuestLog();
+      if (key === "g") openStats();
       if (key === "m") openTravel();
       if (key === "h" || key === "?") openHelp();
       if (key === "s" && (event.ctrlKey || event.metaKey)) saveGame(true);
@@ -1778,6 +2703,8 @@
     document.getElementById("rpgSave").onclick = () => saveGame(true);
     document.getElementById("rpgQuest").onclick = openQuestLog;
     document.getElementById("rpgBag").onclick = openInventory;
+    document.getElementById("rpgStatsButton").onclick = openStats;
+    document.getElementById("rpgJournal").onclick = openJournal;
     document.getElementById("rpgHelp").onclick = openHelp;
     ui.modal.addEventListener("click", (event) => {
       const button = event.target.closest("button");
@@ -1789,6 +2716,9 @@
       }
       if (button.dataset.buy) buyItem(button.dataset.buy);
       if (button.dataset.use) useItem(button.dataset.use);
+      if (button.dataset.equip) equipItem(button.dataset.equip);
+      if (button.dataset.stat) addStatPoint(button.dataset.stat);
+      if (button.dataset.skillUp !== undefined) upgradeSkill();
       if (button.dataset.travel) {
         const zoneId = button.dataset.travel;
         closeModal();
