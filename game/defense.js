@@ -1,7 +1,7 @@
 (() => {
   const params = new URLSearchParams(window.location.search);
   const isSolo = ["solo", "local"].includes(params.get("mode") || "");
-  const assetVersion = params.get("v") || "20260530z";
+  const assetVersion = params.get("v") || "20260530ae";
   const world = { width: 1536, height: 960, cell: 24, columns: 64, rows: 40 };
   let defenseMaps = {
     classic: {
@@ -80,8 +80,10 @@
       damage: 13,
       cooldown: 1.15,
       splash: 58,
+      burn: 2.4,
+      burnDps: 8,
       color: "#ffba5a",
-      desc: "범위 피해",
+      desc: "범위 피해와 화상",
     },
     sniper: {
       name: "저격",
@@ -89,8 +91,10 @@
       range: 230,
       damage: 55,
       cooldown: 1.7,
+      mark: 2.6,
+      markBonus: 0.22,
       color: "#c8f7ff",
-      desc: "긴 사거리 고화력",
+      desc: "긴 사거리와 취약 표식",
     },
     boost: {
       name: "증폭기",
@@ -148,7 +152,8 @@
       </div>
       <div class="defense-help hidden" id="defenseHelp">
         <p>타워를 선택한 뒤 경로가 아닌 칸을 클릭해 배치합니다. 방장은 첫 웨이브를 시작하고, 이후에는 준비 시간이 끝나면 자동으로 다음 웨이브가 시작됩니다.</p>
-        <p>자원은 개인별로 관리되며 자신의 타워만 업그레이드하거나 판매할 수 있습니다. 증폭기는 주변 타워의 공격 효율을 높입니다.</p>
+        <p>자원은 개인별로 관리되며 자신의 타워만 업그레이드하거나 판매할 수 있습니다. 폭발 타워는 화상, 저격 타워는 취약 표식을 남기고, 증폭기는 주변 타워의 공격 효율을 높입니다.</p>
+        <p>보스는 체력이 낮아지면 격노해 더 빠르게 이동하고 기지 피해가 커집니다. 화상, 표식, 보호막, 격노 링을 보고 우선순위를 조정하세요.</p>
         <p>맵은 1웨이브 시작 전, 타워 배치 전에만 변경할 수 있습니다. 멀티는 같은 방 참가자와 동기화되고, 혼자하기는 서버 없이 현재 브라우저 또는 EXE 안에서 실행됩니다.</p>
       </div>
     </section>
@@ -1024,6 +1029,11 @@
       maxShield: shield,
       baseDamage,
       slowUntil: 0,
+      burnUntil: 0,
+      burnDps: 0,
+      markedUntil: 0,
+      markBonus: 0,
+      enraged: false,
     });
   }
 
@@ -1031,7 +1041,30 @@
     const reached = [];
     state.enemies.forEach((enemy) => {
       enemy.slowUntil = Math.max(0, (enemy.slowUntil || 0) - dt);
-      let remaining = enemy.speed * (enemy.slowUntil > 0 ? 0.55 : 1) * dt;
+      enemy.markedUntil = Math.max(0, (enemy.markedUntil || 0) - dt);
+      if ((enemy.burnUntil || 0) > 0) {
+        enemy.burnUntil = Math.max(0, (enemy.burnUntil || 0) - dt);
+        damageLocalEnemy(enemy, (enemy.burnDps || 0) * dt, { showHit: false });
+        if (!state.enemies.includes(enemy)) return;
+      }
+      if (
+        enemy.type === "boss" &&
+        !enemy.enraged &&
+        enemy.health / Math.max(1, enemy.maxHealth) <= 0.45
+      ) {
+        enemy.enraged = true;
+        addDefenseEffect({
+          x: enemy.x,
+          y: enemy.y,
+          kind: "rage",
+          color: "#ff5f6d",
+          ttl: 1,
+          text: "격노",
+        });
+      }
+      let speed = enemy.speed * (enemy.slowUntil > 0 ? 0.55 : 1);
+      if (enemy.enraged) speed *= 1.22;
+      let remaining = speed * dt;
       while (remaining > 0 && enemy.segment < pathPixels.length - 1) {
         const target = pathPixels[enemy.segment + 1];
         const distance = Math.hypot(target.x - enemy.x, target.y - enemy.y);
@@ -1052,17 +1085,15 @@
     });
     reached.forEach((enemy) => {
       state.enemies = state.enemies.filter((item) => item !== enemy);
-      state.baseHealth = Math.max(
-        0,
-        state.baseHealth - (enemy.baseDamage || 1),
-      );
+      const damage = (enemy.baseDamage || 1) + (enemy.enraged ? 1 : 0);
+      state.baseHealth = Math.max(0, state.baseHealth - damage);
       addDefenseEffect({
         x: enemy.x,
         y: enemy.y,
         kind: "base_hit",
         color: "#ff5f6d",
         ttl: 0.9,
-        text: `-${enemy.baseDamage || 1}`,
+        text: `-${damage}`,
       });
     });
   }
@@ -1104,8 +1135,23 @@
               config.splash,
           )
         : [target];
-      targets.forEach((enemy) => damageLocalEnemy(enemy, damage));
+      targets.forEach((enemy) => {
+        applyLocalDefenseStatus(enemy, config);
+        damageLocalEnemy(enemy, damage);
+      });
     });
+  }
+
+  function applyLocalDefenseStatus(enemy, config) {
+    if (!state.enemies.includes(enemy)) return;
+    if (config.burn) {
+      enemy.burnUntil = Math.max(enemy.burnUntil || 0, config.burn);
+      enemy.burnDps = Math.max(enemy.burnDps || 0, config.burnDps || 0);
+    }
+    if (config.mark) {
+      enemy.markedUntil = Math.max(enemy.markedUntil || 0, config.mark);
+      enemy.markBonus = Math.max(enemy.markBonus || 0, config.markBonus || 0);
+    }
   }
 
   function localTowerBoostMultiplier(tower) {
@@ -1124,34 +1170,37 @@
     }, 1);
   }
 
-  function damageLocalEnemy(enemy, damage) {
+  function damageLocalEnemy(enemy, damage, options = {}) {
     if (!state.enemies.includes(enemy)) return;
+    if ((enemy.markedUntil || 0) > 0) damage *= 1 + (enemy.markBonus || 0);
     if (enemy.shield > 0) {
       const absorbed = Math.min(enemy.shield, damage);
       enemy.shield -= absorbed;
       damage -= absorbed;
       if (damage <= 0) {
-        addDefenseEffect({
-          x: enemy.x,
-          y: enemy.y,
-          kind: "shield",
-          color: "#6fe8ff",
-          ttl: 0.45,
-          text: "SHIELD",
-        });
+        if (options.showHit !== false)
+          addDefenseEffect({
+            x: enemy.x,
+            y: enemy.y,
+            kind: "shield",
+            color: "#6fe8ff",
+            ttl: 0.45,
+            text: "SHIELD",
+          });
         return;
       }
     }
     enemy.health -= damage;
     if (enemy.health > 0) {
-      addDefenseEffect({
-        x: enemy.x,
-        y: enemy.y,
-        kind: "hit",
-        color: "#f8f871",
-        ttl: 0.35,
-        text: `-${Math.round(damage)}`,
-      });
+      if (options.showHit !== false)
+        addDefenseEffect({
+          x: enemy.x,
+          y: enemy.y,
+          kind: "hit",
+          color: "#f8f871",
+          ttl: 0.35,
+          text: `-${Math.round(damage)}`,
+        });
       return;
     }
     state.enemies = state.enemies.filter((item) => item !== enemy);
@@ -1639,8 +1688,15 @@
       Math.PI * 2,
     );
     ctx.fill();
-    ctx.fillStyle =
-      enemy.slowed || enemy.slowUntil > 0 ? "#88e66f" : config.color;
+    ctx.fillStyle = enemy.enraged
+      ? "#ff5f6d"
+      : enemy.burning || enemy.burnUntil > 0
+        ? "#ffba5a"
+        : enemy.marked || enemy.markedUntil > 0
+          ? "#c8f7ff"
+          : enemy.slowed || enemy.slowUntil > 0
+            ? "#88e66f"
+            : config.color;
     ctx.beginPath();
     if (enemy.type === "runner") {
       ctx.ellipse(
@@ -1697,6 +1753,45 @@
     ctx.fill();
     ctx.restore();
     ctx.restore();
+    if (enemy.enraged) {
+      ctx.strokeStyle = "rgba(255,95,109,.85)";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(
+        enemy.x,
+        enemy.y,
+        size / 2 + 12 + Math.sin(performance.now() / 120) * 3,
+        0,
+        Math.PI * 2,
+      );
+      ctx.stroke();
+    }
+    if (enemy.burning || enemy.burnUntil > 0) {
+      ctx.fillStyle = "rgba(255,186,90,.78)";
+      for (let ember = 0; ember < 3; ember += 1) {
+        const angle = performance.now() / 260 + ember * 2.1;
+        ctx.beginPath();
+        ctx.arc(
+          enemy.x + Math.cos(angle) * (size * 0.28),
+          enemy.y - size * 0.5 + Math.sin(angle) * 4,
+          3.4,
+          0,
+          Math.PI * 2,
+        );
+        ctx.fill();
+      }
+    }
+    if (enemy.marked || enemy.markedUntil > 0) {
+      ctx.strokeStyle = "rgba(200,247,255,.88)";
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(enemy.x, enemy.y, size / 2 + 10, 0, Math.PI * 2);
+      ctx.moveTo(enemy.x - size / 2 - 14, enemy.y);
+      ctx.lineTo(enemy.x - size / 2 - 4, enemy.y);
+      ctx.moveTo(enemy.x + size / 2 + 4, enemy.y);
+      ctx.lineTo(enemy.x + size / 2 + 14, enemy.y);
+      ctx.stroke();
+    }
     if (enemy.shield > 0) {
       const shieldRatio = Math.max(
         0.15,
@@ -1782,11 +1877,13 @@
       ctx.beginPath();
       ctx.arc(effect.x, effect.y, 10 + (1 - alpha) * 16, 0, Math.PI * 2);
       ctx.fill();
-    } else if (["kill", "base_hit"].includes(effect.kind)) {
+    } else if (["kill", "base_hit", "rage"].includes(effect.kind)) {
       ctx.fillStyle =
         effect.kind === "base_hit"
           ? `rgba(255,95,109,${0.24 * alpha})`
-          : `rgba(255,209,102,${0.22 * alpha})`;
+          : effect.kind === "rage"
+            ? `rgba(255,95,109,${0.24 * alpha})`
+            : `rgba(255,209,102,${0.22 * alpha})`;
       ctx.beginPath();
       ctx.arc(effect.x, effect.y, 24 + (1 - alpha) * 24, 0, Math.PI * 2);
       ctx.fill();

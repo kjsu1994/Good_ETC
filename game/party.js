@@ -2,13 +2,13 @@
   const params = new URLSearchParams(window.location.search);
   const gameKey = params.get("game") || "kart";
   const isSolo = ["solo", "local"].includes(params.get("mode") || "");
-  const assetVersion = params.get("v") || "20260530z";
+  const assetVersion = params.get("v") || "20260530ae";
   const world = { width: 2600, height: 1600 };
   const gameTypes = {
     kart: {
       name: "카트 랠리",
-      goal: "체크포인트를 따라 3바퀴를 가장 먼저 완주하세요.",
-      action: "Space: 드리프트 · 키를 떼면 미니부스터",
+      goal: "체크포인트를 따라 3바퀴를 돌며 부스터 패드와 니트로로 추월하세요.",
+      action: "Space: 드리프트 · 부스터 패드/니트로 활용",
       accent: "#42d7ff",
       track: [
         [320, 820],
@@ -23,20 +23,20 @@
     },
     bomb: {
       name: "폭탄 그리드",
-      goal: "폭탄을 설치해 상대를 맞히고 오래 살아남으세요.",
-      action: "Space: 폭탄 설치",
+      goal: "블록을 부수고 파워업을 모아 더 큰 연쇄폭발로 상대를 압박하세요.",
+      action: "Space: 폭탄 설치 · 화력/폭탄수/속도 파워업",
       accent: "#ffba5a",
     },
     snake: {
       name: "스네이크 배틀",
-      goal: "먹이를 모아 길어지고 벽과 꼬리를 피하며 순간 질주로 빈틈을 빠져나가세요.",
-      action: "방향키/WASD: 방향 전환 · Space: 순간 질주",
+      goal: "먹이를 모아 길어지고 실드와 보너스 먹이로 위기 상황을 뒤집으세요.",
+      action: "방향키/WASD: 방향 전환 · Space: 순간 질주 · 실드: 충돌 1회 방어",
       accent: "#8be66f",
     },
     coin: {
       name: "코인 러시",
-      goal: "움직이는 위험 구역을 피해 코인과 보석을 모으고 실드로 위기를 버티세요.",
-      action: "Space: 짧은 대시 · 실드: 위험 구역 1회 방어",
+      goal: "위험 구역을 피하며 콤보, 자석, 피버로 코인과 보석을 몰아 모으세요.",
+      action: "Space: 짧은 대시 · 자석/피버/실드 아이템 활용",
       accent: "#d08cff",
     },
   };
@@ -182,7 +182,14 @@
       boosted: false,
       drifting: false,
       driftCharge: 0,
+      padCooldowns: {},
       shield: 0,
+      bombPower: 0,
+      bombLimit: 1,
+      combo: 0,
+      comboTimer: 0,
+      magnet: 0,
+      frenzy: 0,
       cooldown: 0,
       isHost: true,
     };
@@ -205,6 +212,7 @@
       scores: [],
       players: [player, ...bots],
       pickups: seedLocalPickups(),
+      boostPads: game === "kart" ? kartBoostPads(config.track || []) : [],
       bombs: [],
       blocks: seedLocalBlocks(),
       hazards: [],
@@ -223,27 +231,26 @@
   function createLocalPickup() {
     let kind = "coin";
     let value = 1;
-    if (game === "kart" && Math.random() < 0.35) {
-      kind = "boost";
+    if (game === "kart") {
+      ({ kind, value } = randomKartPickup());
     } else if (game === "snake") {
       const roll = Math.random();
-      if (roll < 0.16) {
+      if (roll < 0.12) {
         kind = "boost";
         value = 2;
-      } else if (roll < 0.3) {
+      } else if (roll < 0.22) {
         kind = "gem";
         value = 3;
+      } else if (roll < 0.29) {
+        kind = "shield";
+      } else if (roll < 0.34) {
+        kind = "feast";
+        value = 8;
       }
     } else if (game === "coin") {
-      const roll = Math.random();
-      if (roll < 0.12) {
-        kind = "shield";
-      } else if (roll < 0.28) {
-        kind = "gem";
-        value = 5;
-      } else if (Math.random() < 0.2) {
-        value = 3;
-      }
+      ({ kind, value } = randomCoinPickup());
+    } else if (game === "bomb") {
+      ({ kind, value } = randomBombPickup());
     }
     return {
       id: localIds.pickup++,
@@ -252,6 +259,30 @@
       kind,
       value,
     };
+  }
+
+  function randomBombPickup() {
+    const roll = Math.random();
+    if (roll < 0.18) return { kind: "flame", value: 1 };
+    if (roll < 0.34) return { kind: "bombup", value: 1 };
+    if (roll < 0.5) return { kind: "speed", value: 1 };
+    return { kind: "coin", value: Math.random() < 0.35 ? 2 : 1 };
+  }
+
+  function randomKartPickup() {
+    const roll = Math.random();
+    if (roll < 0.18) return { kind: "nitro", value: 1 };
+    if (roll < 0.5) return { kind: "boost", value: 1 };
+    return { kind: "coin", value: Math.random() < 0.25 ? 2 : 1 };
+  }
+
+  function randomCoinPickup() {
+    const roll = Math.random();
+    if (roll < 0.1) return { kind: "shield", value: 1 };
+    if (roll < 0.2) return { kind: "magnet", value: 1 };
+    if (roll < 0.28) return { kind: "frenzy", value: 1 };
+    if (roll < 0.44) return { kind: "gem", value: 5 };
+    return { kind: "coin", value: Math.random() < 0.2 ? 3 : 1 };
   }
 
   function seedLocalBlocks() {
@@ -292,7 +323,14 @@
       boosted: false,
       drifting: false,
       driftCharge: 0,
+      padCooldowns: {},
       shield: 0,
+      bombPower: 0,
+      bombLimit: 1,
+      combo: 0,
+      comboTimer: 0,
+      magnet: 0,
+      frenzy: 0,
       cooldown: 0,
       isHost: false,
       isBot: true,
@@ -324,8 +362,13 @@
     player.alive = true;
     player.respawn = 0;
     player.shield = 0;
+    player.combo = 0;
+    player.comboTimer = 0;
+    player.magnet = 0;
+    player.frenzy = 0;
     player.drifting = false;
     player.driftCharge = 0;
+    player.padCooldowns = {};
     player.actionLatch = false;
     player.trail = [[player.x, player.y]];
   }
@@ -635,6 +678,7 @@
       if (game === "snake" && player.alive) checkLocalSnakeCollision(player);
     });
     updateLocalBombsForAll(dt);
+    if (game === "coin") updateLocalCoinPickups(dt);
     if (game === "coin") updateLocalCoinHazardsForAll();
     if (
       state.pickups.length <
@@ -646,6 +690,51 @@
 
   function addPartyEffect(effect) {
     state.effects = [...(state.effects || []), effect].slice(-48);
+  }
+
+  function kartBoostPads(track = config.track || []) {
+    if (game !== "kart" || track.length < 2) return [];
+    const pads = [];
+    for (let index = 0; index < track.length; index += 2) {
+      const start = track[index];
+      const end = track[(index + 1) % track.length];
+      pads.push({
+        id: `pad${pads.length + 1}`,
+        x: start[0] * 0.48 + end[0] * 0.52,
+        y: start[1] * 0.48 + end[1] * 0.52,
+        angle: Math.atan2(end[1] - start[1], end[0] - start[0]),
+      });
+    }
+    return pads;
+  }
+
+  function tickKartPadCooldowns(player, dt) {
+    player.padCooldowns = player.padCooldowns || {};
+    Object.keys(player.padCooldowns).forEach((id) => {
+      player.padCooldowns[id] = Math.max(0, player.padCooldowns[id] - dt);
+    });
+  }
+
+  function applyLocalKartBoostPad(player) {
+    const pads = state.boostPads?.length
+      ? state.boostPads
+      : kartBoostPads(state.config?.track || config.track || []);
+    player.padCooldowns = player.padCooldowns || {};
+    pads.forEach((pad) => {
+      if ((player.padCooldowns[pad.id] || 0) > 0) return;
+      if (distance(player.x, player.y, pad.x, pad.y) > 58) return;
+      player.boost = Math.max(player.boost || 0, 1.15);
+      player.padCooldowns[pad.id] = 3;
+      player.score += 2;
+      addPartyEffect({
+        x: player.x,
+        y: player.y,
+        kind: "pad",
+        color: player.color,
+        ttl: 0.65,
+        text: "PAD",
+      });
+    });
   }
 
   function updateLocalRespawn(player, dt, index) {
@@ -668,6 +757,12 @@
     const previous = { ...input };
     Object.assign(input, controls);
     player.shield = Math.max(0, (player.shield || 0) - dt);
+    if (game === "coin") {
+      player.comboTimer = Math.max(0, (player.comboTimer || 0) - dt);
+      if (player.comboTimer <= 0) player.combo = 0;
+      player.magnet = Math.max(0, (player.magnet || 0) - dt);
+      player.frenzy = Math.max(0, (player.frenzy || 0) - dt);
+    }
     if (game === "kart") updateLocalKart(player, dt);
     else if (game === "snake") updateLocalSnake(player, dt);
     else updateLocalWalker(player, dt);
@@ -821,6 +916,7 @@
       if (bomb.ttl <= 0) {
         bomb.blastTtl = 0.35;
         exploded.push(bomb);
+        triggerLocalBombChain(bomb);
         addPartyEffect({
           x: bomb.x,
           y: bomb.y,
@@ -855,6 +951,27 @@
     );
   }
 
+  function triggerLocalBombChain(source) {
+    state.bombs.forEach((bomb) => {
+      if (
+        bomb.id === source.id ||
+        bomb.blastTtl > 0 ||
+        bomb.ttl <= 0 ||
+        !inBombBlast(bomb.x, bomb.y, source.x, source.y, source.radius)
+      )
+        return;
+      bomb.ttl = 0;
+      addPartyEffect({
+        x: bomb.x,
+        y: bomb.y,
+        kind: "chain",
+        color: "#ff5f6d",
+        ttl: 0.45,
+        text: "CHAIN",
+      });
+    });
+  }
+
   function destroyLocalBlocks(bomb) {
     if (game !== "bomb" || !state.blocks?.length) return;
     const remaining = [];
@@ -869,12 +986,13 @@
           text: "BREAK",
         });
         if (Math.random() < 0.36) {
+          const drop = randomBombPickup();
           state.pickups.push({
             id: localIds.pickup++,
             x: block.x,
             y: block.y,
-            kind: Math.random() < 0.28 ? "boost" : "coin",
-            value: Math.random() < 0.35 ? 2 : 1,
+            kind: drop.kind,
+            value: drop.value,
           });
         }
         return;
@@ -904,6 +1022,7 @@
       const trail =
         other.id === player.id ? other.trail.slice(0, -10) : other.trail;
       if (trail?.some(([x, y]) => distance(player.x, player.y, x, y) < 13)) {
+        if (guardLocalSnake(player, "꼬리")) return;
         knockLocal(player, "꼬리에 부딪혔습니다.");
         addPartyEffect({
           x: player.x,
@@ -916,6 +1035,27 @@
         return;
       }
     }
+  }
+
+  function guardLocalSnake(player, label) {
+    if (game !== "snake" || (player.shield || 0) <= 0) return false;
+    player.shield = 0;
+    player.x = clamp(player.x, 26, world.width - 26);
+    player.y = clamp(player.y, 26, world.height - 26);
+    player.angle = Math.atan2(
+      world.height / 2 - player.y,
+      world.width / 2 - player.x,
+    );
+    player.trail = player.trail.slice(-14);
+    addPartyEffect({
+      x: player.x,
+      y: player.y,
+      kind: "shield",
+      color: "#69dcff",
+      ttl: 0.85,
+      text: `${label} 방어`,
+    });
+    return true;
   }
 
   function normalizeAngle(angle) {
@@ -989,6 +1129,7 @@
     player.actionLatch = action;
     player.boost = Math.max(0, (player.boost || 0) - dt);
     player.cooldown = Math.max(0, (player.cooldown || 0) - dt);
+    tickKartPadCooldowns(player, dt);
     player.boosted = player.boost > 0;
     const track = state.config?.track || config.track;
     const onTrack = distanceToTrack(player.x, player.y, track) <= 62;
@@ -1007,6 +1148,7 @@
     player.vx *= drag;
     player.vy *= drag;
     moveLocal(player, player.vx * dt, player.vy * dt, true);
+    applyLocalKartBoostPad(player);
     const target = track[player.checkpoint % track.length];
     if (distance(player.x, player.y, target[0], target[1]) < 72) {
       player.checkpoint += 1;
@@ -1060,7 +1202,14 @@
       });
     }
     player.dash = Math.max(0, (player.dash || 0) - dt);
-    const speed = (game === "coin" ? 270 : 245) * (player.dash > 0 ? 2.15 : 1);
+    if (game === "bomb") player.boost = Math.max(0, (player.boost || 0) - dt);
+    const speedBoost =
+      game === "coin" && player.dash > 0
+        ? 2.15
+        : game === "bomb" && (player.boost || 0) > 0
+          ? 1.28
+          : 1;
+    const speed = (game === "coin" ? 270 : 245) * speedBoost;
     const previousX = player.x;
     const previousY = player.y;
     moveLocal(
@@ -1073,20 +1222,41 @@
       player.x = previousX;
       player.y = previousY;
     }
-    if (game === "bomb" && input.action && (player.cooldown || 0) <= 0) {
+    const action = Boolean(input.action);
+    if (game === "bomb" && !action) player.actionLatch = false;
+    if (
+      game === "bomb" &&
+      action &&
+      !player.actionLatch &&
+      (player.cooldown || 0) <= 0
+    ) {
+      const activeBombs = state.bombs.filter(
+        (bomb) =>
+          bomb.ownerId === player.id && bomb.ttl > 0 && bomb.blastTtl <= 0,
+      ).length;
+      if (activeBombs >= (player.bombLimit || 1)) {
+        player.actionLatch = true;
+        player.cooldown = 0.12;
+        player.cooldown = Math.max(0, (player.cooldown || 0) - dt);
+        player.boosted = (player.boost || 0) > 0;
+        return;
+      }
+      player.actionLatch = true;
       player.cooldown = 1;
+      const bombX = Math.round(player.x / 40) * 40;
+      const bombY = Math.round(player.y / 40) * 40;
       state.bombs.push({
         id: localIds.bomb++,
         ownerId: player.id,
-        x: Math.round(player.x / 40) * 40,
-        y: Math.round(player.y / 40) * 40,
+        x: bombX,
+        y: bombY,
         ttl: 1.9,
         blastTtl: 0,
-        radius: 96,
+        radius: 96 + Math.min(5, player.bombPower || 0) * 24,
       });
       addPartyEffect({
-        x: Math.round(player.x / 40) * 40,
-        y: Math.round(player.y / 40) * 40,
+        x: bombX,
+        y: bombY,
         kind: "bomb",
         color: player.color,
         ttl: 0.5,
@@ -1094,7 +1264,8 @@
       });
     }
     player.cooldown = Math.max(0, (player.cooldown || 0) - dt);
-    player.boosted = player.dash > 0;
+    player.boosted =
+      game === "bomb" ? (player.boost || 0) > 0 : player.dash > 0;
   }
 
   function updateLocalSnake(player, dt) {
@@ -1131,8 +1302,10 @@
       player.x >= world.width - 18 ||
       player.y <= 18 ||
       player.y >= world.height - 18
-    )
+    ) {
+      if (guardLocalSnake(player, "벽")) return;
       knockLocal(player, "벽에 닿았습니다.");
+    }
     player.trail.push([player.x, player.y]);
     player.trail = player.trail.slice(-(22 + Math.min(90, player.score * 2)));
     if (
@@ -1141,21 +1314,6 @@
         .some(([x, y]) => distance(player.x, player.y, x, y) < 13)
     )
       knockLocal(player, "꼬리에 부딪혔습니다.");
-  }
-
-  function updateLocalBombs(player, dt) {
-    state.bombs.forEach((bomb) => {
-      if (bomb.blastTtl > 0) bomb.blastTtl -= dt;
-      else bomb.ttl -= dt;
-      if (bomb.ttl <= 0 && bomb.blastTtl <= 0) {
-        bomb.blastTtl = 0.35;
-        if (inBombBlast(player.x, player.y, bomb.x, bomb.y, bomb.radius))
-          knockLocal(player, "폭발에 맞았습니다.");
-      }
-    });
-    state.bombs = state.bombs.filter(
-      (bomb) => bomb.ttl > 0 || bomb.blastTtl > 0,
-    );
   }
 
   function refreshLocalCoinHazards() {
@@ -1201,36 +1359,132 @@
     }
   }
 
+  function updateLocalCoinPickups(dt) {
+    const magnetPlayers = state.players.filter(
+      (player) => player.alive && (player.magnet || player.magneted || 0) > 0,
+    );
+    if (!magnetPlayers.length) return;
+    state.pickups.forEach((pickup) => {
+      if (!["coin", "gem"].includes(pickup.kind)) return;
+      const target = magnetPlayers
+        .map((player) => ({
+          player,
+          gap: distance(player.x, player.y, pickup.x, pickup.y),
+        }))
+        .sort((a, b) => a.gap - b.gap)[0];
+      if (!target || target.gap <= 1 || target.gap > 260) return;
+      const pull = Math.min(
+        target.gap,
+        (310 + Math.max(0, 260 - target.gap) * 2.4) * dt,
+      );
+      pickup.x += ((target.player.x - pickup.x) / target.gap) * pull;
+      pickup.y += ((target.player.y - pickup.y) / target.gap) * pull;
+    });
+  }
+
+  function coinPickupScore(player, pickup) {
+    player.combo = (player.comboTimer || 0) > 0 ? (player.combo || 0) + 1 : 1;
+    player.comboTimer = 2.6;
+    const comboBonus = Math.min(6, Math.floor((player.combo || 1) / 4));
+    const multiplier = (player.frenzy || 0) > 0 ? 2 : 1;
+    return Math.max(1, ((pickup.value || 1) + comboBonus) * multiplier);
+  }
+
   function collectLocalPickups(player) {
+    const coinMode = game === "coin";
+    let gained = 0;
     state.pickups = state.pickups.filter((pickup) => {
       if (distance(player.x, player.y, pickup.x, pickup.y) >= 28) return true;
       if (pickup.kind === "boost") {
         player.score += 3;
         player.boosted = true;
         player.boost = 1.6;
+      } else if (pickup.kind === "nitro") {
+        player.score += 5;
+        player.boosted = true;
+        player.boost = Math.max(player.boost || 0, 2.6);
       } else if (pickup.kind === "shield") {
         player.score += 1;
         player.shield = Math.max(player.shield || 0, 5);
+      } else if (pickup.kind === "magnet") {
+        player.score += 2;
+        player.magnet = Math.max(player.magnet || 0, 6);
+      } else if (pickup.kind === "frenzy") {
+        player.score += 3;
+        player.frenzy = Math.max(player.frenzy || 0, 5);
+        player.combo = Math.max(player.combo || 0, 3);
+        player.comboTimer = 2.6;
+      } else if (pickup.kind === "feast") {
+        player.score += pickup.value || 8;
+        player.boosted = true;
+        player.boost = Math.max(player.boost || 0, 0.9);
+      } else if (pickup.kind === "flame") {
+        player.score += 2;
+        player.bombPower = Math.min(5, (player.bombPower || 0) + 1);
+      } else if (pickup.kind === "bombup") {
+        player.score += 2;
+        player.bombLimit = Math.min(4, (player.bombLimit || 1) + 1);
+      } else if (pickup.kind === "speed") {
+        player.score += 2;
+        player.boosted = true;
+        player.boost = Math.max(player.boost || 0, 3.2);
       } else {
-        player.score += pickup.value || 1;
+        gained = coinMode ? coinPickupScore(player, pickup) : pickup.value || 1;
+        player.score += gained;
       }
       addPartyEffect({
         x: pickup.x,
         y: pickup.y,
         kind:
           pickup.kind === "boost" ||
+          pickup.kind === "nitro" ||
           pickup.kind === "shield" ||
-          pickup.kind === "gem"
+          pickup.kind === "gem" ||
+          pickup.kind === "flame" ||
+          pickup.kind === "bombup" ||
+          pickup.kind === "speed" ||
+          pickup.kind === "magnet" ||
+          pickup.kind === "frenzy" ||
+          pickup.kind === "feast"
             ? pickup.kind
             : "pickup",
-        color: pickup.kind === "shield" ? "#69dcff" : player.color,
+        color:
+          pickup.kind === "shield"
+            ? "#69dcff"
+            : pickup.kind === "flame"
+              ? "#ff5f6d"
+              : pickup.kind === "speed"
+                ? "#42d7ff"
+                : pickup.kind === "magnet"
+                  ? "#42d7ff"
+                  : pickup.kind === "frenzy"
+                    ? "#ffd166"
+                    : pickup.kind === "feast"
+                      ? "#ffd166"
+                      : player.color,
         ttl: 0.65,
         text:
           pickup.kind === "boost"
             ? "BOOST"
-            : pickup.kind === "shield"
-              ? "SHIELD"
-              : `+${pickup.value || 1}`,
+            : pickup.kind === "nitro"
+              ? "NITRO"
+              : pickup.kind === "shield"
+                ? "SHIELD"
+                : pickup.kind === "flame"
+                  ? `화력 ${(player.bombPower || 0) + 1}`
+                  : pickup.kind === "bombup"
+                    ? `폭탄 ${player.bombLimit || 1}`
+                    : pickup.kind === "speed"
+                      ? "SPEED"
+                      : pickup.kind === "magnet"
+                        ? "MAGNET"
+                        : pickup.kind === "frenzy"
+                          ? "FEVER"
+                          : pickup.kind === "feast"
+                            ? `+${pickup.value || 8}`
+                            : coinMode && (player.combo || 0) >= 4
+                              ? `+${gained} x${Math.min(7, player.combo || 1)}`
+                              : `+${gained || pickup.value || 1}`,
       });
       return false;
     });
@@ -1535,7 +1789,42 @@
       ctx.lineWidth = 3;
       ctx.strokeRect(x - 15, y - 15, 30, 30);
     });
+    drawKartBoostPads(track);
     drawKartStartLine(track);
+  }
+
+  function drawKartBoostPads(track) {
+    const pads = state.boostPads?.length
+      ? state.boostPads
+      : kartBoostPads(track);
+    const pulse = 0.5 + Math.sin(performance.now() / 170) * 0.5;
+    pads.forEach((pad) => {
+      ctx.save();
+      ctx.translate(pad.x, pad.y);
+      ctx.rotate((pad.angle || 0) + Math.PI / 2);
+      ctx.shadowColor = "rgba(66,215,255,.8)";
+      ctx.shadowBlur = 18 + pulse * 8;
+      const gradient = ctx.createLinearGradient(-46, -18, 46, 18);
+      gradient.addColorStop(0, "rgba(66,215,255,.32)");
+      gradient.addColorStop(0.5, "rgba(248,248,113,.82)");
+      gradient.addColorStop(1, "rgba(66,215,255,.32)");
+      ctx.fillStyle = gradient;
+      ctx.fillRect(-46, -18, 92, 36);
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = "rgba(245,251,255,.72)";
+      ctx.lineWidth = 3;
+      ctx.strokeRect(-46, -18, 92, 36);
+      ctx.fillStyle = "rgba(7,17,31,.68)";
+      for (let index = -1; index <= 1; index += 1) {
+        ctx.beginPath();
+        ctx.moveTo(index * 24 - 8, -10);
+        ctx.lineTo(index * 24 + 10, 0);
+        ctx.lineTo(index * 24 - 8, 10);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.restore();
+    });
   }
 
   function drawKartStartLine(track) {
@@ -1560,19 +1849,50 @@
     ctx.restore();
   }
 
+  function pickupColor(pickup) {
+    if (pickup.kind === "shield") return "#69dcff";
+    if (pickup.kind === "nitro") return "#ffba5a";
+    if (
+      pickup.kind === "boost" ||
+      pickup.kind === "speed" ||
+      pickup.kind === "magnet"
+    )
+      return "#42d7ff";
+    if (pickup.kind === "frenzy") return "#ffd166";
+    if (pickup.kind === "flame") return "#ff5f6d";
+    if (pickup.kind === "bombup") return "#f5fbff";
+    if (pickup.kind === "feast") return "#ffd166";
+    if (pickup.kind === "gem" || pickup.value > 1) return "#ffd166";
+    return "#f8f871";
+  }
+
   function drawPickup(pickup) {
-    const color =
-      pickup.kind === "shield"
-        ? "#69dcff"
-        : pickup.kind === "boost"
-          ? "#42d7ff"
-          : pickup.kind === "gem" || pickup.value > 1
-            ? "#ffd166"
-            : "#f8f871";
+    const color = pickupColor(pickup);
+    const radius =
+      pickup.kind === "boost" || pickup.kind === "speed"
+        ? 13
+        : pickup.kind === "nitro"
+          ? 14
+          : pickup.kind === "flame" ||
+              pickup.kind === "bombup" ||
+              pickup.kind === "magnet" ||
+              pickup.kind === "frenzy" ||
+              pickup.kind === "feast"
+            ? 12
+            : 10;
     ctx.save();
     ctx.shadowColor = color;
     ctx.shadowBlur =
-      pickup.kind === "boost" || pickup.kind === "shield" ? 18 : 10;
+      pickup.kind === "boost" ||
+      pickup.kind === "nitro" ||
+      pickup.kind === "shield" ||
+      pickup.kind === "speed" ||
+      pickup.kind === "flame" ||
+      pickup.kind === "magnet" ||
+      pickup.kind === "frenzy" ||
+      pickup.kind === "feast"
+        ? 18
+        : 10;
     ctx.fillStyle = color;
     if (pickup.kind === "gem") {
       ctx.beginPath();
@@ -1604,30 +1924,134 @@
         pickup.y - 17,
       );
       ctx.fill();
+    } else if (pickup.kind === "magnet") {
+      ctx.lineWidth = 7;
+      ctx.lineCap = "round";
+      ctx.strokeStyle = color;
+      ctx.beginPath();
+      ctx.arc(pickup.x - 1, pickup.y - 1, 13, Math.PI * 0.12, Math.PI * 0.88);
+      ctx.stroke();
+      ctx.fillStyle = "#ff5f6d";
+      ctx.fillRect(pickup.x - 15, pickup.y - 5, 7, 10);
+      ctx.fillStyle = "#f5fbff";
+      ctx.fillRect(pickup.x + 8, pickup.y - 5, 7, 10);
+    } else if (pickup.kind === "nitro") {
+      const bottle = ctx.createLinearGradient(
+        pickup.x - 9,
+        pickup.y - 16,
+        pickup.x + 9,
+        pickup.y + 16,
+      );
+      bottle.addColorStop(0, "#f8f871");
+      bottle.addColorStop(0.45, "#ffba5a");
+      bottle.addColorStop(1, "#ff5f6d");
+      ctx.fillStyle = bottle;
+      ctx.beginPath();
+      ctx.roundRect?.(pickup.x - 9, pickup.y - 15, 18, 30, 5);
+      if (!ctx.roundRect) ctx.rect(pickup.x - 9, pickup.y - 15, 18, 30);
+      ctx.fill();
+      ctx.fillStyle = "#f5fbff";
+      ctx.fillRect(pickup.x - 5, pickup.y - 20, 10, 6);
+      ctx.strokeStyle = "rgba(7,17,31,.68)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(pickup.x - 4, pickup.y + 8);
+      ctx.lineTo(pickup.x + 7, pickup.y - 2);
+      ctx.lineTo(pickup.x + 1, pickup.y - 2);
+      ctx.lineTo(pickup.x + 5, pickup.y - 10);
+      ctx.stroke();
+    } else if (pickup.kind === "frenzy") {
+      ctx.beginPath();
+      for (let point = 0; point < 10; point += 1) {
+        const angle = -Math.PI / 2 + (point * Math.PI * 2) / 10;
+        const distanceFromCenter = point % 2 ? 7 : 17;
+        const px = pickup.x + Math.cos(angle) * distanceFromCenter;
+        const py = pickup.y + Math.sin(angle) * distanceFromCenter;
+        if (point) ctx.lineTo(px, py);
+        else ctx.moveTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "#ff5f6d";
+      ctx.beginPath();
+      ctx.arc(pickup.x, pickup.y, 6, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (pickup.kind === "feast") {
+      ctx.beginPath();
+      ctx.arc(pickup.x, pickup.y, 16, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#8be66f";
+      ctx.beginPath();
+      ctx.arc(pickup.x - 5, pickup.y - 4, 5, 0, Math.PI * 2);
+      ctx.arc(pickup.x + 6, pickup.y + 4, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(7,17,31,.7)";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(pickup.x, pickup.y, 9, 0.35, Math.PI * 1.6);
+      ctx.stroke();
+    } else if (pickup.kind === "flame") {
+      ctx.beginPath();
+      ctx.moveTo(pickup.x, pickup.y - 18);
+      ctx.bezierCurveTo(
+        pickup.x + 18,
+        pickup.y - 4,
+        pickup.x + 10,
+        pickup.y + 15,
+        pickup.x,
+        pickup.y + 18,
+      );
+      ctx.bezierCurveTo(
+        pickup.x - 12,
+        pickup.y + 12,
+        pickup.x - 16,
+        pickup.y - 3,
+        pickup.x,
+        pickup.y - 18,
+      );
+      ctx.fill();
+      ctx.fillStyle = "#ffd166";
+      ctx.beginPath();
+      ctx.ellipse(pickup.x, pickup.y + 5, 6, 9, 0, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (pickup.kind === "bombup") {
+      ctx.fillStyle = "#111827";
+      ctx.beginPath();
+      ctx.arc(pickup.x, pickup.y, 15, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 4;
+      ctx.stroke();
+      ctx.fillStyle = color;
+      ctx.font = "900 15px Malgun Gothic, system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("+", pickup.x, pickup.y + 1);
+    } else if (pickup.kind === "speed") {
+      ctx.beginPath();
+      ctx.moveTo(pickup.x - 13, pickup.y - 12);
+      ctx.lineTo(pickup.x + 2, pickup.y);
+      ctx.lineTo(pickup.x - 13, pickup.y + 12);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(pickup.x + 2, pickup.y - 12);
+      ctx.lineTo(pickup.x + 17, pickup.y);
+      ctx.lineTo(pickup.x + 2, pickup.y + 12);
+      ctx.closePath();
+      ctx.fill();
     } else {
       ctx.beginPath();
-      ctx.arc(
-        pickup.x,
-        pickup.y,
-        pickup.kind === "boost" ? 13 : 10,
-        0,
-        Math.PI * 2,
-      );
+      ctx.arc(pickup.x, pickup.y, radius, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.shadowBlur = 0;
     ctx.strokeStyle = "rgba(255,255,255,.72)";
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(
-      pickup.x,
-      pickup.y,
-      pickup.kind === "boost" ? 18 : 15,
-      0,
-      Math.PI * 2,
-    );
+    ctx.arc(pickup.x, pickup.y, radius + 5, 0, Math.PI * 2);
     ctx.stroke();
-    if (pickup.kind === "boost") {
+    if (pickup.kind === "boost" || pickup.kind === "speed") {
       ctx.fillStyle = "rgba(5,12,22,.72)";
       ctx.beginPath();
       ctx.moveTo(pickup.x - 5, pickup.y - 8);
@@ -1849,6 +2273,13 @@
         ctx.arc(0, 0, 34, -0.8, 0.8);
         ctx.stroke();
       }
+      if (player.shielded || (player.shield || 0) > 0) {
+        ctx.strokeStyle = "rgba(105,220,255,.92)";
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(0, 0, 35, 0, Math.PI * 2);
+        ctx.stroke();
+      }
       ctx.strokeStyle = "rgba(7,17,31,.55)";
       ctx.lineWidth = 7;
       ctx.beginPath();
@@ -1883,6 +2314,22 @@
         ctx.arc(0, 0, 29, -0.9, 0.9);
         ctx.stroke();
       }
+      if (game === "coin" && (player.magnet || 0) > 0) {
+        ctx.strokeStyle = "rgba(66,215,255,.74)";
+        ctx.lineWidth = 3;
+        ctx.setLineDash([8, 8]);
+        ctx.beginPath();
+        ctx.arc(0, 0, 43, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      if (game === "coin" && (player.frenzy || 0) > 0) {
+        ctx.strokeStyle = "rgba(255,209,102,.9)";
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.arc(0, 0, 38, 0, Math.PI * 2);
+        ctx.stroke();
+      }
       if (game === "coin" && (player.shielded || player.shield > 0)) {
         ctx.strokeStyle = "rgba(105,220,255,.9)";
         ctx.lineWidth = 4;
@@ -1903,6 +2350,32 @@
         ctx.fillStyle = "#f8f871";
         ctx.fillRect(-13, -17, 11, 8);
         ctx.fillRect(-13, 9, 11, 8);
+        if ((player.bombPower || 0) > 0) {
+          ctx.strokeStyle = "#ff5f6d";
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(0, 0, 30 + Math.min(5, player.bombPower) * 2, -0.8, 0.8);
+          ctx.stroke();
+        }
+        if ((player.bombLimit || 1) > 1) {
+          ctx.fillStyle = "#f5fbff";
+          for (
+            let index = 0;
+            index < Math.min(4, player.bombLimit);
+            index += 1
+          ) {
+            ctx.beginPath();
+            ctx.arc(-14 + index * 8, 28, 2.6, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+        if (player.boosted) {
+          ctx.strokeStyle = "rgba(66,215,255,.85)";
+          ctx.lineWidth = 4;
+          ctx.beginPath();
+          ctx.arc(0, 0, 34, -0.95, 0.95);
+          ctx.stroke();
+        }
       } else {
         ctx.fillStyle = "rgba(245,251,255,.22)";
         ctx.beginPath();
@@ -1938,12 +2411,21 @@
     } else if (
       [
         "boost",
+        "nitro",
+        "pad",
         "dash",
         "lap",
         "checkpoint",
         "respawn",
         "shield",
         "gem",
+        "flame",
+        "bombup",
+        "speed",
+        "magnet",
+        "frenzy",
+        "feast",
+        "chain",
       ].includes(effect.kind)
     ) {
       ctx.strokeStyle = color;
@@ -1995,7 +2477,14 @@
             : "rgba(208,140,255,.08)";
     ctx.fillStyle = theme;
     ctx.fillRect(x + 3, y + 3, width - 6, height - 6);
-    if (game === "kart") drawMiniMapTrack(x, y, mapScale);
+    if (game === "kart") {
+      drawMiniMapTrack(x, y, mapScale);
+      const pads = state.boostPads?.length ? state.boostPads : kartBoostPads();
+      pads.forEach((pad) => {
+        ctx.fillStyle = "#f8f871";
+        ctx.fillRect(x + pad.x * mapScale - 2, y + pad.y * mapScale - 2, 4, 4);
+      });
+    }
     state.hazards?.forEach((hazard) => {
       ctx.strokeStyle = "rgba(255,95,109,.8)";
       ctx.lineWidth = 1;
@@ -2024,14 +2513,7 @@
       ctx.fillRect(x + bomb.x * mapScale - 2, y + bomb.y * mapScale - 2, 4, 4);
     });
     state.pickups.slice(0, 36).forEach((pickup) => {
-      ctx.fillStyle =
-        pickup.kind === "shield"
-          ? "#69dcff"
-          : pickup.kind === "boost"
-            ? "#42d7ff"
-            : pickup.kind === "gem"
-              ? "#ffd166"
-              : "#f8f871";
+      ctx.fillStyle = pickupColor(pickup);
       ctx.beginPath();
       ctx.arc(
         x + pickup.x * mapScale,
@@ -2087,6 +2569,22 @@
     ctx.stroke();
   }
 
+  function playerScoreLabel(player) {
+    const score = player.score || 0;
+    if (game === "kart") return `${player.lap || 0}L · ${score}`;
+    if (game === "bomb")
+      return `${score} · 화력 ${(player.bombPower || 0) + 1} · 폭탄 ${player.bombLimit || 1}`;
+    if (game === "coin") {
+      const combo = player.combo || 0;
+      const badges = [];
+      if (combo >= 2) badges.push(`${combo}콤보`);
+      if ((player.magnet || 0) > 0) badges.push("자석");
+      if ((player.frenzy || 0) > 0) badges.push("피버");
+      return badges.length ? `${score} · ${badges.join(" · ")}` : `${score}`;
+    }
+    return `${score}`;
+  }
+
   function renderHud() {
     const players = rankPlayers(state.players || []);
     const me = state.players?.find((player) => player.id === clientId);
@@ -2109,7 +2607,7 @@
       players
         .map(
           (player, index) =>
-            `<li class="${player.id === me?.id ? "me" : ""}"><span><i style="background:${player.color}"></i>${index + 1}. ${escapeHtml(player.name)}${player.isHost ? " · 방장" : ""}</span><strong>${game === "kart" ? `${player.lap || 0}L · ` : ""}${player.score || 0}</strong></li>`,
+            `<li class="${player.id === me?.id ? "me" : ""}"><span><i style="background:${player.color}"></i>${index + 1}. ${escapeHtml(player.name)}${player.isHost ? " · 방장" : ""}</span><strong>${playerScoreLabel(player)}</strong></li>`,
         )
         .join("") || "<li>참가자 없음</li>";
   }

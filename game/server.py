@@ -174,8 +174,10 @@ DEFENSE_TOWERS: dict[str, dict[str, Any]] = {
         "damage": 13,
         "cooldown": 1.15,
         "splash": 58,
+        "burn": 2.4,
+        "burnDps": 8,
         "color": "#ffba5a",
-        "desc": "범위 피해",
+        "desc": "범위 피해와 화상",
     },
     "sniper": {
         "name": "저격",
@@ -183,8 +185,10 @@ DEFENSE_TOWERS: dict[str, dict[str, Any]] = {
         "range": 230,
         "damage": 55,
         "cooldown": 1.7,
+        "mark": 2.6,
+        "markBonus": 0.22,
         "color": "#c8f7ff",
-        "desc": "긴 사거리 고화력",
+        "desc": "긴 사거리와 취약 표식",
     },
     "boost": {
         "name": "증폭기",
@@ -487,6 +491,12 @@ class DefenseEnemy:
     max_shield: float = 0.0
     base_damage: int = 1
     slow_until: float = 0.0
+    burn_until: float = 0.0
+    burn_dps: float = 0.0
+    burn_owner_id: str = ""
+    marked_until: float = 0.0
+    mark_bonus: float = 0.0
+    enraged: bool = False
 
 
 @dataclass
@@ -535,6 +545,13 @@ class PartyClient:
     shield_until: float = 0.0
     drift_charge: float = 0.0
     drifting: bool = False
+    bomb_power: int = 0
+    bomb_limit: int = 1
+    coin_combo: int = 0
+    coin_combo_until: float = 0.0
+    magnet_until: float = 0.0
+    frenzy_until: float = 0.0
+    kart_pad_cooldowns: dict[str, float] = field(default_factory=dict)
     action_latched: bool = False
     connected_at: float = field(default_factory=time.time)
     write_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
@@ -1616,7 +1633,22 @@ class DefenseRoom:
         reached: list[DefenseEnemy] = []
         for enemy in list(self.enemies):
             enemy.slow_until = max(0.0, enemy.slow_until - dt)
+            enemy.marked_until = max(0.0, enemy.marked_until - dt)
+            if enemy.burn_until > 0:
+                enemy.burn_until = max(0.0, enemy.burn_until - dt)
+                self.damage_enemy(enemy, enemy.burn_dps * dt, enemy.burn_owner_id, show_hit=False)
+                if enemy not in self.enemies:
+                    continue
+            if (
+                enemy.enemy_type == "boss"
+                and not enemy.enraged
+                and enemy.health / max(1, enemy.max_health) <= 0.45
+            ):
+                enemy.enraged = True
+                self.add_effect(enemy.x, enemy.y, "rage", "#ff5f6d", 1.0, "격노")
             speed = enemy.speed * (0.55 if enemy.slow_until > 0 else 1.0)
+            if enemy.enraged:
+                speed *= 1.22
             remaining = speed * dt
             while remaining > 0 and enemy.segment < len(self.path_pixels) - 1:
                 target_x, target_y = self.path_pixels[enemy.segment + 1]
@@ -1637,14 +1669,15 @@ class DefenseRoom:
         for enemy in reached:
             if enemy in self.enemies:
                 self.enemies.remove(enemy)
-                self.base_health = max(0, self.base_health - max(1, enemy.base_damage))
+                damage = max(1, enemy.base_damage + (1 if enemy.enraged else 0))
+                self.base_health = max(0, self.base_health - damage)
                 self.add_effect(
                     enemy.x,
                     enemy.y,
                     "base_hit",
                     "#ff5f6d",
                     0.9,
-                    f"-{max(1, enemy.base_damage)}",
+                    f"-{damage}",
                 )
         if reached:
             self.status = f"적 {len(reached)}기가 기지에 도달했습니다."
@@ -1677,9 +1710,24 @@ class DefenseRoom:
                 splash = float(config["splash"])
                 for enemy in list(self.enemies):
                     if math.hypot(enemy.x - target.x, enemy.y - target.y) <= splash:
+                        self.apply_defense_status(enemy, tower, config)
                         self.damage_enemy(enemy, damage, tower.owner_id)
             else:
+                self.apply_defense_status(target, tower, config)
                 self.damage_enemy(target, damage, tower.owner_id)
+
+    def apply_defense_status(
+        self, enemy: DefenseEnemy, tower: DefenseTower, config: dict[str, Any]
+    ) -> None:
+        if enemy not in self.enemies:
+            return
+        if config.get("burn"):
+            enemy.burn_until = max(enemy.burn_until, float(config["burn"]))
+            enemy.burn_dps = max(enemy.burn_dps, float(config.get("burnDps", 0)))
+            enemy.burn_owner_id = tower.owner_id
+        if config.get("mark"):
+            enemy.marked_until = max(enemy.marked_until, float(config["mark"]))
+            enemy.mark_bonus = max(enemy.mark_bonus, float(config.get("markBonus", 0)))
 
     def find_target(self, tower: DefenseTower) -> DefenseEnemy | None:
         tower_x, tower_y = defense_cell_center(tower.cell_x, tower.cell_y)
@@ -1707,19 +1755,29 @@ class DefenseRoom:
                 best = max(best, 1 + (float(config["boost"]) - 1) * booster.level)
         return best
 
-    def damage_enemy(self, enemy: DefenseEnemy, damage: float, owner_id: str) -> None:
+    def damage_enemy(
+        self,
+        enemy: DefenseEnemy,
+        damage: float,
+        owner_id: str,
+        show_hit: bool = True,
+    ) -> None:
         if enemy not in self.enemies:
             return
+        if enemy.marked_until > 0:
+            damage *= 1 + enemy.mark_bonus
         if enemy.shield > 0:
             absorbed = min(enemy.shield, damage)
             enemy.shield -= absorbed
             damage -= absorbed
             if damage <= 0:
-                self.add_effect(enemy.x, enemy.y, "shield", "#6fe8ff", 0.45, "SHIELD")
+                if show_hit:
+                    self.add_effect(enemy.x, enemy.y, "shield", "#6fe8ff", 0.45, "SHIELD")
                 return
         enemy.health -= damage
         if enemy.health > 0:
-            self.add_effect(enemy.x, enemy.y, "hit", "#f8f871", 0.35, f"-{int(damage)}")
+            if show_hit:
+                self.add_effect(enemy.x, enemy.y, "hit", "#f8f871", 0.35, f"-{int(damage)}")
             return
         self.enemies.remove(enemy)
         self.add_effect(enemy.x, enemy.y, "kill", "#ffd166", 0.8, f"+{enemy.reward}")
@@ -1820,6 +1878,11 @@ class DefenseRoom:
                     "health": round(enemy.health, 1),
                     "maxHealth": round(enemy.max_health, 1),
                     "slowed": enemy.slow_until > 0,
+                    "burning": enemy.burn_until > 0,
+                    "burn": round(enemy.burn_until, 1),
+                    "marked": enemy.marked_until > 0,
+                    "mark": round(enemy.marked_until, 1),
+                    "enraged": enemy.enraged,
                     "type": enemy.enemy_type,
                     "segment": enemy.segment,
                     "shield": round(enemy.shield, 1),
@@ -1942,6 +2005,13 @@ class PartyRoom:
             player.shield_until = 0
             player.drift_charge = 0
             player.drifting = False
+            player.bomb_power = 0
+            player.bomb_limit = 1
+            player.coin_combo = 0
+            player.coin_combo_until = 0
+            player.magnet_until = 0
+            player.frenzy_until = 0
+            player.kart_pad_cooldowns.clear()
             player.action_latched = False
             self.place_client(player)
         self.status = "라운드를 다시 시작했습니다."
@@ -1968,6 +2038,11 @@ class PartyRoom:
         client.shield_until = 0
         client.drift_charge = 0
         client.drifting = False
+        client.coin_combo = 0
+        client.coin_combo_until = 0
+        client.magnet_until = 0
+        client.frenzy_until = 0
+        client.kart_pad_cooldowns.clear()
         client.action_latched = False
         client.trail = [(client.x, client.y)]
 
@@ -1976,24 +2051,25 @@ class PartyRoom:
         while len(self.pickups) < target:
             kind = "coin"
             value = 1
-            if self.game_type == "kart" and random.random() < 0.35:
-                kind = "boost"
+            if self.game_type == "kart":
+                kind, value = self.random_kart_pickup()
             elif self.game_type == "snake":
-                if random.random() < 0.16:
-                    kind = "boost"
-                    value = 2
-                elif random.random() < 0.16:
-                    kind = "gem"
-                    value = 3
-            elif self.game_type == "coin":
                 roll = random.random()
                 if roll < 0.12:
-                    kind = "shield"
-                elif roll < 0.28:
+                    kind = "boost"
+                    value = 2
+                elif roll < 0.22:
                     kind = "gem"
-                    value = 5
-                elif random.random() < 0.2:
                     value = 3
+                elif roll < 0.29:
+                    kind = "shield"
+                elif roll < 0.34:
+                    kind = "feast"
+                    value = 8
+            elif self.game_type == "coin":
+                kind, value = self.random_coin_pickup()
+            elif self.game_type == "bomb":
+                kind, value = self.random_bomb_pickup()
             self.pickups.append(
                 PartyPickup(
                     id=self.next_pickup_id,
@@ -2004,6 +2080,36 @@ class PartyRoom:
                 )
             )
             self.next_pickup_id += 1
+
+    def random_kart_pickup(self) -> tuple[str, int]:
+        roll = random.random()
+        if roll < 0.18:
+            return ("nitro", 1)
+        if roll < 0.5:
+            return ("boost", 1)
+        return ("coin", 2 if random.random() < 0.25 else 1)
+
+    def random_bomb_pickup(self) -> tuple[str, int]:
+        roll = random.random()
+        if roll < 0.18:
+            return ("flame", 1)
+        if roll < 0.34:
+            return ("bombup", 1)
+        if roll < 0.5:
+            return ("speed", 1)
+        return ("coin", 2 if random.random() < 0.35 else 1)
+
+    def random_coin_pickup(self) -> tuple[str, int]:
+        roll = random.random()
+        if roll < 0.1:
+            return ("shield", 1)
+        if roll < 0.2:
+            return ("magnet", 1)
+        if roll < 0.28:
+            return ("frenzy", 1)
+        if roll < 0.44:
+            return ("gem", 5)
+        return ("coin", 3 if random.random() < 0.2 else 1)
 
     def seed_blocks(self) -> None:
         if self.game_type != "bomb" or self.blocks:
@@ -2073,6 +2179,7 @@ class PartyRoom:
             self.update_snakes(dt, now)
         else:
             self.update_walkers(dt, now)
+            self.update_coin_pickups(dt, now)
             self.update_coin_hazards(now)
         self.collect_pickups(now)
 
@@ -2091,6 +2198,38 @@ class PartyRoom:
     ) -> None:
         self.effects.append(PartyEffect(x=x, y=y, kind=kind, color=color, ttl=ttl, text=text))
         self.effects = self.effects[-48:]
+
+    def kart_boost_pads(self) -> list[dict[str, float | str]]:
+        checkpoints = self.config.get("track", [])
+        pads: list[dict[str, float | str]] = []
+        if self.game_type != "kart" or len(checkpoints) < 2:
+            return pads
+        for pad_number, index in enumerate(range(0, len(checkpoints), 2), start=1):
+            start = checkpoints[index]
+            end = checkpoints[(index + 1) % len(checkpoints)]
+            start_x, start_y = float(start[0]), float(start[1])
+            end_x, end_y = float(end[0]), float(end[1])
+            pads.append(
+                {
+                    "id": f"pad{pad_number}",
+                    "x": start_x * 0.48 + end_x * 0.52,
+                    "y": start_y * 0.48 + end_y * 0.52,
+                    "angle": math.atan2(end_y - start_y, end_x - start_x),
+                }
+            )
+        return pads
+
+    def apply_kart_boost_pad(self, client: PartyClient, now: float) -> None:
+        for pad in self.kart_boost_pads():
+            pad_id = str(pad["id"])
+            if now < client.kart_pad_cooldowns.get(pad_id, 0):
+                continue
+            if party_distance(client.x, client.y, float(pad["x"]), float(pad["y"])) > 58:
+                continue
+            client.boosted_until = max(client.boosted_until, now + 1.15)
+            client.kart_pad_cooldowns[pad_id] = now + 3.0
+            client.score += 2
+            self.add_effect(client.x, client.y, "pad", client.color, 0.65, "PAD")
 
     def update_kart(self, dt: float, now: float) -> None:
         checkpoints = self.config["track"]
@@ -2138,6 +2277,7 @@ class PartyRoom:
             client.vx *= drag
             client.vy *= drag
             self.move_client(client, client.vx * dt, client.vy * dt)
+            self.apply_kart_boost_pad(client, now)
             target = checkpoints[client.checkpoint % len(checkpoints)]
             if party_distance(client.x, client.y, float(target[0]), float(target[1])) < 72:
                 client.checkpoint += 1
@@ -2175,7 +2315,12 @@ class PartyRoom:
                 client.boosted_until = now + 0.32
                 client.cooldown_until = now + 3.0
                 self.add_effect(client.x, client.y, "dash", client.color, 0.45, "DASH")
-            move_speed = speed * (2.15 if self.game_type == "coin" and now < client.boosted_until else 1.0)
+            boost_factor = 1.0
+            if self.game_type == "coin" and now < client.boosted_until:
+                boost_factor = 2.15
+            elif self.game_type == "bomb" and now < client.boosted_until:
+                boost_factor = 1.28
+            move_speed = speed * boost_factor
             self.move_client(client, dx * move_speed * dt, dy * move_speed * dt)
             if self.game_type == "bomb":
                 self.maybe_drop_bomb(client, now)
@@ -2209,6 +2354,8 @@ class PartyRoom:
                 or client.y <= PARTY_PLAYER_RADIUS
                 or client.y >= PARTY_HEIGHT - PARTY_PLAYER_RADIUS
             ):
+                if self.guard_snake(client, now, "벽"):
+                    continue
                 self.knock_out(client, now, "벽에 닿았습니다.")
                 continue
             client.trail.append((client.x, client.y))
@@ -2219,8 +2366,21 @@ class PartyRoom:
                     continue
                 trail = other.trail[:-8] if other.id == client.id else other.trail
                 if any(party_distance(client.x, client.y, x, y) < 13 for x, y in trail):
+                    if self.guard_snake(client, now, "꼬리"):
+                        break
                     self.knock_out(client, now, "꼬리에 부딪혔습니다.")
                     break
+
+    def guard_snake(self, client: PartyClient, now: float, label: str) -> bool:
+        if self.game_type != "snake" or now >= client.shield_until:
+            return False
+        client.shield_until = 0
+        client.x = party_clamp(client.x, PARTY_PLAYER_RADIUS + 8, PARTY_WIDTH - PARTY_PLAYER_RADIUS - 8)
+        client.y = party_clamp(client.y, PARTY_PLAYER_RADIUS + 8, PARTY_HEIGHT - PARTY_PLAYER_RADIUS - 8)
+        client.angle = math.atan2(PARTY_HEIGHT / 2 - client.y, PARTY_WIDTH / 2 - client.x)
+        client.trail = client.trail[-14:]
+        self.add_effect(client.x, client.y, "shield", "#69dcff", 0.85, f"{label} 방어")
+        return True
 
     def update_bombs(self, dt: float, now: float) -> None:
         alive: list[PartyBomb] = []
@@ -2237,6 +2397,7 @@ class PartyRoom:
             bomb.blast_ttl = 0.35
             alive.append(bomb)
             self.add_effect(bomb.x, bomb.y, "blast", "#ffba5a", 0.5, "BOOM")
+            self.trigger_bomb_chain(bomb)
             self.destroy_bomb_blocks(bomb)
             owner = self.clients.get(bomb.owner_id)
             for client in self.clients.values():
@@ -2248,19 +2409,29 @@ class PartyRoom:
                         owner.score += 5
         self.bombs = alive
 
+    def trigger_bomb_chain(self, bomb: PartyBomb) -> None:
+        for other in self.bombs:
+            if other.id == bomb.id or other.blast_ttl > 0 or other.ttl <= 0:
+                continue
+            if not party_in_bomb_blast(other.x, other.y, bomb.x, bomb.y, bomb.radius):
+                continue
+            other.ttl = 0
+            self.add_effect(other.x, other.y, "chain", "#ff5f6d", 0.45, "CHAIN")
+
     def destroy_bomb_blocks(self, bomb: PartyBomb) -> None:
         remaining: list[PartyBlock] = []
         for block in self.blocks:
             if party_in_bomb_blast(block.x, block.y, bomb.x, bomb.y, bomb.radius):
                 self.add_effect(block.x, block.y, "block", "#ffba5a", 0.65, "BREAK")
                 if random.random() < 0.36:
+                    kind, value = self.random_bomb_pickup()
                     self.pickups.append(
                         PartyPickup(
                             id=self.next_pickup_id,
                             x=block.x,
                             y=block.y,
-                            kind="boost" if random.random() < 0.28 else "coin",
-                            value=2 if random.random() < 0.35 else 1,
+                            kind=kind,
+                            value=value,
                         )
                     )
                     self.next_pickup_id += 1
@@ -2277,6 +2448,40 @@ class PartyRoom:
                         self.add_effect(client.x, client.y, "shield", "#69dcff", 0.75, "SAFE")
                         continue
                     self.knock_out(client, now, "위험 구역에 닿았습니다.")
+
+    def update_coin_pickups(self, dt: float, now: float) -> None:
+        if self.game_type != "coin":
+            return
+        magnet_players = [
+            client
+            for client in self.clients.values()
+            if client.alive and now < client.magnet_until
+        ]
+        if not magnet_players:
+            return
+        for pickup in self.pickups:
+            if pickup.kind not in {"coin", "gem"}:
+                continue
+            target = min(
+                magnet_players,
+                key=lambda client: party_distance(client.x, client.y, pickup.x, pickup.y),
+            )
+            gap = party_distance(target.x, target.y, pickup.x, pickup.y)
+            if gap <= 1 or gap > 260:
+                continue
+            pull = min(gap, (310 + max(0, 260 - gap) * 2.4) * dt)
+            pickup.x += (target.x - pickup.x) / gap * pull
+            pickup.y += (target.y - pickup.y) / gap * pull
+
+    def coin_pickup_score(self, collector: PartyClient, pickup: PartyPickup, now: float) -> int:
+        if now <= collector.coin_combo_until:
+            collector.coin_combo += 1
+        else:
+            collector.coin_combo = 1
+        collector.coin_combo_until = now + 2.6
+        combo_bonus = min(6, collector.coin_combo // 4)
+        multiplier = 2 if now < collector.frenzy_until else 1
+        return max(1, (pickup.value + combo_bonus) * multiplier)
 
     def collect_pickups(self, now: float) -> None:
         remaining: list[PartyPickup] = []
@@ -2296,19 +2501,57 @@ class PartyRoom:
                 collector.boosted_until = max(collector.boosted_until, now + 1.6)
                 collector.score += 3
                 self.add_effect(pickup.x, pickup.y, "boost", collector.color, 0.65, "BOOST")
+            elif pickup.kind == "nitro":
+                collector.boosted_until = max(collector.boosted_until, now + 2.6)
+                collector.score += 5
+                self.add_effect(pickup.x, pickup.y, "nitro", collector.color, 0.8, "NITRO")
             elif pickup.kind == "shield":
                 collector.shield_until = max(collector.shield_until, now + 5.0)
                 collector.score += 1
                 self.add_effect(pickup.x, pickup.y, "shield", "#69dcff", 0.75, "SHIELD")
-            else:
+            elif pickup.kind == "magnet":
+                collector.magnet_until = max(collector.magnet_until, now + 6.0)
+                collector.score += 2
+                self.add_effect(pickup.x, pickup.y, "magnet", "#42d7ff", 0.75, "MAGNET")
+            elif pickup.kind == "frenzy":
+                collector.frenzy_until = max(collector.frenzy_until, now + 5.0)
+                collector.coin_combo = max(collector.coin_combo, 3)
+                collector.coin_combo_until = now + 2.6
+                collector.score += 3
+                self.add_effect(pickup.x, pickup.y, "frenzy", "#ffd166", 0.85, "FEVER")
+            elif pickup.kind == "feast":
                 collector.score += pickup.value
+                collector.boosted_until = max(collector.boosted_until, now + 0.9)
+                self.add_effect(pickup.x, pickup.y, "feast", "#ffd166", 0.9, f"+{pickup.value}")
+            elif pickup.kind == "flame":
+                collector.bomb_power = min(5, collector.bomb_power + 1)
+                collector.score += 2
+                self.add_effect(pickup.x, pickup.y, "flame", "#ff5f6d", 0.7, f"화력 {collector.bomb_power + 1}")
+            elif pickup.kind == "bombup":
+                collector.bomb_limit = min(4, collector.bomb_limit + 1)
+                collector.score += 2
+                self.add_effect(pickup.x, pickup.y, "bombup", "#f5fbff", 0.7, f"폭탄 {collector.bomb_limit}")
+            elif pickup.kind == "speed":
+                collector.boosted_until = max(collector.boosted_until, now + 3.2)
+                collector.score += 2
+                self.add_effect(pickup.x, pickup.y, "speed", "#42d7ff", 0.7, "SPEED")
+            else:
+                gained = (
+                    self.coin_pickup_score(collector, pickup, now)
+                    if self.game_type == "coin"
+                    else pickup.value
+                )
+                collector.score += gained
+                effect_text = f"+{gained}"
+                if self.game_type == "coin" and collector.coin_combo >= 4:
+                    effect_text = f"{effect_text} x{min(7, collector.coin_combo)}"
                 self.add_effect(
                     pickup.x,
                     pickup.y,
                     "gem" if pickup.kind == "gem" else "pickup",
                     collector.color,
                     0.65,
-                    f"+{pickup.value}",
+                    effect_text,
                 )
         self.pickups = remaining
 
@@ -2319,19 +2562,31 @@ class PartyRoom:
             return
         if client.action_latched or now < client.cooldown_until:
             return
+        active_bombs = sum(
+            1
+            for bomb in self.bombs
+            if bomb.owner_id == client.id and bomb.ttl > 0 and bomb.blast_ttl <= 0
+        )
+        if active_bombs >= client.bomb_limit:
+            client.action_latched = True
+            return
         client.action_latched = True
         client.cooldown_until = now + 1.0
+        bomb_x = round(client.x / 40) * 40
+        bomb_y = round(client.y / 40) * 40
+        radius = 96 + min(5, client.bomb_power) * 24
         self.bombs.append(
             PartyBomb(
                 id=self.next_bomb_id,
                 owner_id=client.id,
-                x=round(client.x / 40) * 40,
-                y=round(client.y / 40) * 40,
+                x=bomb_x,
+                y=bomb_y,
+                radius=radius,
             )
         )
         self.add_effect(
-            round(client.x / 40) * 40,
-            round(client.y / 40) * 40,
+            bomb_x,
+            bomb_y,
             "bomb",
             client.color,
             0.5,
@@ -2448,6 +2703,7 @@ class PartyRoom:
                     reverse=True,
                 )
             ],
+            "boostPads": self.kart_boost_pads() if self.game_type == "kart" else [],
             "players": [
                 {
                     "id": client.id,
@@ -2468,6 +2724,12 @@ class PartyRoom:
                     "driftCharge": round(client.drift_charge, 2),
                     "shielded": now < client.shield_until,
                     "shield": max(0, round(client.shield_until - now, 1)),
+                    "bombPower": client.bomb_power,
+                    "bombLimit": client.bomb_limit,
+                    "combo": client.coin_combo if now <= client.coin_combo_until else 0,
+                    "comboTime": max(0, round(client.coin_combo_until - now, 1)),
+                    "magnet": max(0, round(client.magnet_until - now, 1)),
+                    "frenzy": max(0, round(client.frenzy_until - now, 1)),
                     "cooldown": max(0, round(client.cooldown_until - now, 1)),
                     "trail": [[round(x, 1), round(y, 1)] for x, y in client.trail[-120:]],
                 }
