@@ -2,13 +2,13 @@
   const params = new URLSearchParams(window.location.search);
   const gameKey = params.get("game") || "kart";
   const isSolo = ["solo", "local"].includes(params.get("mode") || "");
-  const assetVersion = params.get("v") || "20260530ah";
+  const assetVersion = params.get("v") || "20260530am";
   const world = { width: 2600, height: 1600 };
   const gameTypes = {
     kart: {
       name: "카트 랠리",
-      goal: "체크포인트를 따라 3바퀴를 돌며 부스터 패드와 니트로로 추월하세요.",
-      action: "Space: 드리프트 · 부스터 패드/니트로 활용",
+      goal: "체크포인트 3바퀴를 돌며 드리프트, 니트로, 드래프트로 추월하세요.",
+      action: "Space: 드리프트 · 앞차 뒤에서 드래프트 충전",
       accent: "#42d7ff",
       track: [
         [320, 820],
@@ -23,19 +23,20 @@
     },
     bomb: {
       name: "폭탄 그리드",
-      goal: "블록을 부수고 파워업을 모아 더 큰 연쇄폭발로 상대를 압박하세요.",
-      action: "Space: 폭탄 설치 · 화력/폭탄수/속도 파워업",
+      goal: "블록을 부수고 킥 파워업으로 폭탄을 밀어 연쇄폭발을 만들어 보세요.",
+      action: "Space: 폭탄 설치 · 화력/폭탄수/속도/킥 파워업",
       accent: "#ffba5a",
     },
     snake: {
       name: "스네이크 배틀",
-      goal: "먹이를 모아 길어지고 실드와 보너스 먹이로 위기 상황을 뒤집으세요.",
-      action: "방향키/WASD: 방향 전환 · Space: 순간 질주 · 실드: 충돌 1회 방어",
+      goal: "먹이를 모아 길어지고 질주로 상대 꼬리를 잘라 흐름을 뒤집으세요.",
+      action:
+        "방향키/WASD: 방향 전환 · Space: 질주/꼬리 절단 · 실드: 충돌 1회 방어",
       accent: "#8be66f",
     },
     coin: {
       name: "코인 러시",
-      goal: "위험 구역을 피하며 콤보, 자석, 피버로 코인과 보석을 몰아 모으세요.",
+      goal: "위험 구역을 피해 콤보를 쌓고 은행 존에서 큰 보너스로 현금화하세요.",
       action: "Space: 짧은 대시 · 자석/피버/실드 아이템 활용",
       accent: "#d08cff",
     },
@@ -180,16 +181,22 @@
       alive: true,
       trail: [],
       boosted: false,
+      biting: false,
+      biteCooldown: 0,
       drifting: false,
       driftCharge: 0,
+      drafting: false,
+      draftCharge: 0,
       padCooldowns: {},
       shield: 0,
       bombPower: 0,
       bombLimit: 1,
+      bombKick: 0,
       combo: 0,
       comboTimer: 0,
       magnet: 0,
       frenzy: 0,
+      bankCooldown: 0,
       cooldown: 0,
       isHost: true,
     };
@@ -216,6 +223,7 @@
       bombs: [],
       blocks: seedLocalBlocks(),
       hazards: [],
+      banks: [],
       effects: [],
       clientId: "local",
       isHost: true,
@@ -266,6 +274,7 @@
     if (roll < 0.18) return { kind: "flame", value: 1 };
     if (roll < 0.34) return { kind: "bombup", value: 1 };
     if (roll < 0.5) return { kind: "speed", value: 1 };
+    if (roll < 0.62) return { kind: "kick", value: 1 };
     return { kind: "coin", value: Math.random() < 0.35 ? 2 : 1 };
   }
 
@@ -321,16 +330,22 @@
       alive: true,
       trail: [],
       boosted: false,
+      biting: false,
+      biteCooldown: 0,
       drifting: false,
       driftCharge: 0,
+      drafting: false,
+      draftCharge: 0,
       padCooldowns: {},
       shield: 0,
       bombPower: 0,
       bombLimit: 1,
+      bombKick: 0,
       combo: 0,
       comboTimer: 0,
       magnet: 0,
       frenzy: 0,
+      bankCooldown: 0,
       cooldown: 0,
       isHost: false,
       isBot: true,
@@ -366,8 +381,11 @@
     player.comboTimer = 0;
     player.magnet = 0;
     player.frenzy = 0;
+    player.bankCooldown = 0;
     player.drifting = false;
     player.driftCharge = 0;
+    player.drafting = false;
+    player.draftCharge = 0;
     player.padCooldowns = {};
     player.actionLatch = false;
     player.trail = [[player.x, player.y]];
@@ -579,6 +597,7 @@
         state.bombs = state.bombs || [];
         state.blocks = state.blocks || [];
         state.hazards = state.hazards || [];
+        state.banks = state.banks || [];
         state.players = state.players || [];
         setCenter("");
         renderHud();
@@ -680,6 +699,7 @@
     updateLocalBombsForAll(dt);
     if (game === "coin") updateLocalCoinPickups(dt);
     if (game === "coin") updateLocalCoinHazardsForAll();
+    if (game === "coin") updateLocalCoinBanksForAll();
     if (
       state.pickups.length <
       (game === "snake" ? 30 : game === "coin" ? 24 : game === "bomb" ? 10 : 7)
@@ -757,11 +777,16 @@
     const previous = { ...input };
     Object.assign(input, controls);
     player.shield = Math.max(0, (player.shield || 0) - dt);
+    if (game === "bomb")
+      player.bombKick = Math.max(0, (player.bombKick || 0) - dt);
+    if (game === "snake")
+      player.biteCooldown = Math.max(0, (player.biteCooldown || 0) - dt);
     if (game === "coin") {
       player.comboTimer = Math.max(0, (player.comboTimer || 0) - dt);
       if (player.comboTimer <= 0) player.combo = 0;
       player.magnet = Math.max(0, (player.magnet || 0) - dt);
       player.frenzy = Math.max(0, (player.frenzy || 0) - dt);
+      player.bankCooldown = Math.max(0, (player.bankCooldown || 0) - dt);
     }
     if (game === "kart") updateLocalKart(player, dt);
     else if (game === "snake") updateLocalSnake(player, dt);
@@ -912,6 +937,7 @@
         bomb.blastTtl -= dt;
         return;
       }
+      updateLocalMovingBomb(bomb, dt);
       bomb.ttl -= dt;
       if (bomb.ttl <= 0) {
         bomb.blastTtl = 0.35;
@@ -1002,6 +1028,84 @@
     state.blocks = remaining;
   }
 
+  function updateLocalMovingBomb(bomb, dt) {
+    const speed = Math.hypot(bomb.vx || 0, bomb.vy || 0);
+    if (speed < 8) {
+      bomb.vx = 0;
+      bomb.vy = 0;
+      return;
+    }
+    const nextX = bomb.x + (bomb.vx || 0) * dt;
+    const nextY = bomb.y + (bomb.vy || 0) * dt;
+    if (localBombBlocked(bomb, nextX, nextY)) {
+      bomb.vx = 0;
+      bomb.vy = 0;
+      return;
+    }
+    bomb.x = nextX;
+    bomb.y = nextY;
+  }
+
+  function tryKickLocalBomb(player, dirX, dirY) {
+    if (game !== "bomb" || (player.bombKick || 0) <= 0) return;
+    const horizontal = Math.abs(dirX) >= Math.abs(dirY);
+    const kickX = horizontal
+      ? Math.sign(dirX || Math.cos(player.angle) || 1)
+      : 0;
+    const kickY = horizontal
+      ? 0
+      : Math.sign(dirY || Math.sin(player.angle) || 1);
+    const bomb = (state.bombs || []).find(
+      (item) =>
+        item.ttl > 0 &&
+        item.blastTtl <= 0 &&
+        distance(player.x, player.y, item.x, item.y) < 46,
+    );
+    if (!bomb) return;
+    const currentSpeed = Math.hypot(bomb.vx || 0, bomb.vy || 0);
+    if (
+      currentSpeed > 24 &&
+      Math.sign(bomb.vx || 0) === kickX &&
+      Math.sign(bomb.vy || 0) === kickY
+    )
+      return;
+    const previewX = bomb.x + kickX * 20;
+    const previewY = bomb.y + kickY * 20;
+    if (localBombBlocked(bomb, previewX, previewY)) return;
+    bomb.vx = kickX * 380;
+    bomb.vy = kickY * 380;
+    addPartyEffect({
+      x: bomb.x,
+      y: bomb.y,
+      kind: "kick",
+      color: player.color,
+      ttl: 0.5,
+      text: "KICK",
+    });
+  }
+
+  function localBombBlocked(bomb, x, y) {
+    if (x < 34 || x > world.width - 34 || y < 34 || y > world.height - 34)
+      return true;
+    if (
+      (state.blocks || []).some((block) => {
+        const size = block.size || 46;
+        return (
+          Math.abs(x - block.x) < size / 2 + 22 &&
+          Math.abs(y - block.y) < size / 2 + 22
+        );
+      })
+    )
+      return true;
+    return (state.bombs || []).some(
+      (other) =>
+        other.id !== bomb.id &&
+        other.ttl > 0 &&
+        other.blastTtl <= 0 &&
+        distance(x, y, other.x, other.y) < 34,
+    );
+  }
+
   function updateLocalCoinHazardsForAll() {
     refreshLocalCoinHazards();
     state.players.forEach((player) => {
@@ -1021,20 +1125,77 @@
       if (!other.alive) continue;
       const trail =
         other.id === player.id ? other.trail.slice(0, -10) : other.trail;
-      if (trail?.some(([x, y]) => distance(player.x, player.y, x, y) < 13)) {
-        if (guardLocalSnake(player, "꼬리")) return;
-        knockLocal(player, "꼬리에 부딪혔습니다.");
-        addPartyEffect({
-          x: player.x,
-          y: player.y,
-          kind: "down",
-          color: player.color,
-          ttl: 0.8,
-          text: "CRASH",
-        });
+      const hitIndex = trail?.findIndex(
+        ([x, y]) => distance(player.x, player.y, x, y) < 13,
+      );
+      if (!Number.isInteger(hitIndex) || hitIndex < 0) continue;
+      if (other.id !== player.id && tryLocalSnakeBite(player, other, hitIndex))
         return;
-      }
+      if (guardLocalSnake(player, "꼬리")) return;
+      knockLocal(player, "꼬리에 부딪혔습니다.");
+      addPartyEffect({
+        x: player.x,
+        y: player.y,
+        kind: "down",
+        color: player.color,
+        ttl: 0.8,
+        text: "CRASH",
+      });
+      return;
     }
+  }
+
+  function tryLocalSnakeBite(player, other, hitIndex) {
+    if (
+      game !== "snake" ||
+      !player.boosted ||
+      (player.biteCooldown || 0) > 0 ||
+      !other.trail?.length
+    )
+      return false;
+    const cutCount = Math.min(
+      hitIndex + 1,
+      Math.max(0, other.trail.length - 14),
+    );
+    if (cutCount < 5) return false;
+    const cutTrail = other.trail.slice(0, cutCount);
+    other.trail = other.trail.slice(cutCount);
+    const reward = Math.min(14, Math.max(3, Math.floor(cutCount / 6)));
+    player.score += reward;
+    other.score = Math.max(
+      0,
+      (other.score || 0) - Math.max(1, Math.floor(reward / 2)),
+    );
+    player.biteCooldown = 0.75;
+    player.biting = true;
+    for (let index = 0; index < cutTrail.length; index += 10) {
+      const [x, y] = cutTrail[index];
+      state.pickups.push({
+        id: localIds.pickup++,
+        x,
+        y,
+        kind: index % 20 === 0 ? "gem" : "coin",
+        value: index % 20 === 0 ? 3 : 1,
+      });
+    }
+    state.pickups = state.pickups.slice(-48);
+    addPartyEffect({
+      x: player.x,
+      y: player.y,
+      kind: "bite",
+      color: player.color,
+      ttl: 0.75,
+      text: `CUT +${reward}`,
+    });
+    addPartyEffect({
+      x: other.x,
+      y: other.y,
+      kind: "cut",
+      color: other.color,
+      ttl: 0.65,
+      text: "TAIL CUT",
+    });
+    return true;
   }
 
   function guardLocalSnake(player, label) {
@@ -1149,6 +1310,7 @@
     player.vy *= drag;
     moveLocal(player, player.vx * dt, player.vy * dt, true);
     applyLocalKartBoostPad(player);
+    updateLocalKartDraft(player, dt, onTrack);
     const target = track[player.checkpoint % track.length];
     if (distance(player.x, player.y, target[0], target[1]) < 72) {
       player.checkpoint += 1;
@@ -1177,6 +1339,58 @@
         if (player.lap >= 3) finishLocalRound("완주");
       }
     }
+  }
+
+  function updateLocalKartDraft(player, dt, onTrack) {
+    if (game !== "kart" || !player.alive) return;
+    const speed = Math.hypot(player.vx || 0, player.vy || 0);
+    const forwardX = Math.cos(player.angle || 0);
+    const forwardY = Math.sin(player.angle || 0);
+    const target = (state.players || [])
+      .filter((other) => other.id !== player.id && other.alive)
+      .map((other) => {
+        const dx = other.x - player.x;
+        const dy = other.y - player.y;
+        const ahead = dx * forwardX + dy * forwardY;
+        const lateral = Math.abs(dx * -forwardY + dy * forwardX);
+        const gap = Math.hypot(dx, dy);
+        const sameDirection = Math.cos(
+          (other.angle || 0) - (player.angle || 0),
+        );
+        return { other, ahead, lateral, gap, sameDirection };
+      })
+      .filter(
+        (item) =>
+          item.ahead > 42 &&
+          item.ahead < 230 &&
+          item.lateral < 74 &&
+          item.gap < 240 &&
+          item.sameDirection > 0.55,
+      )
+      .sort((a, b) => a.gap - b.gap)[0];
+    const canDraft = Boolean(
+      target && onTrack && speed > 118 && !player.drifting,
+    );
+    if (!canDraft) {
+      player.drafting = false;
+      player.draftCharge = Math.max(0, (player.draftCharge || 0) - dt * 0.75);
+      return;
+    }
+    player.drafting = true;
+    player.draftCharge = Math.min(1.35, (player.draftCharge || 0) + dt);
+    if (player.draftCharge < 1.18) return;
+    player.boost = Math.max(player.boost || 0, 1.05);
+    player.draftCharge = 0;
+    player.drafting = false;
+    player.score += 3;
+    addPartyEffect({
+      x: player.x,
+      y: player.y,
+      kind: "draft",
+      color: player.color,
+      ttl: 0.72,
+      text: "DRAFT",
+    });
   }
 
   function updateLocalWalker(player, dt) {
@@ -1250,6 +1464,8 @@
         ownerId: player.id,
         x: bombX,
         y: bombY,
+        vx: 0,
+        vy: 0,
         ttl: 1.9,
         blastTtl: 0,
         radius: 96 + Math.min(5, player.bombPower || 0) * 24,
@@ -1263,6 +1479,8 @@
         text: "BOMB",
       });
     }
+    if (game === "bomb" && (dx || dy))
+      tryKickLocalBomb(player, dx / length, dy / length);
     player.cooldown = Math.max(0, (player.cooldown || 0) - dt);
     player.boosted =
       game === "bomb" ? (player.boost || 0) > 0 : player.dash > 0;
@@ -1290,6 +1508,7 @@
     player.boost = Math.max(0, (player.boost || 0) - dt);
     player.cooldown = Math.max(0, (player.cooldown || 0) - dt);
     player.boosted = player.boost > 0;
+    player.biting = (player.biteCooldown || 0) > 0;
     const speed = 205 * (player.boosted ? 1.5 : 1);
     moveLocal(
       player,
@@ -1312,8 +1531,10 @@
       player.trail
         .slice(0, -8)
         .some(([x, y]) => distance(player.x, player.y, x, y) < 13)
-    )
+    ) {
+      if (guardLocalSnake(player, "꼬리")) return;
       knockLocal(player, "꼬리에 부딪혔습니다.");
+    }
   }
 
   function refreshLocalCoinHazards() {
@@ -1357,6 +1578,69 @@
       }
       knockLocal(player, "위험 구역에 닿았습니다.");
     }
+  }
+
+  function localCoinBanks() {
+    const t = performance.now() / 1000;
+    const phase = Math.floor(t / 7);
+    return [
+      {
+        id: "bank-a",
+        x: world.width * 0.24 + Math.sin(t * 0.28) * 150,
+        y: world.height * 0.38 + Math.cos(t * 0.33) * 120,
+        radius: 62,
+        active: phase % 3 !== 1,
+      },
+      {
+        id: "bank-b",
+        x: world.width * 0.7 + Math.cos(t * 0.24) * 170,
+        y: world.height * 0.32 + Math.sin(t * 0.31) * 125,
+        radius: 58,
+        active: phase % 3 !== 2,
+      },
+      {
+        id: "bank-c",
+        x: world.width * 0.52 + Math.sin(t * 0.2) * 210,
+        y: world.height * 0.73 + Math.cos(t * 0.27) * 105,
+        radius: 64,
+        active: phase % 3 !== 0,
+      },
+    ];
+  }
+
+  function updateLocalCoinBanksForAll() {
+    state.banks = localCoinBanks();
+    state.players.forEach((player) => {
+      if (!player.alive) return;
+      tryLocalCoinBank(player);
+    });
+  }
+
+  function tryLocalCoinBank(player) {
+    if (game !== "coin" || (player.bankCooldown || 0) > 0) return;
+    const bank = state.banks.find(
+      (item) =>
+        item.active &&
+        distance(player.x, player.y, item.x, item.y) < item.radius,
+    );
+    if (!bank) return;
+    const combo = player.combo || 0;
+    if (combo < 3 && (player.frenzy || 0) <= 0) return;
+    const cashCombo = Math.max(3, combo);
+    const multiplier = (player.frenzy || 0) > 0 ? 2 : 1;
+    const bonus = Math.min(70, 8 + cashCombo * 3) * multiplier;
+    player.score += bonus;
+    player.combo = 0;
+    player.comboTimer = 0;
+    player.bankCooldown = 5.5;
+    addPartyEffect({
+      x: bank.x,
+      y: bank.y,
+      kind: "bank",
+      color: "#ffd166",
+      ttl: 0.9,
+      text: `BANK +${bonus}`,
+    });
   }
 
   function updateLocalCoinPickups(dt) {
@@ -1428,6 +1712,9 @@
         player.score += 2;
         player.boosted = true;
         player.boost = Math.max(player.boost || 0, 3.2);
+      } else if (pickup.kind === "kick") {
+        player.score += 2;
+        player.bombKick = Math.max(player.bombKick || 0, 12);
       } else {
         gained = coinMode ? coinPickupScore(player, pickup) : pickup.value || 1;
         player.score += gained;
@@ -1443,6 +1730,7 @@
           pickup.kind === "flame" ||
           pickup.kind === "bombup" ||
           pickup.kind === "speed" ||
+          pickup.kind === "kick" ||
           pickup.kind === "magnet" ||
           pickup.kind === "frenzy" ||
           pickup.kind === "feast"
@@ -1455,13 +1743,15 @@
               ? "#ff5f6d"
               : pickup.kind === "speed"
                 ? "#42d7ff"
-                : pickup.kind === "magnet"
-                  ? "#42d7ff"
-                  : pickup.kind === "frenzy"
-                    ? "#ffd166"
-                    : pickup.kind === "feast"
+                : pickup.kind === "kick"
+                  ? "#8be66f"
+                  : pickup.kind === "magnet"
+                    ? "#42d7ff"
+                    : pickup.kind === "frenzy"
                       ? "#ffd166"
-                      : player.color,
+                      : pickup.kind === "feast"
+                        ? "#ffd166"
+                        : player.color,
         ttl: 0.65,
         text:
           pickup.kind === "boost"
@@ -1476,15 +1766,17 @@
                     ? `폭탄 ${player.bombLimit || 1}`
                     : pickup.kind === "speed"
                       ? "SPEED"
-                      : pickup.kind === "magnet"
-                        ? "MAGNET"
-                        : pickup.kind === "frenzy"
-                          ? "FEVER"
-                          : pickup.kind === "feast"
-                            ? `+${pickup.value || 8}`
-                            : coinMode && (player.combo || 0) >= 4
-                              ? `+${gained} x${Math.min(7, player.combo || 1)}`
-                              : `+${gained || pickup.value || 1}`,
+                      : pickup.kind === "kick"
+                        ? "KICK"
+                        : pickup.kind === "magnet"
+                          ? "MAGNET"
+                          : pickup.kind === "frenzy"
+                            ? "FEVER"
+                            : pickup.kind === "feast"
+                              ? `+${pickup.value || 8}`
+                              : coinMode && (player.combo || 0) >= 4
+                                ? `+${gained} x${Math.min(7, player.combo || 1)}`
+                                : `+${gained || pickup.value || 1}`,
       });
       return false;
     });
@@ -1578,6 +1870,7 @@
     ctx.translate(camera.offsetX, camera.offsetY);
     ctx.scale(camera.scale, camera.scale);
     drawArena();
+    state.banks?.forEach(drawBank);
     state.pickups.forEach(drawPickup);
     state.hazards?.forEach(drawHazard);
     state.blocks?.forEach(drawBlock);
@@ -1861,6 +2154,7 @@
     if (pickup.kind === "frenzy") return "#ffd166";
     if (pickup.kind === "flame") return "#ff5f6d";
     if (pickup.kind === "bombup") return "#f5fbff";
+    if (pickup.kind === "kick") return "#8be66f";
     if (pickup.kind === "feast") return "#ffd166";
     if (pickup.kind === "gem" || pickup.value > 1) return "#ffd166";
     return "#f8f871";
@@ -1875,6 +2169,7 @@
           ? 14
           : pickup.kind === "flame" ||
               pickup.kind === "bombup" ||
+              pickup.kind === "kick" ||
               pickup.kind === "magnet" ||
               pickup.kind === "frenzy" ||
               pickup.kind === "feast"
@@ -1888,6 +2183,7 @@
       pickup.kind === "shield" ||
       pickup.kind === "speed" ||
       pickup.kind === "flame" ||
+      pickup.kind === "kick" ||
       pickup.kind === "magnet" ||
       pickup.kind === "frenzy" ||
       pickup.kind === "feast"
@@ -2027,6 +2323,26 @@
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText("+", pickup.x, pickup.y + 1);
+    } else if (pickup.kind === "kick") {
+      ctx.fillStyle = "#12251d";
+      ctx.beginPath();
+      ctx.roundRect?.(pickup.x - 15, pickup.y - 14, 30, 28, 7);
+      if (!ctx.roundRect) ctx.rect(pickup.x - 15, pickup.y - 14, 30, 28);
+      ctx.fill();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(pickup.x - 9, pickup.y + 3);
+      ctx.lineTo(pickup.x + 2, pickup.y + 3);
+      ctx.lineTo(pickup.x + 2, pickup.y - 8);
+      ctx.lineTo(pickup.x + 12, pickup.y + 1);
+      ctx.lineTo(pickup.x + 2, pickup.y + 10);
+      ctx.lineTo(pickup.x + 2, pickup.y + 5);
+      ctx.lineTo(pickup.x - 9, pickup.y + 5);
+      ctx.closePath();
+      ctx.fill();
     } else if (pickup.kind === "speed") {
       ctx.beginPath();
       ctx.moveTo(pickup.x - 13, pickup.y - 12);
@@ -2099,6 +2415,40 @@
     ctx.restore();
   }
 
+  function drawBank(bank) {
+    if (game !== "coin") return;
+    const pulse = 0.5 + Math.sin(performance.now() / 240) * 0.5;
+    const alpha = bank.active ? 0.2 + pulse * 0.1 : 0.08;
+    ctx.save();
+    ctx.shadowColor = bank.active
+      ? "rgba(255,209,102,.8)"
+      : "rgba(105,220,255,.28)";
+    ctx.shadowBlur = bank.active ? 24 : 8;
+    ctx.fillStyle = bank.active
+      ? `rgba(255,209,102,${alpha})`
+      : "rgba(105,220,255,.08)";
+    ctx.strokeStyle = bank.active ? "#ffd166" : "rgba(245,251,255,.3)";
+    ctx.lineWidth = bank.active ? 4 : 2;
+    ctx.beginPath();
+    ctx.arc(bank.x, bank.y, bank.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = bank.active ? "#ffd166" : "rgba(245,251,255,.45)";
+    ctx.font = "900 15px Malgun Gothic, system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(bank.active ? "BANK" : "휴식", bank.x, bank.y);
+    ctx.strokeStyle = "rgba(245,251,255,.28)";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 8]);
+    ctx.beginPath();
+    ctx.arc(bank.x, bank.y, bank.radius + 12 + pulse * 8, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
   function drawBlock(block) {
     const size = block.size || 46;
     ctx.save();
@@ -2154,6 +2504,19 @@
       return;
     }
     ctx.save();
+    const moveSpeed = Math.hypot(bomb.vx || 0, bomb.vy || 0);
+    if (moveSpeed > 24) {
+      ctx.strokeStyle = "rgba(139,230,111,.62)";
+      ctx.lineWidth = 9;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(bomb.x, bomb.y);
+      ctx.lineTo(
+        bomb.x - ((bomb.vx || 0) / moveSpeed) * 30,
+        bomb.y - ((bomb.vy || 0) / moveSpeed) * 30,
+      );
+      ctx.stroke();
+    }
     ctx.shadowColor = "rgba(0,0,0,.65)";
     ctx.shadowBlur = 10;
     ctx.fillStyle = "#111827";
@@ -2232,6 +2595,19 @@
           ctx.fill();
         }
       }
+      if (player.drafting || (player.draftCharge || 0) > 0.08) {
+        const charge = clamp(player.draftCharge || 0, 0, 1.18);
+        ctx.strokeStyle = `rgba(66,215,255,${0.35 + charge * 0.38})`;
+        ctx.lineWidth = 4;
+        ctx.lineCap = "round";
+        for (let line = 0; line < 4; line += 1) {
+          const offset = -18 + line * 12;
+          ctx.beginPath();
+          ctx.moveTo(-62, offset);
+          ctx.lineTo(-34 - charge * 12, offset * 0.35);
+          ctx.stroke();
+        }
+      }
       const body = ctx.createLinearGradient(-28, -18, 28, 18);
       body.addColorStop(0, "#07111f");
       body.addColorStop(0.45, player.color);
@@ -2271,6 +2647,13 @@
         ctx.lineWidth = 5;
         ctx.beginPath();
         ctx.arc(0, 0, 34, -0.8, 0.8);
+        ctx.stroke();
+      }
+      if (player.biting) {
+        ctx.strokeStyle = "rgba(255,95,109,.92)";
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.arc(16, 0, 18, -0.75, 0.75);
         ctx.stroke();
       }
       if (player.shielded || (player.shield || 0) > 0) {
@@ -2376,6 +2759,15 @@
           ctx.arc(0, 0, 34, -0.95, 0.95);
           ctx.stroke();
         }
+        if ((player.bombKick || 0) > 0) {
+          ctx.strokeStyle = "rgba(139,230,111,.9)";
+          ctx.lineWidth = 4;
+          ctx.setLineDash([9, 7]);
+          ctx.beginPath();
+          ctx.arc(0, 0, 39, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
       } else {
         ctx.fillStyle = "rgba(245,251,255,.22)";
         ctx.beginPath();
@@ -2416,6 +2808,7 @@
         "dash",
         "lap",
         "checkpoint",
+        "draft",
         "respawn",
         "shield",
         "gem",
@@ -2485,6 +2878,21 @@
         ctx.fillRect(x + pad.x * mapScale - 2, y + pad.y * mapScale - 2, 4, 4);
       });
     }
+    state.banks?.forEach((bank) => {
+      ctx.strokeStyle = bank.active
+        ? "rgba(255,209,102,.9)"
+        : "rgba(245,251,255,.28)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(
+        x + bank.x * mapScale,
+        y + bank.y * mapScale,
+        Math.max(3, bank.radius * mapScale),
+        0,
+        Math.PI * 2,
+      );
+      ctx.stroke();
+    });
     state.hazards?.forEach((hazard) => {
       ctx.strokeStyle = "rgba(255,95,109,.8)";
       ctx.lineWidth = 1;
@@ -2571,15 +2979,26 @@
 
   function playerScoreLabel(player) {
     const score = player.score || 0;
-    if (game === "kart") return `${player.lap || 0}L · ${score}`;
-    if (game === "bomb")
-      return `${score} · 화력 ${(player.bombPower || 0) + 1} · 폭탄 ${player.bombLimit || 1}`;
+    if (game === "kart") {
+      const draft =
+        (player.draftCharge || 0) > 0
+          ? ` · 드래프트 ${Math.round(clamp(player.draftCharge || 0, 0, 1.18) * 85)}%`
+          : "";
+      return `${player.lap || 0}L · ${score}${draft}`;
+    }
+    if (game === "bomb") {
+      const kick =
+        (player.bombKick || 0) > 0 ? ` · 킥 ${Math.ceil(player.bombKick)}` : "";
+      return `${score} · 화력 ${(player.bombPower || 0) + 1} · 폭탄 ${player.bombLimit || 1}${kick}`;
+    }
     if (game === "coin") {
       const combo = player.combo || 0;
       const badges = [];
       if (combo >= 2) badges.push(`${combo}콤보`);
       if ((player.magnet || 0) > 0) badges.push("자석");
       if ((player.frenzy || 0) > 0) badges.push("피버");
+      if ((player.bankCooldown || 0) > 0)
+        badges.push(`은행 ${Math.ceil(player.bankCooldown)}`);
       return badges.length ? `${score} · ${badges.join(" · ")}` : `${score}`;
     }
     return `${score}`;

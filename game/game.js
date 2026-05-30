@@ -204,7 +204,7 @@ function safeUrl(value) {
 }
 
 function currentAssetVersion() {
-  return new URLSearchParams(window.location.search).get("v") || "20260530ah";
+  return new URLSearchParams(window.location.search).get("v") || "20260530am";
 }
 
 function nowSeconds() {
@@ -414,6 +414,7 @@ function buildInput() {
     left: keys.has("a") || keys.has("arrowleft"),
     right: keys.has("d") || keys.has("arrowright"),
     fire: pointer.down || keys.has(" "),
+    dash: keys.has("shift"),
     aimX: aim.x,
     aimY: aim.y,
   };
@@ -575,7 +576,7 @@ function startLocalArena() {
   setStatus("훈련장", false);
   setConnectionPanelCollapsed(true);
   setCenterMessage(
-    "LAN 아레나 훈련장입니다. 봇을 상대로 엄폐물, 파워업, 거점을 활용하세요.",
+    "LAN 아레나 훈련장입니다. Shift 회피 대시, 엄폐물, 파워업, 거점을 활용하세요.",
   );
   window.setTimeout(() => {
     if (isLocalArena) setCenterMessage("");
@@ -604,9 +605,15 @@ function createLocalArenaPlayer(id, name, color, x, y, bot) {
     weapon: "blaster",
     weaponUntil: 0,
     weaponAmmo: 0,
+    stamina: 100,
+    dashUntil: 0,
+    dashCooldownUntil: 0,
+    dashAngle: 0,
+    dashLatch: false,
     shielded: false,
     hasted: false,
     rapid: false,
+    dashing: false,
     respawnIn: 0,
     bot,
     targetX: x,
@@ -708,6 +715,12 @@ function respawnLocalArenaPlayer(player, now) {
   player.weapon = "blaster";
   player.weaponUntil = 0;
   player.weaponAmmo = 0;
+  player.stamina = 100;
+  player.dashUntil = 0;
+  player.dashCooldownUntil = 0;
+  player.dashAngle = 0;
+  player.dashLatch = false;
+  player.dashing = false;
   addLocalArenaEffect({
     x: player.x,
     y: player.y,
@@ -738,6 +751,7 @@ function updateLocalArena(dt, now) {
     item.shielded = now < item.shieldUntil;
     item.hasted = now < item.hasteUntil;
     item.rapid = now < item.rapidUntil;
+    item.dashing = now < (item.dashUntil || 0);
     item.weaponTtl = Math.max(0, (item.weaponUntil || 0) - now);
     item.respawnIn = item.alive ? 0 : Math.max(0, item.respawnAt - now);
   });
@@ -823,13 +837,44 @@ function updateLocalArenaActor(player, input, dt, now) {
   const dx = Number(input.right) - Number(input.left);
   const dy = Number(input.down) - Number(input.up);
   const length = Math.hypot(dx, dy) || 1;
+  player.stamina = Math.min(100, (player.stamina ?? 100) + dt * 24);
+  if (!input.dash) player.dashLatch = false;
+  if (
+    input.dash &&
+    !player.dashLatch &&
+    now >= (player.dashCooldownUntil || 0) &&
+    (player.stamina ?? 100) >= 36
+  ) {
+    player.dashLatch = true;
+    player.stamina = Math.max(0, (player.stamina ?? 100) - 36);
+    player.dashUntil = now + 0.18;
+    player.dashCooldownUntil = now + 0.65;
+    player.dashAngle =
+      dx || dy
+        ? Math.atan2(dy, dx)
+        : Math.atan2(input.aimY - player.y, input.aimX - player.x);
+    addLocalArenaEffect({
+      x: player.x,
+      y: player.y,
+      kind: "dash",
+      color: player.color,
+      ttl: 0.42,
+      text: "DASH",
+    });
+  }
+  const dashing = now < (player.dashUntil || 0);
+  player.dashing = dashing;
+  const moveX = dashing
+    ? Math.cos(player.dashAngle || player.angle || 0)
+    : dx / length;
+  const moveY = dashing
+    ? Math.sin(player.dashAngle || player.angle || 0)
+    : dy / length;
   const speed =
-    localArenaConfig.playerSpeed * (now < player.hasteUntil ? 1.32 : 1);
-  moveLocalArenaPlayer(
-    player,
-    (dx / length) * speed * dt,
-    (dy / length) * speed * dt,
-  );
+    localArenaConfig.playerSpeed *
+    (now < player.hasteUntil ? 1.32 : 1) *
+    (dashing ? 2.65 : 1);
+  moveLocalArenaPlayer(player, moveX * speed * dt, moveY * speed * dt);
   player.angle = Math.atan2(input.aimY - player.y, input.aimX - player.x);
   if (input.fire) spawnLocalArenaBullet(player, now);
   collectLocalArenaPickups(player, now);
@@ -1627,6 +1672,17 @@ function drawPlayer(player) {
     ctx.arc(0, 0, radius + 5, -0.8, 0.8);
     ctx.stroke();
   }
+  if (player.dashing) {
+    ctx.strokeStyle = "rgba(66,215,255,.88)";
+    ctx.lineWidth = 5;
+    ctx.lineCap = "round";
+    for (let streak = 0; streak < 3; streak += 1) {
+      ctx.beginPath();
+      ctx.moveTo(-radius - 24 - streak * 8, -9 + streak * 9);
+      ctx.lineTo(-radius - 7, -5 + streak * 5);
+      ctx.stroke();
+    }
+  }
   ctx.fillStyle = "rgba(255,255,255,.2)";
   ctx.beginPath();
   ctx.arc(-5, -6, radius * 0.48, 0, Math.PI * 2);
@@ -1646,6 +1702,15 @@ function drawPlayer(player) {
   ctx.fillRect(x - 28, y - radius - 19, 56, 6);
   ctx.fillStyle = player.health > 35 ? "#53e2a8" : "#ff5f6d";
   ctx.fillRect(x - 28, y - radius - 19, 56 * (player.health / 100), 6);
+  ctx.fillStyle = "rgba(0, 0, 0, 0.42)";
+  ctx.fillRect(x - 28, y - radius - 11, 56, 4);
+  ctx.fillStyle = "#42d7ff";
+  ctx.fillRect(
+    x - 28,
+    y - radius - 11,
+    56 * clamp(Number(player.stamina ?? 100) / 100, 0, 1),
+    4,
+  );
   ctx.fillStyle = "#eef6ff";
   ctx.font = "700 12px system-ui, sans-serif";
   ctx.textAlign = "center";
@@ -1793,7 +1858,11 @@ netInfoCopy?.addEventListener("click", () => {
 
 window.addEventListener("keydown", (event) => {
   const key = event.key.toLowerCase();
-  if ([" ", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(key)) {
+  if (
+    [" ", "shift", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(
+      key,
+    )
+  ) {
     event.preventDefault();
   }
   keys.add(key);

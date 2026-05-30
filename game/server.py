@@ -355,7 +355,7 @@ PARTY_GAME_TYPES = {"kart", "bomb", "snake", "coin"}
 PARTY_GAME_CONFIGS: dict[str, dict[str, Any]] = {
     "kart": {
         "name": "카트 랠리",
-        "goal": "3바퀴를 가장 먼저 완주하고 드리프트 미니부스터를 활용하세요.",
+        "goal": "체크포인트 3바퀴를 돌며 드리프트, 니트로, 드래프트로 추월하세요.",
         "duration": 240,
         "laps": 3,
         "speed": 360,
@@ -372,19 +372,19 @@ PARTY_GAME_CONFIGS: dict[str, dict[str, Any]] = {
     },
     "bomb": {
         "name": "폭탄 그리드",
-        "goal": "폭탄을 설치해 상대를 맞히고 오래 살아남으세요.",
+        "goal": "폭탄을 설치하고 킥 파워업으로 폭탄을 밀어 상대를 압박하세요.",
         "duration": 180,
         "speed": 245,
     },
     "snake": {
         "name": "스네이크 배틀",
-        "goal": "먹이를 모아 길어지고 벽과 꼬리를 피하며 순간 질주로 빈틈을 빠져나가세요.",
+        "goal": "먹이를 모아 길어지고 질주로 상대 꼬리를 잘라 흐름을 뒤집으세요.",
         "duration": 180,
         "speed": 205,
     },
     "coin": {
         "name": "코인 러시",
-        "goal": "위험 구역을 피해 코인과 보석을 모으고 실드로 위기를 버티세요.",
+        "goal": "위험 구역을 피해 콤보를 쌓고 은행 존에서 큰 보너스로 현금화하세요.",
         "duration": 150,
         "speed": 270,
     },
@@ -458,6 +458,11 @@ class Client:
     weapon: str = "blaster"
     weapon_until: float = 0
     weapon_ammo: int = 0
+    stamina: float = 100.0
+    dash_until: float = 0
+    dash_cooldown_until: float = 0
+    dash_angle: float = 0
+    dash_latched: bool = False
     input: dict[str, Any] = field(default_factory=dict)
     write_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
@@ -627,14 +632,19 @@ class PartyClient:
     cooldown_until: float = 0.0
     boosted_until: float = 0.0
     shield_until: float = 0.0
+    snake_bite_until: float = 0.0
     drift_charge: float = 0.0
     drifting: bool = False
+    draft_charge: float = 0.0
+    drafting: bool = False
     bomb_power: int = 0
     bomb_limit: int = 1
+    bomb_kick_until: float = 0.0
     coin_combo: int = 0
     coin_combo_until: float = 0.0
     magnet_until: float = 0.0
     frenzy_until: float = 0.0
+    coin_bank_until: float = 0.0
     kart_pad_cooldowns: dict[str, float] = field(default_factory=dict)
     action_latched: bool = False
     connected_at: float = field(default_factory=time.time)
@@ -659,6 +669,8 @@ class PartyBomb:
     ttl: float = 1.9
     blast_ttl: float = 0.0
     radius: float = 96.0
+    vx: float = 0.0
+    vy: float = 0.0
 
 
 @dataclass
@@ -2200,14 +2212,19 @@ class PartyRoom:
             player.cooldown_until = 0
             player.boosted_until = 0
             player.shield_until = 0
+            player.snake_bite_until = 0
             player.drift_charge = 0
             player.drifting = False
+            player.draft_charge = 0
+            player.drafting = False
             player.bomb_power = 0
             player.bomb_limit = 1
+            player.bomb_kick_until = 0.0
             player.coin_combo = 0
             player.coin_combo_until = 0
             player.magnet_until = 0
             player.frenzy_until = 0
+            player.coin_bank_until = 0
             player.kart_pad_cooldowns.clear()
             player.action_latched = False
             self.place_client(player)
@@ -2233,12 +2250,16 @@ class PartyRoom:
         client.alive = True
         client.respawn_at = 0
         client.shield_until = 0
+        client.snake_bite_until = 0
         client.drift_charge = 0
         client.drifting = False
+        client.draft_charge = 0
+        client.drafting = False
         client.coin_combo = 0
         client.coin_combo_until = 0
         client.magnet_until = 0
         client.frenzy_until = 0
+        client.coin_bank_until = 0
         client.kart_pad_cooldowns.clear()
         client.action_latched = False
         client.trail = [(client.x, client.y)]
@@ -2294,6 +2315,8 @@ class PartyRoom:
             return ("bombup", 1)
         if roll < 0.5:
             return ("speed", 1)
+        if roll < 0.62:
+            return ("kick", 1)
         return ("coin", 2 if random.random() < 0.35 else 1)
 
     def random_coin_pickup(self) -> tuple[str, int]:
@@ -2378,6 +2401,7 @@ class PartyRoom:
             self.update_walkers(dt, now)
             self.update_coin_pickups(dt, now)
             self.update_coin_hazards(now)
+            self.update_coin_banks(now)
         self.collect_pickups(now)
 
     def tick_effect(self, effect: PartyEffect, dt: float) -> bool:
@@ -2475,6 +2499,7 @@ class PartyRoom:
             client.vy *= drag
             self.move_client(client, client.vx * dt, client.vy * dt)
             self.apply_kart_boost_pad(client, now)
+            self.update_kart_draft(client, dt, now, on_track)
             target = checkpoints[client.checkpoint % len(checkpoints)]
             if party_distance(client.x, client.y, float(target[0]), float(target[1])) < 72:
                 client.checkpoint += 1
@@ -2489,6 +2514,45 @@ class PartyRoom:
                     if client.lap >= int(self.config["laps"]):
                         self.finish_round(f"{client.name}님 완주")
                         return
+
+    def update_kart_draft(
+        self,
+        client: PartyClient,
+        dt: float,
+        now: float,
+        on_track: bool,
+    ) -> None:
+        if self.game_type != "kart" or not client.alive:
+            return
+        speed = math.hypot(client.vx, client.vy)
+        forward_x = math.cos(client.angle)
+        forward_y = math.sin(client.angle)
+        candidates: list[tuple[float, PartyClient]] = []
+        for other in self.clients.values():
+            if other.id == client.id or not other.alive:
+                continue
+            dx = other.x - client.x
+            dy = other.y - client.y
+            ahead = dx * forward_x + dy * forward_y
+            lateral = abs(dx * -forward_y + dy * forward_x)
+            gap = math.hypot(dx, dy)
+            same_direction = math.cos(other.angle - client.angle)
+            if ahead > 42 and ahead < 230 and lateral < 74 and gap < 240 and same_direction > 0.55:
+                candidates.append((gap, other))
+        can_draft = bool(candidates) and on_track and speed > 118 and not client.drifting
+        if not can_draft:
+            client.drafting = False
+            client.draft_charge = max(0.0, client.draft_charge - dt * 0.75)
+            return
+        client.drafting = True
+        client.draft_charge = min(1.35, client.draft_charge + dt)
+        if client.draft_charge < 1.18:
+            return
+        client.boosted_until = max(client.boosted_until, now + 1.05)
+        client.draft_charge = 0
+        client.drafting = False
+        client.score += 3
+        self.add_effect(client.x, client.y, "draft", client.color, 0.72, "DRAFT")
 
     def update_walkers(self, dt: float, now: float) -> None:
         speed = float(self.config["speed"])
@@ -2520,6 +2584,8 @@ class PartyRoom:
             move_speed = speed * boost_factor
             self.move_client(client, dx * move_speed * dt, dy * move_speed * dt)
             if self.game_type == "bomb":
+                if length:
+                    self.try_kick_bomb(client, dx, dy, now)
                 self.maybe_drop_bomb(client, now)
 
     def update_snakes(self, dt: float, now: float) -> None:
@@ -2562,11 +2628,22 @@ class PartyRoom:
                 if not other.alive:
                     continue
                 trail = other.trail[:-8] if other.id == client.id else other.trail
-                if any(party_distance(client.x, client.y, x, y) < 13 for x, y in trail):
-                    if self.guard_snake(client, now, "꼬리"):
-                        break
-                    self.knock_out(client, now, "꼬리에 부딪혔습니다.")
+                hit_index = next(
+                    (
+                        index
+                        for index, (x, y) in enumerate(trail)
+                        if party_distance(client.x, client.y, x, y) < 13
+                    ),
+                    None,
+                )
+                if hit_index is None:
+                    continue
+                if other.id != client.id and self.try_snake_bite(client, other, hit_index, now):
                     break
+                if self.guard_snake(client, now, "꼬리"):
+                    break
+                self.knock_out(client, now, "꼬리에 부딪혔습니다.")
+                break
 
     def guard_snake(self, client: PartyClient, now: float, label: str) -> bool:
         if self.game_type != "snake" or now >= client.shield_until:
@@ -2579,6 +2656,113 @@ class PartyRoom:
         self.add_effect(client.x, client.y, "shield", "#69dcff", 0.85, f"{label} 방어")
         return True
 
+    def try_snake_bite(
+        self,
+        client: PartyClient,
+        other: PartyClient,
+        hit_index: int,
+        now: float,
+    ) -> bool:
+        if (
+            self.game_type != "snake"
+            or now >= client.boosted_until
+            or now < client.snake_bite_until
+            or not other.trail
+        ):
+            return False
+        cut_count = min(hit_index + 1, max(0, len(other.trail) - 14))
+        if cut_count < 5:
+            return False
+        cut_trail = other.trail[:cut_count]
+        other.trail = other.trail[cut_count:]
+        reward = min(14, max(3, cut_count // 6))
+        client.score += reward
+        other.score = max(0, other.score - max(1, reward // 2))
+        client.snake_bite_until = now + 0.75
+        for index, (x, y) in enumerate(cut_trail[::10]):
+            self.pickups.append(
+                PartyPickup(
+                    id=self.next_pickup_id,
+                    x=x,
+                    y=y,
+                    kind="gem" if index % 2 == 0 else "coin",
+                    value=3 if index % 2 == 0 else 1,
+                )
+            )
+            self.next_pickup_id += 1
+        self.pickups = self.pickups[-48:]
+        self.add_effect(client.x, client.y, "bite", client.color, 0.75, f"CUT +{reward}")
+        self.add_effect(other.x, other.y, "cut", other.color, 0.65, "TAIL CUT")
+        return True
+
+    def update_moving_bomb(self, bomb: PartyBomb, dt: float) -> None:
+        speed = math.hypot(bomb.vx, bomb.vy)
+        if speed < 8:
+            bomb.vx = 0.0
+            bomb.vy = 0.0
+            return
+        next_x = bomb.x + bomb.vx * dt
+        next_y = bomb.y + bomb.vy * dt
+        if self.bomb_blocked(bomb, next_x, next_y):
+            bomb.vx = 0.0
+            bomb.vy = 0.0
+            return
+        bomb.x = next_x
+        bomb.y = next_y
+
+    def try_kick_bomb(self, client: PartyClient, dir_x: float, dir_y: float, now: float) -> None:
+        if self.game_type != "bomb" or now >= client.bomb_kick_until:
+            return
+        horizontal = abs(dir_x) >= abs(dir_y)
+        kick_x = math.copysign(1.0, dir_x if horizontal and dir_x else math.cos(client.angle))
+        kick_y = 0.0
+        if not horizontal:
+            kick_x = 0.0
+            kick_y = math.copysign(1.0, dir_y if dir_y else math.sin(client.angle))
+        target = next(
+            (
+                bomb
+                for bomb in self.bombs
+                if bomb.ttl > 0
+                and bomb.blast_ttl <= 0
+                and party_distance(client.x, client.y, bomb.x, bomb.y) < 46
+            ),
+            None,
+        )
+        if not target:
+            return
+        current_speed = math.hypot(target.vx, target.vy)
+        same_direction = (
+            (kick_x == 0 or math.copysign(1.0, target.vx or kick_x) == kick_x)
+            and (kick_y == 0 or math.copysign(1.0, target.vy or kick_y) == kick_y)
+        )
+        if (
+            current_speed > 24
+            and same_direction
+        ):
+            return
+        if self.bomb_blocked(target, target.x + kick_x * 20, target.y + kick_y * 20):
+            return
+        target.vx = kick_x * 380
+        target.vy = kick_y * 380
+        self.add_effect(target.x, target.y, "kick", client.color, 0.5, "KICK")
+
+    def bomb_blocked(self, bomb: PartyBomb, x: float, y: float) -> bool:
+        if x < 34 or x > PARTY_WIDTH - 34 or y < 34 or y > PARTY_HEIGHT - 34:
+            return True
+        if any(
+            abs(x - block.x) < block.size / 2 + 22 and abs(y - block.y) < block.size / 2 + 22
+            for block in self.blocks
+        ):
+            return True
+        return any(
+            other.id != bomb.id
+            and other.ttl > 0
+            and other.blast_ttl <= 0
+            and party_distance(x, y, other.x, other.y) < 34
+            for other in self.bombs
+        )
+
     def update_bombs(self, dt: float, now: float) -> None:
         alive: list[PartyBomb] = []
         for bomb in self.bombs:
@@ -2587,6 +2771,7 @@ class PartyRoom:
                 if bomb.blast_ttl > 0:
                     alive.append(bomb)
                 continue
+            self.update_moving_bomb(bomb, dt)
             bomb.ttl -= dt
             if bomb.ttl > 0:
                 alive.append(bomb)
@@ -2645,6 +2830,65 @@ class PartyRoom:
                         self.add_effect(client.x, client.y, "shield", "#69dcff", 0.75, "SAFE")
                         continue
                     self.knock_out(client, now, "위험 구역에 닿았습니다.")
+
+    def coin_banks(self, now: float) -> list[dict[str, float | bool | str]]:
+        if self.game_type != "coin":
+            return []
+        phase_time = now - self.started_at
+        phase = int(phase_time // 7)
+        return [
+            {
+                "id": "bank-a",
+                "x": PARTY_WIDTH * 0.24 + math.sin(phase_time * 0.28) * 150,
+                "y": PARTY_HEIGHT * 0.38 + math.cos(phase_time * 0.33) * 120,
+                "radius": 62,
+                "active": phase % 3 != 1,
+            },
+            {
+                "id": "bank-b",
+                "x": PARTY_WIDTH * 0.7 + math.cos(phase_time * 0.24) * 170,
+                "y": PARTY_HEIGHT * 0.32 + math.sin(phase_time * 0.31) * 125,
+                "radius": 58,
+                "active": phase % 3 != 2,
+            },
+            {
+                "id": "bank-c",
+                "x": PARTY_WIDTH * 0.52 + math.sin(phase_time * 0.2) * 210,
+                "y": PARTY_HEIGHT * 0.73 + math.cos(phase_time * 0.27) * 105,
+                "radius": 64,
+                "active": phase % 3 != 0,
+            },
+        ]
+
+    def update_coin_banks(self, now: float) -> None:
+        if self.game_type != "coin":
+            return
+        banks = self.coin_banks(now)
+        for client in self.clients.values():
+            if not client.alive or now < client.coin_bank_until:
+                continue
+            bank = next(
+                (
+                    item
+                    for item in banks
+                    if item["active"]
+                    and party_distance(client.x, client.y, float(item["x"]), float(item["y"])) < float(item["radius"])
+                ),
+                None,
+            )
+            if not bank:
+                continue
+            combo = client.coin_combo if now <= client.coin_combo_until else 0
+            if combo < 3 and now >= client.frenzy_until:
+                continue
+            cash_combo = max(3, combo)
+            multiplier = 2 if now < client.frenzy_until else 1
+            bonus = min(70, 8 + cash_combo * 3) * multiplier
+            client.score += bonus
+            client.coin_combo = 0
+            client.coin_combo_until = 0
+            client.coin_bank_until = now + 5.5
+            self.add_effect(float(bank["x"]), float(bank["y"]), "bank", "#ffd166", 0.9, f"BANK +{bonus}")
 
     def update_coin_pickups(self, dt: float, now: float) -> None:
         if self.game_type != "coin":
@@ -2732,6 +2976,10 @@ class PartyRoom:
                 collector.boosted_until = max(collector.boosted_until, now + 3.2)
                 collector.score += 2
                 self.add_effect(pickup.x, pickup.y, "speed", "#42d7ff", 0.7, "SPEED")
+            elif pickup.kind == "kick":
+                collector.bomb_kick_until = max(collector.bomb_kick_until, now + 12.0)
+                collector.score += 2
+                self.add_effect(pickup.x, pickup.y, "kick", "#8be66f", 0.7, "KICK")
             else:
                 gained = (
                     self.coin_pickup_score(collector, pickup, now)
@@ -2917,16 +3165,21 @@ class PartyRoom:
                     "alive": client.alive,
                     "isHost": client.id == self.host_id,
                     "boosted": now < client.boosted_until,
+                    "biting": now < client.snake_bite_until,
                     "drifting": client.drifting,
                     "driftCharge": round(client.drift_charge, 2),
+                    "drafting": client.drafting,
+                    "draftCharge": round(client.draft_charge, 2),
                     "shielded": now < client.shield_until,
                     "shield": max(0, round(client.shield_until - now, 1)),
                     "bombPower": client.bomb_power,
                     "bombLimit": client.bomb_limit,
+                    "bombKick": max(0, round(client.bomb_kick_until - now, 1)),
                     "combo": client.coin_combo if now <= client.coin_combo_until else 0,
                     "comboTime": max(0, round(client.coin_combo_until - now, 1)),
                     "magnet": max(0, round(client.magnet_until - now, 1)),
                     "frenzy": max(0, round(client.frenzy_until - now, 1)),
+                    "bankCooldown": max(0, round(client.coin_bank_until - now, 1)),
                     "cooldown": max(0, round(client.cooldown_until - now, 1)),
                     "trail": [[round(x, 1), round(y, 1)] for x, y in client.trail[-120:]],
                 }
@@ -2948,6 +3201,8 @@ class PartyRoom:
                     "ownerId": bomb.owner_id,
                     "x": round(bomb.x, 1),
                     "y": round(bomb.y, 1),
+                    "vx": round(bomb.vx, 1),
+                    "vy": round(bomb.vy, 1),
                     "ttl": round(max(0, bomb.ttl), 2),
                     "blastTtl": round(max(0, bomb.blast_ttl), 2),
                     "radius": bomb.radius,
@@ -2964,6 +3219,16 @@ class PartyRoom:
                 for block in self.blocks
             ],
             "hazards": self.hazards(now),
+            "banks": [
+                {
+                    "id": bank["id"],
+                    "x": round(float(bank["x"]), 1),
+                    "y": round(float(bank["y"]), 1),
+                    "radius": float(bank["radius"]),
+                    "active": bool(bank["active"]),
+                }
+                for bank in self.coin_banks(now)
+            ],
             "effects": [
                 {
                     "x": round(effect.x, 1),
@@ -3889,6 +4154,7 @@ class ArenaServer:
                 "left": bool(message.get("left")),
                 "right": bool(message.get("right")),
                 "fire": bool(message.get("fire")),
+                "dash": bool(message.get("dash")),
                 "aimX": self.safe_float(message.get("aimX"), client.x),
                 "aimY": self.safe_float(message.get("aimY"), client.y),
             }
@@ -3991,6 +4257,11 @@ class ArenaServer:
                         client.weapon = "blaster"
                         client.weapon_until = 0
                         client.weapon_ammo = 0
+                        client.stamina = 100.0
+                        client.dash_until = 0
+                        client.dash_cooldown_until = 0
+                        client.dash_angle = 0
+                        client.dash_latched = False
                         self.add_arena_effect(
                             room,
                             client.x,
@@ -4009,8 +4280,28 @@ class ArenaServer:
                 if length:
                     dx /= length
                     dy /= length
-                speed = PLAYER_SPEED * (1.32 if now < client.haste_until else 1.0)
-                self.move_arena_client(client, dx * speed * dt, dy * speed * dt)
+                client.stamina = min(100.0, client.stamina + dt * 24.0)
+                if not controls.get("dash"):
+                    client.dash_latched = False
+                if (
+                    controls.get("dash")
+                    and not client.dash_latched
+                    and now >= client.dash_cooldown_until
+                    and client.stamina >= 36.0
+                ):
+                    client.dash_latched = True
+                    client.stamina = max(0.0, client.stamina - 36.0)
+                    client.dash_until = now + 0.18
+                    client.dash_cooldown_until = now + 0.65
+                    aim_x = float(controls.get("aimX", client.x + 1))
+                    aim_y = float(controls.get("aimY", client.y))
+                    client.dash_angle = math.atan2(dy, dx) if length else math.atan2(aim_y - client.y, aim_x - client.x)
+                    self.add_arena_effect(room, client.x, client.y, "dash", client.color, 0.42, "DASH")
+                dashing = now < client.dash_until
+                move_x = math.cos(client.dash_angle) if dashing else dx
+                move_y = math.sin(client.dash_angle) if dashing else dy
+                speed = PLAYER_SPEED * (1.32 if now < client.haste_until else 1.0) * (2.65 if dashing else 1.0)
+                self.move_arena_client(client, move_x * speed * dt, move_y * speed * dt)
                 self.collect_arena_pickups(room, client, now)
                 self.expire_arena_weapon(client, now)
 
@@ -4318,6 +4609,8 @@ class ArenaServer:
                         "shielded": now < client.shield_until,
                         "hasted": now < client.haste_until,
                         "rapid": now < client.rapid_until,
+                        "dashing": now < client.dash_until,
+                        "stamina": round(client.stamina, 1),
                         "weapon": client.weapon,
                         "weaponAmmo": client.weapon_ammo,
                         "weaponTtl": max(0, round(client.weapon_until - now, 2)),

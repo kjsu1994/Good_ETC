@@ -11,7 +11,7 @@
       : requestedRole === "spectator"
         ? "spectator"
         : "client";
-  const assetVersion = params.get("v") || "20260530ah";
+  const assetVersion = params.get("v") || "20260530am";
   const world = { width: 2600, height: 980 };
   const gravity = 300;
   const moveBudgetMax = 130;
