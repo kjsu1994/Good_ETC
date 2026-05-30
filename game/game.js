@@ -25,8 +25,8 @@ const keys = new Set();
 const pointer = { x: 0, y: 0, down: false };
 const camera = { x: 0, y: 0 };
 const localArenaConfig = {
-  width: 2200,
-  height: 1400,
+  width: 2600,
+  height: 1600,
   playerRadius: 18,
   playerSpeed: 260,
   bulletRadius: 5,
@@ -39,11 +39,14 @@ const fallbackObstacles = [
   { x: 320, y: 260, w: 210, h: 76 },
   { x: 760, y: 460, w: 170, h: 92 },
   { x: 1230, y: 245, w: 240, h: 82 },
-  { x: 1690, y: 520, w: 190, h: 96 },
+  { x: 1740, y: 420, w: 210, h: 96 },
+  { x: 2160, y: 675, w: 250, h: 86 },
   { x: 410, y: 845, w: 230, h: 82 },
   { x: 990, y: 930, w: 190, h: 105 },
-  { x: 1540, y: 1040, w: 255, h: 76 },
+  { x: 1540, y: 1120, w: 255, h: 76 },
+  { x: 2020, y: 1180, w: 210, h: 120 },
   { x: 1830, y: 250, w: 118, h: 220 },
+  { x: 680, y: 1270, w: 240, h: 90 },
 ];
 const fallbackPickups = [
   { id: "preview-heal", x: 560, y: 385, kind: "heal" },
@@ -56,7 +59,7 @@ let playerId = "";
 let lastFrame = performance.now();
 let localArenaIds = { bullet: 1, pickup: 1 };
 let latestState = {
-  arena: { width: 2200, height: 1400, obstacles: fallbackObstacles },
+  arena: { width: 2600, height: 1600, obstacles: fallbackObstacles },
   players: [],
   bullets: [],
   pickups: fallbackPickups,
@@ -135,7 +138,7 @@ function safeUrl(value) {
 }
 
 function currentAssetVersion() {
-  return new URLSearchParams(window.location.search).get("v") || "20260530r";
+  return new URLSearchParams(window.location.search).get("v") || "20260530v";
 }
 
 function nowSeconds() {
@@ -481,9 +484,9 @@ function startLocalArena() {
     },
     players: [
       createLocalArenaPlayer("local", name, "#53e2a8", 420, 420, false),
-      createLocalArenaPlayer("bot-1", "훈련 봇 A", "#48a5ff", 1720, 360, true),
-      createLocalArenaPlayer("bot-2", "훈련 봇 B", "#ffbc54", 1560, 980, true),
-      createLocalArenaPlayer("bot-3", "훈련 봇 C", "#b987ff", 720, 1080, true),
+      createLocalArenaPlayer("bot-1", "훈련 봇 A", "#48a5ff", 2040, 380, true),
+      createLocalArenaPlayer("bot-2", "훈련 봇 B", "#ffbc54", 2140, 1260, true),
+      createLocalArenaPlayer("bot-3", "훈련 봇 C", "#b987ff", 720, 1300, true),
     ],
     bullets: [],
     pickups: seedLocalArenaPickups(),
@@ -531,7 +534,7 @@ function createLocalArenaPlayer(id, name, color, x, y, bot) {
 }
 
 function seedLocalArenaPickups() {
-  return Array.from({ length: 10 }, () => createLocalArenaPickup());
+  return Array.from({ length: 12 }, () => createLocalArenaPickup());
 }
 
 function createLocalArenaPickup() {
@@ -847,7 +850,7 @@ function collectLocalArenaPickups(player, now) {
 }
 
 function ensureLocalArenaPickups() {
-  while ((latestState.pickups || []).length < 10) {
+  while ((latestState.pickups || []).length < 12) {
     latestState.pickups.push(createLocalArenaPickup());
   }
 }
@@ -857,7 +860,7 @@ function clamp(value, min, max) {
 }
 
 function drawGrid() {
-  const arena = latestState.arena || { width: 2200, height: 1400 };
+  const arena = latestState.arena || { width: 2600, height: 1600 };
   const bg = ctx.createLinearGradient(
     0,
     0,
@@ -869,6 +872,8 @@ function drawGrid() {
   bg.addColorStop(1, "#171129");
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+
+  drawArenaFloorPanels(arena);
 
   const grid = 64;
   const startX = -((camera.x % grid) + grid);
@@ -890,14 +895,52 @@ function drawGrid() {
 
   drawArenaScenery(arena);
   drawArenaObstacles(arena.obstacles || []);
+  drawArenaLightPools(arena);
 
   ctx.strokeStyle = "rgba(83, 226, 168, 0.56)";
   ctx.lineWidth = 5;
   ctx.strokeRect(-camera.x, -camera.y, arena.width, arena.height);
 }
 
+function drawArenaFloorPanels(arena) {
+  const panel = 192;
+  const startWorldX = Math.floor(camera.x / panel) * panel;
+  const startWorldY = Math.floor(camera.y / panel) * panel;
+  for (
+    let worldX = startWorldX;
+    worldX < camera.x + window.innerWidth + panel;
+    worldX += panel
+  ) {
+    for (
+      let worldY = startWorldY;
+      worldY < camera.y + window.innerHeight + panel;
+      worldY += panel
+    ) {
+      if (
+        worldX < 0 ||
+        worldY < 0 ||
+        worldX > arena.width ||
+        worldY > arena.height
+      )
+        continue;
+      const x = worldX - camera.x;
+      const y = worldY - camera.y;
+      ctx.fillStyle =
+        (Math.floor(worldX / panel) + Math.floor(worldY / panel)) % 2
+          ? "rgba(255,255,255,.018)"
+          : "rgba(83,226,168,.018)";
+      ctx.fillRect(x, y, panel, panel);
+      ctx.strokeStyle = "rgba(245,251,255,.035)";
+      ctx.strokeRect(x + 4, y + 4, panel - 8, panel - 8);
+      ctx.fillStyle = "rgba(245,251,255,.045)";
+      ctx.fillRect(x + 22, y + 22, 4, 4);
+      ctx.fillRect(x + panel - 26, y + panel - 26, 4, 4);
+    }
+  }
+}
+
 function drawArenaScenery(arena) {
-  for (let index = 0; index < 42; index += 1) {
+  for (let index = 0; index < 72; index += 1) {
     const worldX = 140 + ((index * 389) % (arena.width - 280));
     const worldY = 140 + ((index * 257) % (arena.height - 280));
     const x = worldX - camera.x;
@@ -910,13 +953,71 @@ function drawArenaScenery(arena) {
     ) {
       continue;
     }
-    ctx.fillStyle =
-      index % 3 === 0 ? "rgba(83,226,168,.13)" : "rgba(72,165,255,.11)";
-    ctx.fillRect(x - 34, y - 24, 68, 48);
-    ctx.strokeStyle = "rgba(245,251,255,.12)";
-    ctx.strokeRect(x - 34, y - 24, 68, 48);
-    ctx.fillStyle = "rgba(0,0,0,.2)";
-    ctx.fillRect(x - 22, y - 12, 44, 24);
+    const type = index % 4;
+    ctx.save();
+    ctx.fillStyle = "rgba(0,0,0,.22)";
+    ctx.beginPath();
+    ctx.ellipse(x, y + 18, 42, 13, 0, 0, Math.PI * 2);
+    ctx.fill();
+    if (type === 0) {
+      ctx.fillStyle = "rgba(83,226,168,.14)";
+      ctx.fillRect(x - 38, y - 24, 76, 48);
+      ctx.strokeStyle = "rgba(245,251,255,.14)";
+      ctx.strokeRect(x - 38, y - 24, 76, 48);
+      ctx.fillStyle = "rgba(7,17,31,.45)";
+      ctx.fillRect(x - 25, y - 10, 50, 20);
+      ctx.fillStyle = "rgba(83,226,168,.42)";
+      ctx.fillRect(x - 28, y - 21, 56, 5);
+    } else if (type === 1) {
+      ctx.fillStyle = "rgba(72,165,255,.16)";
+      ctx.fillRect(x - 30, y - 34, 60, 68);
+      ctx.fillStyle = "rgba(245,251,255,.10)";
+      ctx.fillRect(x - 18, y - 22, 36, 10);
+      ctx.fillRect(x - 18, y + 8, 36, 10);
+      ctx.strokeStyle = "rgba(72,165,255,.28)";
+      ctx.strokeRect(x - 30, y - 34, 60, 68);
+    } else if (type === 2) {
+      ctx.fillStyle = "rgba(255,207,92,.14)";
+      ctx.beginPath();
+      ctx.arc(x, y, 24, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255,207,92,.32)";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(x, y, 31, 0, Math.PI * 2);
+      ctx.stroke();
+    } else {
+      ctx.strokeStyle = "rgba(255,143,212,.16)";
+      ctx.lineWidth = 3;
+      ctx.strokeRect(x - 44, y - 26, 88, 52);
+      ctx.fillStyle = "rgba(255,143,212,.08)";
+      ctx.fillRect(x - 33, y - 15, 66, 30);
+    }
+    ctx.restore();
+  }
+}
+
+function drawArenaLightPools(arena) {
+  for (let index = 0; index < 12; index += 1) {
+    const worldX = 260 + ((index * 547) % (arena.width - 520));
+    const worldY = 220 + ((index * 431) % (arena.height - 440));
+    const x = worldX - camera.x;
+    const y = worldY - camera.y;
+    if (
+      x < -260 ||
+      y < -260 ||
+      x > window.innerWidth + 260 ||
+      y > window.innerHeight + 260
+    )
+      continue;
+    const gradient = ctx.createRadialGradient(x, y, 20, x, y, 190);
+    gradient.addColorStop(0, "rgba(83,226,168,.10)");
+    gradient.addColorStop(0.45, "rgba(72,165,255,.045)");
+    gradient.addColorStop(1, "rgba(72,165,255,0)");
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(x, y, 190, 0, Math.PI * 2);
+    ctx.fill();
   }
 }
 
@@ -1108,6 +1209,7 @@ function drawPlayer(player) {
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(player.angle || 0);
+  const pulse = 0.5 + Math.sin(performance.now() / 180) * 0.5;
   ctx.fillStyle = "rgba(0,0,0,.34)";
   ctx.beginPath();
   ctx.ellipse(
@@ -1120,13 +1222,42 @@ function drawPlayer(player) {
     Math.PI * 2,
   );
   ctx.fill();
+  ctx.fillStyle = "rgba(7,17,31,.86)";
+  ctx.beginPath();
+  ctx.ellipse(0, 0, radius * 1.25, radius * 0.95, 0, 0, Math.PI * 2);
+  ctx.fill();
   ctx.fillStyle = player.color;
   ctx.shadowColor = player.color;
   ctx.shadowBlur = player.id === playerId ? 22 : 10;
   ctx.beginPath();
-  ctx.arc(0, 0, radius, 0, Math.PI * 2);
+  ctx.ellipse(0, 0, radius, radius * 0.82, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.shadowBlur = 0;
+  ctx.fillStyle = "rgba(255,255,255,.24)";
+  ctx.beginPath();
+  ctx.ellipse(-5, -7, radius * 0.5, radius * 0.28, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(255,255,255,.42)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(-radius * 0.5, radius * 0.58);
+  ctx.lineTo(radius * 0.52, radius * 0.58);
+  ctx.stroke();
+  ctx.fillStyle = "rgba(5,12,22,.88)";
+  ctx.fillRect(2, -5, radius + 18, 10);
+  ctx.fillStyle = player.rapid ? "#ff8fd4" : "#f5fbff";
+  ctx.fillRect(radius + 11, -3, 11 + pulse * 4, 6);
+  ctx.fillStyle = "rgba(5,12,22,.72)";
+  ctx.beginPath();
+  ctx.moveTo(-radius * 0.9, -radius * 0.24);
+  ctx.lineTo(-radius * 1.55, -radius * 0.52);
+  ctx.lineTo(-radius * 1.2, 0);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(-radius * 0.9, radius * 0.24);
+  ctx.lineTo(-radius * 1.55, radius * 0.52);
+  ctx.lineTo(-radius * 1.2, 0);
+  ctx.fill();
   if (player.hasted || player.rapid) {
     ctx.strokeStyle = player.hasted ? "#ffcf5c" : "#ff8fd4";
     ctx.lineWidth = 4;
@@ -1160,7 +1291,7 @@ function drawPlayer(player) {
 }
 
 function drawMinimap() {
-  const arena = latestState.arena || { width: 2200, height: 1400 };
+  const arena = latestState.arena || { width: 2600, height: 1600 };
   const mapScale = Math.min(210 / arena.width, 132 / arena.height);
   const width = arena.width * mapScale;
   const height = arena.height * mapScale;

@@ -11,8 +11,8 @@
       : requestedRole === "spectator"
         ? "spectator"
         : "client";
-  const assetVersion = params.get("v") || "20260530r";
-  const world = { width: 2200, height: 920 };
+  const assetVersion = params.get("v") || "20260530v";
+  const world = { width: 2600, height: 980 };
   const gravity = 300;
   const moveBudgetMax = 130;
   const moveCost = 10;
@@ -279,7 +279,7 @@
   function createInitialState() {
     const players = [
       createPlayer("P1", "#53e2a8", 260, 45, 8, 82),
-      createPlayer("P2", "#ffbc54", 1940, 135, 98, 172),
+      createPlayer("P2", "#ffbc54", 2340, 135, 98, 172),
     ];
     const terrain = buildTerrain();
     placePlayers(players, terrain);
@@ -331,11 +331,11 @@
     const terrain = [];
     for (let x = 0; x <= world.width; x += 1) {
       const y =
-        660 +
+        700 +
         Math.sin(x / 135) * 62 +
         Math.sin(x / 57) * 28 +
         Math.sin(x / 310) * 48;
-      terrain.push(clamp(Math.round(y), 500, 835));
+      terrain.push(clamp(Math.round(y), 520, world.height - 85));
     }
     for (let pass = 0; pass < 4; pass += 1) {
       for (let x = 1; x < terrain.length - 1; x += 1) {

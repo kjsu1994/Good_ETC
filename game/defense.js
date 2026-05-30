@@ -1,22 +1,22 @@
 (() => {
   const params = new URLSearchParams(window.location.search);
   const isSolo = ["solo", "local"].includes(params.get("mode") || "");
-  const assetVersion = params.get("v") || "20260530r";
-  const world = { width: 1280, height: 832, cell: 32, columns: 40, rows: 26 };
+  const assetVersion = params.get("v") || "20260530v";
+  const world = { width: 1536, height: 960, cell: 24, columns: 64, rows: 40 };
   let defenseMaps = {
     classic: {
       name: "기본 우회로",
       baseHealth: 20,
       startResources: 180,
       pathPoints: [
-        [0, 12],
-        [8, 12],
-        [8, 5],
-        [18, 5],
-        [18, 18],
-        [30, 18],
-        [30, 10],
-        [39, 10],
+        [0, 19],
+        [10, 19],
+        [10, 8],
+        [25, 8],
+        [25, 30],
+        [43, 30],
+        [43, 14],
+        [63, 14],
       ],
     },
     harbor: {
@@ -24,14 +24,14 @@
       baseHealth: 22,
       startResources: 170,
       pathPoints: [
-        [0, 6],
-        [7, 6],
-        [7, 20],
-        [15, 20],
-        [15, 8],
-        [25, 8],
-        [25, 17],
-        [39, 17],
+        [0, 9],
+        [11, 9],
+        [11, 32],
+        [24, 32],
+        [24, 12],
+        [40, 12],
+        [40, 27],
+        [63, 27],
       ],
     },
     lava: {
@@ -39,16 +39,16 @@
       baseHealth: 18,
       startResources: 200,
       pathPoints: [
-        [0, 18],
-        [5, 18],
-        [5, 4],
-        [13, 4],
-        [13, 22],
-        [23, 22],
-        [23, 10],
-        [32, 10],
-        [32, 15],
-        [39, 15],
+        [0, 29],
+        [8, 29],
+        [8, 6],
+        [21, 6],
+        [21, 35],
+        [36, 35],
+        [36, 16],
+        [51, 16],
+        [51, 24],
+        [63, 24],
       ],
     },
   };
@@ -290,6 +290,7 @@
       towers: [],
       enemies: [],
       shots: [],
+      effects: [],
       scores: [],
       lastPing: null,
     };
@@ -635,6 +636,10 @@
         clearConnectTimer();
         setCenter("");
         state = { ...message, pathCells: message.pathCells || state.pathCells };
+        state.effects = state.effects || [];
+        state.shots = state.shots || [];
+        state.enemies = state.enemies || [];
+        state.towers = state.towers || [];
         syncConfigFromState(state);
         clientId = message.clientId || clientId;
         selectedTowerId = state.towers.some(
@@ -794,6 +799,17 @@
     state.spawnRemaining = localWaveSpawnCount(state.wave);
     state.spawnTotal = state.spawnRemaining;
     state.spawnTimer = 0;
+    const start = pathPixels[0];
+    if (start) {
+      addDefenseEffect({
+        x: start.x,
+        y: start.y,
+        kind: "wave",
+        color: "#ffd166",
+        ttl: 1,
+        text: `W${state.wave}`,
+      });
+    }
     state.status = `${state.wave} 웨이브 시작.`;
     setCenter("");
     renderHud();
@@ -826,6 +842,15 @@
       range: config.range,
       cooldownLeft: 0,
     });
+    const center = cellCenter(cellX, cellY);
+    addDefenseEffect({
+      x: center.x,
+      y: center.y,
+      kind: "build",
+      color: config.color,
+      ttl: 0.7,
+      text: "BUILD",
+    });
     state.status = `${config.name} 타워를 배치했습니다.`;
     renderHud();
   }
@@ -852,6 +877,15 @@
     player.resources -= cost;
     tower.level += 1;
     tower.range = towerTypes[tower.type].range + (tower.level - 1) * 14;
+    const center = cellCenter(tower.cellX, tower.cellY);
+    addDefenseEffect({
+      x: center.x,
+      y: center.y,
+      kind: "upgrade",
+      color: "#f8f871",
+      ttl: 0.7,
+      text: `Lv${tower.level}`,
+    });
     state.status = `타워를 ${tower.level}단계로 업그레이드했습니다.`;
     renderHud();
   }
@@ -871,11 +905,27 @@
     selfPlayer().resources += Math.round(total * 0.6);
     state.towers.splice(index, 1);
     selectedTowerId = null;
+    const center = cellCenter(tower.cellX, tower.cellY);
+    addDefenseEffect({
+      x: center.x,
+      y: center.y,
+      kind: "sell",
+      color: "#c8f7ff",
+      ttl: 0.65,
+      text: `+${Math.round(total * 0.6)}`,
+    });
     state.status = "타워를 판매했습니다.";
     renderHud();
   }
 
+  function addDefenseEffect(effect) {
+    state.effects = [...(state.effects || []), effect].slice(-64);
+  }
+
   function localUpdate(dt) {
+    state.effects = (state.effects || [])
+      .map((effect) => ({ ...effect, ttl: effect.ttl - dt }))
+      .filter((effect) => effect.ttl > 0);
     state.shots.forEach((shot) => (shot.ttl -= dt));
     state.shots = state.shots.filter((shot) => shot.ttl > 0);
     if (state.phase === "build" && state.autoStartAt) {
@@ -912,6 +962,14 @@
         state.autoStartAt = Date.now() + 25000;
         state.autoStartSeconds = 25;
         state.wavePreview = buildWavePreview(state.wave + 1);
+        addDefenseEffect({
+          x: world.width / 2,
+          y: world.height / 2,
+          kind: "reward",
+          color: "#8be66f",
+          ttl: 1,
+          text: `+${bonus}`,
+        });
         setCenter(state.status);
       }
     }
@@ -998,6 +1056,14 @@
         0,
         state.baseHealth - (enemy.baseDamage || 1),
       );
+      addDefenseEffect({
+        x: enemy.x,
+        y: enemy.y,
+        kind: "base_hit",
+        color: "#ff5f6d",
+        ttl: 0.9,
+        text: `-${enemy.baseDamage || 1}`,
+      });
     });
   }
 
@@ -1064,15 +1130,43 @@
       const absorbed = Math.min(enemy.shield, damage);
       enemy.shield -= absorbed;
       damage -= absorbed;
-      if (damage <= 0) return;
+      if (damage <= 0) {
+        addDefenseEffect({
+          x: enemy.x,
+          y: enemy.y,
+          kind: "shield",
+          color: "#6fe8ff",
+          ttl: 0.45,
+          text: "SHIELD",
+        });
+        return;
+      }
     }
     enemy.health -= damage;
-    if (enemy.health > 0) return;
+    if (enemy.health > 0) {
+      addDefenseEffect({
+        x: enemy.x,
+        y: enemy.y,
+        kind: "hit",
+        color: "#f8f871",
+        ttl: 0.35,
+        text: `-${Math.round(damage)}`,
+      });
+      return;
+    }
     state.enemies = state.enemies.filter((item) => item !== enemy);
     const player = selfPlayer();
     player.resources += enemy.reward || 0;
     player.kills = (player.kills || 0) + 1;
     player.score = (player.score || 0) + (enemy.reward || 0) * 10;
+    addDefenseEffect({
+      x: enemy.x,
+      y: enemy.y,
+      kind: "kill",
+      color: "#ffd166",
+      ttl: 0.8,
+      text: `+${enemy.reward || 0}`,
+    });
   }
 
   function renderMapOptions() {
@@ -1227,6 +1321,7 @@
     state.towers.forEach(drawTower);
     state.enemies.forEach(drawEnemy);
     state.shots.forEach(drawShot);
+    (state.effects || []).forEach(drawDefenseEffect);
     drawPing();
     drawBase();
     ctx.restore();
@@ -1250,9 +1345,9 @@
   }
 
   function drawMapDecor() {
-    for (let index = 0; index < 52; index += 1) {
-      const x = 36 + ((index * 151) % (world.width - 72));
-      const y = 36 + ((index * 97) % (world.height - 72));
+    for (let index = 0; index < 96; index += 1) {
+      const x = 30 + ((index * 151) % (world.width - 60));
+      const y = 30 + ((index * 97) % (world.height - 60));
       if (
         pathCells.has(
           `${Math.floor(x / world.cell)},${Math.floor(y / world.cell)}`,
@@ -1260,11 +1355,37 @@
       ) {
         continue;
       }
-      ctx.fillStyle =
-        index % 4 === 0 ? "rgba(98,230,255,.08)" : "rgba(255,255,255,.045)";
-      ctx.fillRect(x - 12, y - 9, 24, 18);
-      ctx.strokeStyle = "rgba(0,0,0,.18)";
-      ctx.strokeRect(x - 12, y - 9, 24, 18);
+      const type = index % 5;
+      if (type === 0) {
+        ctx.fillStyle = "rgba(98,230,255,.10)";
+        ctx.fillRect(x - 16, y - 11, 32, 22);
+        ctx.strokeStyle = "rgba(245,251,255,.16)";
+        ctx.strokeRect(x - 16, y - 11, 32, 22);
+        ctx.fillStyle = "rgba(6,12,22,.32)";
+        ctx.fillRect(x - 8, y - 5, 16, 10);
+      } else if (type === 1) {
+        ctx.fillStyle = "rgba(139,230,111,.09)";
+        ctx.beginPath();
+        ctx.moveTo(x, y - 18);
+        ctx.lineTo(x + 18, y + 10);
+        ctx.lineTo(x - 18, y + 10);
+        ctx.closePath();
+        ctx.fill();
+      } else if (type === 2) {
+        ctx.fillStyle = "rgba(255,186,90,.10)";
+        ctx.fillRect(x - 11, y - 14, 22, 28);
+        ctx.fillStyle = "rgba(255,255,255,.08)";
+        ctx.fillRect(x - 7, y - 10, 14, 5);
+      } else {
+        ctx.strokeStyle =
+          type === 3 ? "rgba(208,140,255,.12)" : "rgba(255,255,255,.07)";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x - 18, y - 12, 36, 24);
+        ctx.beginPath();
+        ctx.moveTo(x - 12, y);
+        ctx.lineTo(x + 12, y);
+        ctx.stroke();
+      }
     }
   }
 
@@ -1639,6 +1760,57 @@
     ctx.beginPath();
     ctx.arc(shot.targetX, shot.targetY, 5, 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
+  }
+
+  function drawDefenseEffect(effect) {
+    const ttl = Number(effect.ttl || 0);
+    const alpha = Math.max(0.08, Math.min(1, ttl / 0.85));
+    const color = effect.color || "#62e6ff";
+    const lift = (1 - alpha) * 28;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 16;
+    if (["build", "upgrade", "wave", "reward", "map"].includes(effect.kind)) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = effect.kind === "wave" ? 6 : 4;
+      ctx.beginPath();
+      ctx.arc(effect.x, effect.y, 18 + (1 - alpha) * 34, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = `rgba(245,251,255,${0.08 * alpha})`;
+      ctx.beginPath();
+      ctx.arc(effect.x, effect.y, 10 + (1 - alpha) * 16, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (["kill", "base_hit"].includes(effect.kind)) {
+      ctx.fillStyle =
+        effect.kind === "base_hit"
+          ? `rgba(255,95,109,${0.24 * alpha})`
+          : `rgba(255,209,102,${0.22 * alpha})`;
+      ctx.beginPath();
+      ctx.arc(effect.x, effect.y, 24 + (1 - alpha) * 24, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(effect.x, effect.y, 34 + (1 - alpha) * 30, 0, Math.PI * 2);
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(effect.x, effect.y, 7 + (1 - alpha) * 10, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (effect.text) {
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "#f5fbff";
+      ctx.font = `900 ${effect.kind === "wave" ? 22 : 15}px Malgun Gothic, system-ui, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = "rgba(7,17,31,.82)";
+      ctx.strokeText(effect.text, effect.x, effect.y - 26 - lift);
+      ctx.fillText(effect.text, effect.x, effect.y - 26 - lift);
+    }
     ctx.restore();
   }
 

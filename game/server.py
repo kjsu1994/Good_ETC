@@ -21,8 +21,8 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 ROOT = Path(__file__).resolve().parent
-ARENA_WIDTH = 2200
-ARENA_HEIGHT = 1400
+ARENA_WIDTH = 2600
+ARENA_HEIGHT = 1600
 PLAYER_RADIUS = 18
 PLAYER_SPEED = 260
 BULLET_RADIUS = 5
@@ -31,16 +31,19 @@ BULLET_TTL = 1.6
 FIRE_COOLDOWN = 0.22
 RESPAWN_DELAY = 1.8
 TICK_RATE = 30
-ARENA_PICKUP_TARGET = 10
+ARENA_PICKUP_TARGET = 12
 ARENA_OBSTACLES = [
     {"x": 320, "y": 260, "w": 210, "h": 76},
     {"x": 760, "y": 460, "w": 170, "h": 92},
     {"x": 1230, "y": 245, "w": 240, "h": 82},
-    {"x": 1690, "y": 520, "w": 190, "h": 96},
+    {"x": 1740, "y": 420, "w": 210, "h": 96},
+    {"x": 2160, "y": 675, "w": 250, "h": 86},
     {"x": 410, "y": 845, "w": 230, "h": 82},
     {"x": 990, "y": 930, "w": 190, "h": 105},
-    {"x": 1540, "y": 1040, "w": 255, "h": 76},
+    {"x": 1540, "y": 1120, "w": 255, "h": 76},
+    {"x": 2020, "y": 1180, "w": 210, "h": 120},
     {"x": 1830, "y": 250, "w": 118, "h": 220},
+    {"x": 680, "y": 1270, "w": 240, "h": 90},
 ]
 COLORS = [
     "#53e2a8",
@@ -53,8 +56,8 @@ COLORS = [
     "#ff8fd4",
 ]
 
-FORTRESS_WIDTH = 2200
-FORTRESS_HEIGHT = 920
+FORTRESS_WIDTH = 2600
+FORTRESS_HEIGHT = 980
 FORTRESS_GRAVITY = 300
 FORTRESS_TICK_RATE = 30
 FORTRESS_MOVE_BUDGET_MAX = 130
@@ -107,9 +110,9 @@ FORTRESS_WEAPONS: dict[str, dict[str, Any]] = {
     },
 }
 
-DEFENSE_WIDTH = 1280
-DEFENSE_HEIGHT = 832
-DEFENSE_CELL = 32
+DEFENSE_WIDTH = 1536
+DEFENSE_HEIGHT = 960
+DEFENSE_CELL = 24
 DEFENSE_COLUMNS = DEFENSE_WIDTH // DEFENSE_CELL
 DEFENSE_ROWS = DEFENSE_HEIGHT // DEFENSE_CELL
 DEFENSE_MAX_WAVE = 15
@@ -123,19 +126,19 @@ DEFENSE_MAPS: dict[str, dict[str, Any]] = {
         "name": "기본 우회로",
         "baseHealth": 20,
         "startResources": 180,
-        "pathPoints": [(0, 12), (8, 12), (8, 5), (18, 5), (18, 18), (30, 18), (30, 10), (39, 10)],
+        "pathPoints": [(0, 19), (10, 19), (10, 8), (25, 8), (25, 30), (43, 30), (43, 14), (63, 14)],
     },
     "harbor": {
         "name": "항구 지그재그",
         "baseHealth": 22,
         "startResources": 170,
-        "pathPoints": [(0, 6), (7, 6), (7, 20), (15, 20), (15, 8), (25, 8), (25, 17), (39, 17)],
+        "pathPoints": [(0, 9), (11, 9), (11, 32), (24, 32), (24, 12), (40, 12), (40, 27), (63, 27)],
     },
     "lava": {
         "name": "용암 협곡",
         "baseHealth": 18,
         "startResources": 200,
-        "pathPoints": [(0, 18), (5, 18), (5, 4), (13, 4), (13, 22), (23, 22), (23, 10), (32, 10), (32, 15), (39, 15)],
+        "pathPoints": [(0, 29), (8, 29), (8, 6), (21, 6), (21, 35), (36, 35), (36, 16), (51, 16), (51, 24), (63, 24)],
     },
 }
 DEFENSE_PATH_POINTS = list(DEFENSE_MAPS[DEFENSE_DEFAULT_MAP_ID]["pathPoints"])
@@ -260,8 +263,8 @@ def build_defense_path_cells(points: list[tuple[int, int]]) -> set[tuple[int, in
 DEFENSE_PATH_CELLS = build_defense_path_cells(DEFENSE_PATH_POINTS)
 DEFENSE_PATH_PIXELS = [defense_cell_center(x, y) for x, y in DEFENSE_PATH_POINTS]
 
-PARTY_WIDTH = 2200
-PARTY_HEIGHT = 1400
+PARTY_WIDTH = 2600
+PARTY_HEIGHT = 1600
 PARTY_PLAYER_RADIUS = 18
 PARTY_GAME_TYPES = {"kart", "bomb", "snake", "coin"}
 PARTY_GAME_CONFIGS: dict[str, dict[str, Any]] = {
@@ -272,14 +275,14 @@ PARTY_GAME_CONFIGS: dict[str, dict[str, Any]] = {
         "laps": 3,
         "speed": 360,
         "track": [
-            [260, 720],
-            [470, 330],
-            [980, 190],
-            [1640, 310],
-            [1900, 720],
-            [1540, 1120],
-            [820, 1210],
-            [340, 980],
+            [320, 820],
+            [560, 380],
+            [1140, 220],
+            [1980, 360],
+            [2320, 830],
+            [1840, 1320],
+            [930, 1410],
+            [390, 1140],
         ],
     },
     "bomb": {
@@ -478,6 +481,16 @@ class DefenseShot:
 
 
 @dataclass
+class DefenseEffect:
+    x: float
+    y: float
+    kind: str
+    color: str
+    ttl: float = 0.8
+    text: str = ""
+
+
+@dataclass
 class PartyClient:
     id: str
     writer: asyncio.StreamWriter
@@ -522,6 +535,14 @@ class PartyBomb:
     ttl: float = 1.9
     blast_ttl: float = 0.0
     radius: float = 96.0
+
+
+@dataclass
+class PartyBlock:
+    id: int
+    x: float
+    y: float
+    size: float = 46.0
 
 
 @dataclass
@@ -650,7 +671,7 @@ class FortressMatch:
     def reset(self) -> None:
         self.players = [
             self.create_player("P1", "#53e2a8", 260, 45, 8, 82),
-            self.create_player("P2", "#ffbc54", 1940, 135, 98, 172),
+            self.create_player("P2", "#ffbc54", 2340, 135, 98, 172),
         ]
         self.build_terrain()
         self.place_players()
@@ -696,12 +717,12 @@ class FortressMatch:
         self.terrain = []
         for x in range(FORTRESS_WIDTH + 1):
             y = (
-                660
+                700
                 + math.sin(x / 135) * 62
                 + math.sin(x / 57) * 28
                 + math.sin(x / 310) * 48
             )
-            self.terrain.append(self.clamp(round(y), 500, 835))
+            self.terrain.append(self.clamp(round(y), 520, FORTRESS_HEIGHT - 85))
         for _ in range(4):
             for x in range(1, len(self.terrain) - 1):
                 self.terrain[x] = round(
@@ -1137,6 +1158,7 @@ class DefenseRoom:
         self.towers: dict[int, DefenseTower] = {}
         self.enemies: list[DefenseEnemy] = []
         self.shots: list[DefenseShot] = []
+        self.effects: list[DefenseEffect] = []
         self.wave = 0
         self.phase = "build"
         self.map_id = DEFENSE_DEFAULT_MAP_ID
@@ -1179,6 +1201,14 @@ class DefenseRoom:
             player.kills = 0
             player.score = 0
         self.status = f"{self.map_name} 맵이 선택되었습니다."
+        self.add_effect(
+            DEFENSE_WIDTH / 2,
+            DEFENSE_HEIGHT / 2,
+            "map",
+            "#62e6ff",
+            0.9,
+            self.map_name,
+        )
         return ""
 
     def create_client(self, writer: asyncio.StreamWriter) -> DefenseClient:
@@ -1235,6 +1265,8 @@ class DefenseRoom:
         self.spawn_total = self.spawn_remaining
         self.spawn_timer = 0.0
         self.status = f"{self.wave} 웨이브 시작."
+        start_x, start_y = self.path_pixels[0]
+        self.add_effect(start_x, start_y, "wave", "#ffd166", 1.0, f"W{self.wave}")
         return ""
 
     def schedule_auto_start(self) -> None:
@@ -1266,6 +1298,15 @@ class DefenseRoom:
         )
         self.towers[tower.id] = tower
         self.next_tower_id += 1
+        tower_x, tower_y = defense_cell_center(cell_x, cell_y)
+        self.add_effect(
+            tower_x,
+            tower_y,
+            "build",
+            str(tower_config["color"]),
+            0.7,
+            "BUILD",
+        )
         self.status = f"{client.name}님이 {tower_config['name']} 타워를 배치했습니다."
         return ""
 
@@ -1284,6 +1325,8 @@ class DefenseRoom:
             return "자원이 부족합니다."
         client.resources -= cost
         tower.level += 1
+        tower_x, tower_y = defense_cell_center(tower.cell_x, tower.cell_y)
+        self.add_effect(tower_x, tower_y, "upgrade", "#f8f871", 0.7, f"Lv{tower.level}")
         self.status = f"{client.name}님이 타워를 {tower.level}단계로 업그레이드했습니다."
         return ""
 
@@ -1298,6 +1341,8 @@ class DefenseRoom:
         refund = int(self.tower_total_cost(tower) * 0.6)
         client.resources += refund
         self.towers.pop(tower.id, None)
+        tower_x, tower_y = defense_cell_center(tower.cell_x, tower.cell_y)
+        self.add_effect(tower_x, tower_y, "sell", "#c8f7ff", 0.65, f"+{refund}")
         self.status = f"{client.name}님이 타워를 판매했습니다. +{refund}"
         return ""
 
@@ -1326,6 +1371,7 @@ class DefenseRoom:
         for shot in self.shots:
             shot.ttl -= dt
         self.shots = [shot for shot in self.shots if shot.ttl > 0]
+        self.effects = [effect for effect in self.effects if self.tick_effect(effect, dt)]
         if (
             self.phase == "build"
             and self.auto_start_at
@@ -1358,7 +1404,33 @@ class DefenseRoom:
                 for client in self.clients.values():
                     client.resources += bonus
                 self.status = f"{self.wave} 웨이브 완료. 전원 +{bonus}"
+                self.add_effect(
+                    DEFENSE_WIDTH / 2,
+                    DEFENSE_HEIGHT / 2,
+                    "reward",
+                    "#8be66f",
+                    1.0,
+                    f"+{bonus}",
+                )
                 self.schedule_auto_start()
+
+    def tick_effect(self, effect: DefenseEffect, dt: float) -> bool:
+        effect.ttl -= dt
+        return effect.ttl > 0
+
+    def add_effect(
+        self,
+        x: float,
+        y: float,
+        kind: str,
+        color: str,
+        ttl: float = 0.8,
+        text: str = "",
+    ) -> None:
+        self.effects.append(
+            DefenseEffect(x=x, y=y, kind=kind, color=color, ttl=ttl, text=text)
+        )
+        self.effects = self.effects[-64:]
 
     def wave_spawn_count(self, wave: int) -> int:
         player_bonus = max(0, len(self.clients) - 1) * 2
@@ -1473,6 +1545,14 @@ class DefenseRoom:
             if enemy in self.enemies:
                 self.enemies.remove(enemy)
                 self.base_health = max(0, self.base_health - max(1, enemy.base_damage))
+                self.add_effect(
+                    enemy.x,
+                    enemy.y,
+                    "base_hit",
+                    "#ff5f6d",
+                    0.9,
+                    f"-{max(1, enemy.base_damage)}",
+                )
         if reached:
             self.status = f"적 {len(reached)}기가 기지에 도달했습니다."
 
@@ -1542,11 +1622,14 @@ class DefenseRoom:
             enemy.shield -= absorbed
             damage -= absorbed
             if damage <= 0:
+                self.add_effect(enemy.x, enemy.y, "shield", "#6fe8ff", 0.45, "SHIELD")
                 return
         enemy.health -= damage
         if enemy.health > 0:
+            self.add_effect(enemy.x, enemy.y, "hit", "#f8f871", 0.35, f"-{int(damage)}")
             return
         self.enemies.remove(enemy)
+        self.add_effect(enemy.x, enemy.y, "kill", "#ffd166", 0.8, f"+{enemy.reward}")
         owner = self.clients.get(owner_id)
         if owner:
             owner.resources += enemy.reward
@@ -1663,6 +1746,17 @@ class DefenseRoom:
                 }
                 for shot in self.shots
             ],
+            "effects": [
+                {
+                    "x": round(effect.x, 2),
+                    "y": round(effect.y, 2),
+                    "kind": effect.kind,
+                    "color": effect.color,
+                    "ttl": round(max(0, effect.ttl), 3),
+                    "text": effect.text,
+                }
+                for effect in self.effects
+            ],
             "serverTime": round(time.time(), 3),
         }
 
@@ -1677,8 +1771,10 @@ class PartyRoom:
         self.next_client_id = 1
         self.next_pickup_id = 1
         self.next_bomb_id = 1
+        self.next_block_id = 1
         self.pickups: list[PartyPickup] = []
         self.bombs: list[PartyBomb] = []
+        self.blocks: list[PartyBlock] = []
         self.effects: list[PartyEffect] = []
         self.started_at = time.time()
         self.ends_at = self.started_at + float(self.config["duration"])
@@ -1687,6 +1783,7 @@ class PartyRoom:
         self.winner_name = ""
         self.status = f"{self.config['name']} 방이 열렸습니다."
         self.seed_pickups()
+        self.seed_blocks()
 
     def create_client(self, writer: asyncio.StreamWriter) -> PartyClient:
         client = PartyClient(
@@ -1730,6 +1827,7 @@ class PartyRoom:
             return "방장만 라운드를 다시 시작할 수 있습니다."
         self.pickups.clear()
         self.bombs.clear()
+        self.blocks.clear()
         self.effects.clear()
         self.started_at = time.time()
         self.ends_at = self.started_at + float(self.config["duration"])
@@ -1737,6 +1835,7 @@ class PartyRoom:
         self.winner_id = ""
         self.winner_name = ""
         self.seed_pickups()
+        self.seed_blocks()
         for player in self.clients.values():
             player.score = 0
             player.lap = 0
@@ -1752,13 +1851,16 @@ class PartyRoom:
     def place_client(self, client: PartyClient) -> None:
         index = max(0, self.next_client_id - 1)
         if self.game_type == "kart":
-            client.x = 230 + (index % 4) * 42
-            client.y = 695 + (index // 4) * 46
+            client.x = 290 + (index % 4) * 46
+            client.y = 795 + (index // 4) * 48
             client.angle = 0
         else:
             margin = 90
-            client.x = random.uniform(margin, PARTY_WIDTH - margin)
-            client.y = random.uniform(margin, PARTY_HEIGHT - margin)
+            for _ in range(80):
+                client.x = random.uniform(margin, PARTY_WIDTH - margin)
+                client.y = random.uniform(margin, PARTY_HEIGHT - margin)
+                if not self.client_hits_block(client.x, client.y):
+                    break
             client.angle = random.uniform(-math.pi, math.pi)
         client.vx = 0
         client.vy = 0
@@ -1767,7 +1869,7 @@ class PartyRoom:
         client.trail = [(client.x, client.y)]
 
     def seed_pickups(self) -> None:
-        target = {"kart": 6, "bomb": 8, "snake": 28, "coin": 22}[self.game_type]
+        target = {"kart": 9, "bomb": 12, "snake": 34, "coin": 30}[self.game_type]
         while len(self.pickups) < target:
             self.pickups.append(
                 PartyPickup(
@@ -1779,6 +1881,35 @@ class PartyRoom:
                 )
             )
             self.next_pickup_id += 1
+
+    def seed_blocks(self) -> None:
+        if self.game_type != "bomb" or self.blocks:
+            return
+        for x in range(320, PARTY_WIDTH - 260, 160):
+            for y in range(280, PARTY_HEIGHT - 220, 160):
+                if (x // 160 + y // 160) % 5 == 0:
+                    continue
+                if any(
+                    party_distance(x, y, spawn_x, spawn_y) < 260
+                    for spawn_x, spawn_y in (
+                        (420, 420),
+                        (PARTY_WIDTH - 420, 420),
+                        (420, PARTY_HEIGHT - 420),
+                        (PARTY_WIDTH - 420, PARTY_HEIGHT - 420),
+                    )
+                ):
+                    continue
+                self.blocks.append(PartyBlock(id=self.next_block_id, x=float(x), y=float(y)))
+                self.next_block_id += 1
+
+    def client_hits_block(self, x: float, y: float) -> bool:
+        if self.game_type != "bomb":
+            return False
+        return any(
+            abs(x - block.x) < block.size / 2 + PARTY_PLAYER_RADIUS
+            and abs(y - block.y) < block.size / 2 + PARTY_PLAYER_RADIUS
+            for block in self.blocks
+        )
 
     def handle_message(self, client: PartyClient, raw: str) -> str:
         try:
@@ -1960,6 +2091,7 @@ class PartyRoom:
             bomb.blast_ttl = 0.35
             alive.append(bomb)
             self.add_effect(bomb.x, bomb.y, "blast", "#ffba5a", 0.5, "BOOM")
+            self.destroy_bomb_blocks(bomb)
             owner = self.clients.get(bomb.owner_id)
             for client in self.clients.values():
                 if not client.alive:
@@ -1969,6 +2101,26 @@ class PartyRoom:
                     if owner and owner.id != client.id:
                         owner.score += 5
         self.bombs = alive
+
+    def destroy_bomb_blocks(self, bomb: PartyBomb) -> None:
+        remaining: list[PartyBlock] = []
+        for block in self.blocks:
+            if party_in_bomb_blast(block.x, block.y, bomb.x, bomb.y, bomb.radius):
+                self.add_effect(block.x, block.y, "block", "#ffba5a", 0.65, "BREAK")
+                if random.random() < 0.36:
+                    self.pickups.append(
+                        PartyPickup(
+                            id=self.next_pickup_id,
+                            x=block.x,
+                            y=block.y,
+                            kind="boost" if random.random() < 0.28 else "coin",
+                            value=2 if random.random() < 0.35 else 1,
+                        )
+                    )
+                    self.next_pickup_id += 1
+            else:
+                remaining.append(block)
+        self.blocks = remaining
 
     def update_coin_hazards(self, now: float) -> None:
         for hazard in self.hazards(now):
@@ -2027,6 +2179,8 @@ class PartyRoom:
         self.next_bomb_id += 1
 
     def move_client(self, client: PartyClient, dx: float, dy: float, bounce: bool = True) -> None:
+        previous_x = client.x
+        previous_y = client.y
         client.x += dx
         client.y += dy
         if bounce:
@@ -2036,6 +2190,11 @@ class PartyRoom:
                 client.vy *= -0.35
         client.x = party_clamp(client.x, PARTY_PLAYER_RADIUS, PARTY_WIDTH - PARTY_PLAYER_RADIUS)
         client.y = party_clamp(client.y, PARTY_PLAYER_RADIUS, PARTY_HEIGHT - PARTY_PLAYER_RADIUS)
+        if self.client_hits_block(client.x, client.y):
+            client.x = previous_x
+            client.y = previous_y
+            client.vx *= -0.25
+            client.vy *= -0.25
 
     def knock_out(self, client: PartyClient, now: float, reason: str) -> None:
         client.alive = False
@@ -2170,6 +2329,15 @@ class PartyRoom:
                     "radius": bomb.radius,
                 }
                 for bomb in self.bombs
+            ],
+            "blocks": [
+                {
+                    "id": block.id,
+                    "x": round(block.x, 1),
+                    "y": round(block.y, 1),
+                    "size": round(block.size, 1),
+                }
+                for block in self.blocks
             ],
             "hazards": self.hazards(now),
             "effects": [
