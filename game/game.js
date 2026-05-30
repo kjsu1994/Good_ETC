@@ -35,6 +35,11 @@ const localArenaConfig = {
   fireCooldown: 0.22,
   respawnDelay: 1.8,
 };
+const arenaControlPointSpecs = [
+  { id: "alpha", x: 650, y: 520, radius: 118, label: "A" },
+  { id: "bravo", x: 1300, y: 800, radius: 132, label: "B" },
+  { id: "charlie", x: 1990, y: 1080, radius: 118, label: "C" },
+];
 const fallbackObstacles = [
   { x: 320, y: 260, w: 210, h: 76 },
   { x: 760, y: 460, w: 170, h: 92 },
@@ -63,6 +68,7 @@ let latestState = {
   players: [],
   bullets: [],
   pickups: fallbackPickups,
+  controlPoints: createLocalArenaControlPoints(),
   effects: [],
 };
 let lastInputSent = 0;
@@ -138,7 +144,7 @@ function safeUrl(value) {
 }
 
 function currentAssetVersion() {
-  return new URLSearchParams(window.location.search).get("v") || "20260530v";
+  return new URLSearchParams(window.location.search).get("v") || "20260530z";
 }
 
 function nowSeconds() {
@@ -403,6 +409,7 @@ function connect() {
       latestState.effects = latestState.effects || [];
       latestState.bullets = latestState.bullets || [];
       latestState.pickups = latestState.pickups || [];
+      latestState.controlPoints = latestState.controlPoints || [];
       latestState.players = latestState.players || [];
       renderScoreboard();
       return;
@@ -490,13 +497,14 @@ function startLocalArena() {
     ],
     bullets: [],
     pickups: seedLocalArenaPickups(),
+    controlPoints: createLocalArenaControlPoints(),
     effects: [],
     local: true,
   };
   setStatus("훈련장", false);
   setConnectionPanelCollapsed(true);
   setCenterMessage(
-    "LAN 아레나 훈련장입니다. 봇을 상대로 엄폐물과 파워업을 활용하세요.",
+    "LAN 아레나 훈련장입니다. 봇을 상대로 엄폐물, 파워업, 거점을 활용하세요.",
   );
   window.setTimeout(() => {
     if (isLocalArena) setCenterMessage("");
@@ -535,6 +543,17 @@ function createLocalArenaPlayer(id, name, color, x, y, bot) {
 
 function seedLocalArenaPickups() {
   return Array.from({ length: 12 }, () => createLocalArenaPickup());
+}
+
+function createLocalArenaControlPoints() {
+  return arenaControlPointSpecs.map((spec) => ({
+    ...spec,
+    ownerId: "",
+    ownerName: "",
+    ownerColor: "",
+    capture: 0,
+    nextScoreAt: 0,
+  }));
 }
 
 function createLocalArenaPickup() {
@@ -628,6 +647,7 @@ function updateLocalArena(dt, now) {
     .forEach((bot) => updateLocalArenaBot(bot, dt, now));
   updateLocalArenaBullets(dt, now);
   ensureLocalArenaPickups();
+  updateLocalArenaControlPoints(dt, now);
   latestState.players.forEach((item) => {
     item.shielded = now < item.shieldUntil;
     item.hasted = now < item.hasteUntil;
@@ -639,6 +659,65 @@ function updateLocalArena(dt, now) {
 
 function addLocalArenaEffect(effect) {
   latestState.effects = [...(latestState.effects || []), effect].slice(-36);
+}
+
+function updateLocalArenaControlPoints(dt, now) {
+  (latestState.controlPoints || []).forEach((point) => {
+    const occupants = latestState.players.filter(
+      (player) =>
+        player.alive &&
+        Math.hypot(player.x - point.x, player.y - point.y) <= point.radius,
+    );
+    if (occupants.length !== 1) {
+      if (!point.ownerId)
+        point.capture = Math.max(0, (point.capture || 0) - dt * 0.32);
+      return;
+    }
+
+    const player = occupants[0];
+    if (point.ownerId === player.id) {
+      point.capture = 1;
+      if (now >= (point.nextScoreAt || 0)) {
+        player.score += 1;
+        player.health = Math.min(100, player.health + 4);
+        point.nextScoreAt = now + 2.6;
+        addLocalArenaEffect({
+          x: point.x,
+          y: point.y,
+          kind: "control",
+          color: player.color,
+          ttl: 0.55,
+          text: "+1",
+        });
+      }
+      return;
+    }
+
+    if (point.ownerId && (point.capture || 0) > 0) {
+      point.capture = Math.max(0, (point.capture || 0) - dt * 0.78);
+      if (point.capture > 0) return;
+      point.ownerId = "";
+      point.ownerName = "";
+      point.ownerColor = "";
+    }
+
+    point.capture = Math.min(1, (point.capture || 0) + dt * 0.52);
+    if (point.capture >= 1) {
+      point.ownerId = player.id;
+      point.ownerName = player.name;
+      point.ownerColor = player.color;
+      point.nextScoreAt = now + 1;
+      player.score += 2;
+      addLocalArenaEffect({
+        x: point.x,
+        y: point.y,
+        kind: "control",
+        color: player.color,
+        ttl: 0.9,
+        text: `${point.label} 점령`,
+      });
+    }
+  });
 }
 
 function updateLocalArenaActor(player, input, dt, now) {
@@ -673,9 +752,13 @@ function updateLocalArenaBot(bot, dt, now) {
   ) {
     bot.thinkAt = now + 0.55 + Math.random() * 0.65;
     const pickup = nearestLocalArenaPickup(bot);
+    const controlPoint = nearestLocalArenaControlPoint(bot);
     if (pickup && (bot.health < 65 || Math.random() < 0.45)) {
       bot.targetX = pickup.x;
       bot.targetY = pickup.y;
+    } else if (controlPoint && Math.random() < 0.42) {
+      bot.targetX = controlPoint.x;
+      bot.targetY = controlPoint.y;
     } else if (target) {
       const angle =
         Math.atan2(bot.y - target.y, bot.x - target.x) + (Math.random() - 0.5);
@@ -733,6 +816,16 @@ function nearestLocalArenaPickup(player) {
       Math.hypot(a.x - player.x, a.y - player.y) -
       Math.hypot(b.x - player.x, b.y - player.y),
   )[0];
+}
+
+function nearestLocalArenaControlPoint(player) {
+  return [...(latestState.controlPoints || [])]
+    .filter((point) => point.ownerId !== player.id || point.capture < 1)
+    .sort(
+      (a, b) =>
+        Math.hypot(a.x - player.x, a.y - player.y) -
+        Math.hypot(b.x - player.x, b.y - player.y),
+    )[0];
 }
 
 function spawnLocalArenaBullet(player, now) {
@@ -894,6 +987,7 @@ function drawGrid() {
   }
 
   drawArenaScenery(arena);
+  drawArenaControlPoints();
   drawArenaObstacles(arena.obstacles || []);
   drawArenaLightPools(arena);
 
@@ -1019,6 +1113,63 @@ function drawArenaLightPools(arena) {
     ctx.arc(x, y, 190, 0, Math.PI * 2);
     ctx.fill();
   }
+}
+
+function drawArenaControlPoints() {
+  (latestState.controlPoints || []).forEach((point) => {
+    const x = point.x - camera.x;
+    const y = point.y - camera.y;
+    if (
+      x < -point.radius - 80 ||
+      y < -point.radius - 80 ||
+      x > window.innerWidth + point.radius + 80 ||
+      y > window.innerHeight + point.radius + 80
+    )
+      return;
+    const ownerColor = point.ownerColor || "rgba(245,251,255,.65)";
+    const capture = clamp(Number(point.capture || 0), 0, 1);
+    ctx.save();
+    ctx.shadowColor = ownerColor;
+    ctx.shadowBlur = point.ownerId ? 28 : 14;
+    ctx.fillStyle = point.ownerId
+      ? `${ownerColor}2e`
+      : "rgba(245,251,255,.045)";
+    ctx.strokeStyle = point.ownerId ? ownerColor : "rgba(245,251,255,.24)";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(x, y, point.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = ownerColor;
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    ctx.arc(
+      x,
+      y,
+      point.radius - 10,
+      -Math.PI / 2,
+      -Math.PI / 2 + Math.PI * 2 * capture,
+    );
+    ctx.stroke();
+    ctx.fillStyle = "rgba(7,17,31,.72)";
+    ctx.beginPath();
+    ctx.arc(x, y, 28, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = ownerColor;
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.fillStyle = "#f5fbff";
+    ctx.font = "900 22px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(point.label || "?", x, y);
+    if (point.ownerName) {
+      ctx.font = "800 12px system-ui, sans-serif";
+      ctx.fillText(point.ownerName, x, y + point.radius + 18);
+    }
+    ctx.restore();
+  });
 }
 
 function drawArenaObstacles(obstacles) {
@@ -1324,6 +1475,29 @@ function drawMinimap() {
       x + pickup.x * mapScale,
       y + pickup.y * mapScale,
       2.8,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+  });
+  (latestState.controlPoints || []).forEach((point) => {
+    ctx.strokeStyle = point.ownerColor || "rgba(245,251,255,.58)";
+    ctx.fillStyle = point.ownerColor || "rgba(245,251,255,.24)";
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.arc(
+      x + point.x * mapScale,
+      y + point.y * mapScale,
+      Math.max(4, point.radius * mapScale),
+      0,
+      Math.PI * 2,
+    );
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(
+      x + point.x * mapScale,
+      y + point.y * mapScale,
+      2.6,
       0,
       Math.PI * 2,
     );

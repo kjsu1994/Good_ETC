@@ -2,13 +2,13 @@
   const params = new URLSearchParams(window.location.search);
   const gameKey = params.get("game") || "kart";
   const isSolo = ["solo", "local"].includes(params.get("mode") || "");
-  const assetVersion = params.get("v") || "20260530v";
+  const assetVersion = params.get("v") || "20260530z";
   const world = { width: 2600, height: 1600 };
   const gameTypes = {
     kart: {
       name: "카트 랠리",
       goal: "체크포인트를 따라 3바퀴를 가장 먼저 완주하세요.",
-      action: "Space: 부스터",
+      action: "Space: 드리프트 · 키를 떼면 미니부스터",
       accent: "#42d7ff",
       track: [
         [320, 820],
@@ -29,14 +29,14 @@
     },
     snake: {
       name: "스네이크 배틀",
-      goal: "먹이를 모아 길어지고 벽과 꼬리를 피하세요.",
-      action: "방향키/WASD: 방향 전환",
+      goal: "먹이를 모아 길어지고 벽과 꼬리를 피하며 순간 질주로 빈틈을 빠져나가세요.",
+      action: "방향키/WASD: 방향 전환 · Space: 순간 질주",
       accent: "#8be66f",
     },
     coin: {
       name: "코인 러시",
-      goal: "움직이는 위험 구역을 피해 코인을 가장 많이 모으세요.",
-      action: "위험 구역 회피",
+      goal: "움직이는 위험 구역을 피해 코인과 보석을 모으고 실드로 위기를 버티세요.",
+      action: "Space: 짧은 대시 · 실드: 위험 구역 1회 방어",
       accent: "#d08cff",
     },
   };
@@ -87,7 +87,7 @@
     </section>
     <section class="hud party-toolbar" aria-label="게임 조작">
       <button id="partyRestart" type="button">라운드 재시작</button>
-      <button id="partyActionButton" class="party-action-button" type="button" data-control="action">${game === "kart" ? "부스터" : game === "bomb" ? "폭탄" : "액션"}</button>
+        <button id="partyActionButton" class="party-action-button" type="button" data-control="action">${game === "kart" ? "드리프트" : game === "bomb" ? "폭탄" : "액션"}</button>
       <span id="partyActionHint">${config.action}</span>
     </section>
     <section class="party-touch" id="partyTouch" aria-label="터치 조작">
@@ -180,6 +180,9 @@
       alive: true,
       trail: [],
       boosted: false,
+      drifting: false,
+      driftCharge: 0,
+      shield: 0,
       cooldown: 0,
       isHost: true,
     };
@@ -214,13 +217,41 @@
   function seedLocalPickups() {
     const count =
       game === "snake" ? 34 : game === "coin" ? 30 : game === "bomb" ? 12 : 9;
-    return Array.from({ length: count }, () => ({
+    return Array.from({ length: count }, createLocalPickup);
+  }
+
+  function createLocalPickup() {
+    let kind = "coin";
+    let value = 1;
+    if (game === "kart" && Math.random() < 0.35) {
+      kind = "boost";
+    } else if (game === "snake") {
+      const roll = Math.random();
+      if (roll < 0.16) {
+        kind = "boost";
+        value = 2;
+      } else if (roll < 0.3) {
+        kind = "gem";
+        value = 3;
+      }
+    } else if (game === "coin") {
+      const roll = Math.random();
+      if (roll < 0.12) {
+        kind = "shield";
+      } else if (roll < 0.28) {
+        kind = "gem";
+        value = 5;
+      } else if (Math.random() < 0.2) {
+        value = 3;
+      }
+    }
+    return {
       id: localIds.pickup++,
       x: 80 + Math.random() * (world.width - 160),
       y: 80 + Math.random() * (world.height - 160),
-      kind: game === "kart" && Math.random() < 0.35 ? "boost" : "coin",
-      value: game === "coin" && Math.random() < 0.2 ? 3 : 1,
-    }));
+      kind,
+      value,
+    };
   }
 
   function seedLocalBlocks() {
@@ -259,6 +290,9 @@
       alive: true,
       trail: [],
       boosted: false,
+      drifting: false,
+      driftCharge: 0,
+      shield: 0,
       cooldown: 0,
       isHost: false,
       isBot: true,
@@ -289,6 +323,10 @@
     player.vy = 0;
     player.alive = true;
     player.respawn = 0;
+    player.shield = 0;
+    player.drifting = false;
+    player.driftCharge = 0;
+    player.actionLatch = false;
     player.trail = [[player.x, player.y]];
   }
 
@@ -629,6 +667,7 @@
   function updateLocalPlayer(player, dt, controls) {
     const previous = { ...input };
     Object.assign(input, controls);
+    player.shield = Math.max(0, (player.shield || 0) - dt);
     if (game === "kart") updateLocalKart(player, dt);
     else if (game === "snake") updateLocalSnake(player, dt);
     else updateLocalWalker(player, dt);
@@ -649,7 +688,9 @@
     const action =
       game === "coin"
         ? Boolean(avoid) && (player.cooldown || 0) <= 0
-        : game === "bomb" && localClosestOpponentDistance(player) < 124;
+        : game === "snake"
+          ? Boolean(avoid) && (player.cooldown || 0) <= 0
+          : game === "bomb" && localClosestOpponentDistance(player) < 124;
     return {
       up: dy < -18,
       down: dy > 18,
@@ -668,14 +709,17 @@
     const desired = Math.atan2(target[1] - player.y, target[0] - player.x);
     const turn = normalizeAngle(desired - (player.angle || 0));
     const trackDistance = distanceToTrack(player.x, player.y, track);
+    const speed = Math.hypot(player.vx || 0, player.vy || 0);
     return {
       up: true,
       down: trackDistance > 150 && Math.abs(turn) > 1.9,
       left: turn < -0.12,
       right: turn > 0.12,
       action:
-        Math.abs(turn) < 0.42 &&
-        trackDistance < 92 &&
+        Math.abs(turn) > 0.22 &&
+        Math.abs(turn) < 1.25 &&
+        trackDistance < 118 &&
+        speed > 95 &&
         (player.cooldown || 0) <= 0,
     };
   }
@@ -904,38 +948,57 @@
   }
 
   function updateLocalKart(player, dt) {
-    if (input.left) player.angle -= 3.2 * dt;
-    if (input.right) player.angle += 3.2 * dt;
-    const boost =
-      input.action && (player.cooldown || 0) <= 0
-        ? 1.55
-        : player.boosted
-          ? 1.35
-          : 1;
-    if (input.action && (player.cooldown || 0) <= 0) {
-      player.boosted = true;
-      player.boost = 1.2;
-      player.cooldown = 4;
-      addPartyEffect({
-        x: player.x,
-        y: player.y,
-        kind: "boost",
-        color: player.color,
-        ttl: 0.55,
-        text: "BOOST",
-      });
+    const turn = Number(input.right) - Number(input.left);
+    if (turn) player.angle += turn * 3.2 * dt;
+    const currentSpeed = Math.hypot(player.vx || 0, player.vy || 0);
+    const throttle = Number(input.up) - Number(input.down) * 0.5;
+    const action = Boolean(input.action);
+    const canDrift =
+      action &&
+      Math.abs(turn) > 0 &&
+      throttle > 0 &&
+      currentSpeed > 90 &&
+      (player.cooldown || 0) <= 0;
+    if (canDrift) {
+      player.drifting = true;
+      player.driftCharge = Math.min(
+        1.65,
+        (player.driftCharge || 0) + dt * (0.75 + currentSpeed / 440),
+      );
+      player.angle += turn * 0.85 * dt;
+    } else if (player.actionLatch && !action) {
+      if ((player.driftCharge || 0) >= 0.42) {
+        player.boost = Math.min(1.6, 0.45 + player.driftCharge * 0.78);
+        player.cooldown = 1.15;
+        addPartyEffect({
+          x: player.x,
+          y: player.y,
+          kind: "boost",
+          color: player.color,
+          ttl: 0.7,
+          text: "MINI",
+        });
+      }
+      player.driftCharge = 0;
+      player.drifting = false;
+    } else {
+      player.drifting = false;
+      if (!action)
+        player.driftCharge = Math.max(0, (player.driftCharge || 0) - dt * 1.8);
     }
+    player.actionLatch = action;
     player.boost = Math.max(0, (player.boost || 0) - dt);
     player.cooldown = Math.max(0, (player.cooldown || 0) - dt);
     player.boosted = player.boost > 0;
-    const throttle = Number(input.up) - Number(input.down) * 0.5;
     const track = state.config?.track || config.track;
     const onTrack = distanceToTrack(player.x, player.y, track) <= 62;
-    const grip = onTrack ? 1 : 0.58;
+    const grip = player.drifting ? (onTrack ? 0.82 : 0.48) : onTrack ? 1 : 0.58;
+    const boost = player.boosted ? 1.45 : 1;
     player.vx += Math.cos(player.angle) * 520 * throttle * boost * grip * dt;
     player.vy += Math.sin(player.angle) * 520 * throttle * boost * grip * dt;
     const speed = Math.hypot(player.vx, player.vy);
-    const maxSpeed = 360 * (player.boosted ? 1.45 : 1) * (onTrack ? 1 : 0.68);
+    const driftLimit = player.drifting ? 0.92 : 1;
+    const maxSpeed = 360 * boost * driftLimit * (onTrack ? 1 : 0.68);
     if (speed > maxSpeed) {
       player.vx = (player.vx / speed) * maxSpeed;
       player.vy = (player.vy / speed) * maxSpeed;
@@ -1037,11 +1100,30 @@
   function updateLocalSnake(player, dt) {
     const dx = Number(input.right) - Number(input.left);
     const dy = Number(input.down) - Number(input.up);
-    if (dx || dy) player.angle = Math.atan2(dy, dx);
+    if (dx || dy) {
+      const nextAngle = Math.atan2(dy, dx);
+      if (Math.cos(nextAngle - player.angle) > -0.35) player.angle = nextAngle;
+    }
+    if (input.action && (player.cooldown || 0) <= 0) {
+      player.boost = 0.75;
+      player.cooldown = 3.2;
+      addPartyEffect({
+        x: player.x,
+        y: player.y,
+        kind: "boost",
+        color: player.color,
+        ttl: 0.55,
+        text: "SPRINT",
+      });
+    }
+    player.boost = Math.max(0, (player.boost || 0) - dt);
+    player.cooldown = Math.max(0, (player.cooldown || 0) - dt);
+    player.boosted = player.boost > 0;
+    const speed = 205 * (player.boosted ? 1.5 : 1);
     moveLocal(
       player,
-      Math.cos(player.angle) * 205 * dt,
-      Math.sin(player.angle) * 205 * dt,
+      Math.cos(player.angle) * speed * dt,
+      Math.sin(player.angle) * speed * dt,
       false,
     );
     if (
@@ -1100,27 +1182,55 @@
       },
     ];
     if (!player) return;
-    state.hazards.forEach((hazard) => {
-      if (distance(player.x, player.y, hazard.x, hazard.y) < hazard.radius + 8)
-        knockLocal(player, "위험 구역에 닿았습니다.");
-    });
+    for (const hazard of state.hazards) {
+      if (distance(player.x, player.y, hazard.x, hazard.y) >= hazard.radius + 8)
+        continue;
+      if ((player.shield || 0) > 0) {
+        player.shield = 0;
+        addPartyEffect({
+          x: player.x,
+          y: player.y,
+          kind: "shield",
+          color: "#69dcff",
+          ttl: 0.75,
+          text: "SAFE",
+        });
+        continue;
+      }
+      knockLocal(player, "위험 구역에 닿았습니다.");
+    }
   }
 
   function collectLocalPickups(player) {
     state.pickups = state.pickups.filter((pickup) => {
       if (distance(player.x, player.y, pickup.x, pickup.y) >= 28) return true;
-      player.score += pickup.kind === "boost" ? 3 : pickup.value || 1;
       if (pickup.kind === "boost") {
+        player.score += 3;
         player.boosted = true;
         player.boost = 1.6;
+      } else if (pickup.kind === "shield") {
+        player.score += 1;
+        player.shield = Math.max(player.shield || 0, 5);
+      } else {
+        player.score += pickup.value || 1;
       }
       addPartyEffect({
         x: pickup.x,
         y: pickup.y,
-        kind: pickup.kind === "boost" ? "boost" : "pickup",
-        color: player.color,
+        kind:
+          pickup.kind === "boost" ||
+          pickup.kind === "shield" ||
+          pickup.kind === "gem"
+            ? pickup.kind
+            : "pickup",
+        color: pickup.kind === "shield" ? "#69dcff" : player.color,
         ttl: 0.65,
-        text: pickup.kind === "boost" ? "BOOST" : `+${pickup.value || 1}`,
+        text:
+          pickup.kind === "boost"
+            ? "BOOST"
+            : pickup.kind === "shield"
+              ? "SHIELD"
+              : `+${pickup.value || 1}`,
       });
       return false;
     });
@@ -1452,24 +1562,59 @@
 
   function drawPickup(pickup) {
     const color =
-      pickup.kind === "boost"
-        ? "#42d7ff"
-        : pickup.value > 1
-          ? "#ffd166"
-          : "#f8f871";
+      pickup.kind === "shield"
+        ? "#69dcff"
+        : pickup.kind === "boost"
+          ? "#42d7ff"
+          : pickup.kind === "gem" || pickup.value > 1
+            ? "#ffd166"
+            : "#f8f871";
     ctx.save();
     ctx.shadowColor = color;
-    ctx.shadowBlur = pickup.kind === "boost" ? 18 : 10;
+    ctx.shadowBlur =
+      pickup.kind === "boost" || pickup.kind === "shield" ? 18 : 10;
     ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.arc(
-      pickup.x,
-      pickup.y,
-      pickup.kind === "boost" ? 13 : 10,
-      0,
-      Math.PI * 2,
-    );
-    ctx.fill();
+    if (pickup.kind === "gem") {
+      ctx.beginPath();
+      ctx.moveTo(pickup.x, pickup.y - 15);
+      ctx.lineTo(pickup.x + 15, pickup.y);
+      ctx.lineTo(pickup.x, pickup.y + 15);
+      ctx.lineTo(pickup.x - 15, pickup.y);
+      ctx.closePath();
+      ctx.fill();
+    } else if (pickup.kind === "shield") {
+      ctx.beginPath();
+      ctx.moveTo(pickup.x, pickup.y - 17);
+      ctx.quadraticCurveTo(
+        pickup.x + 17,
+        pickup.y - 10,
+        pickup.x + 13,
+        pickup.y + 6,
+      );
+      ctx.quadraticCurveTo(
+        pickup.x,
+        pickup.y + 20,
+        pickup.x - 13,
+        pickup.y + 6,
+      );
+      ctx.quadraticCurveTo(
+        pickup.x - 17,
+        pickup.y - 10,
+        pickup.x,
+        pickup.y - 17,
+      );
+      ctx.fill();
+    } else {
+      ctx.beginPath();
+      ctx.arc(
+        pickup.x,
+        pickup.y,
+        pickup.kind === "boost" ? 13 : 10,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+    }
     ctx.shadowBlur = 0;
     ctx.strokeStyle = "rgba(255,255,255,.72)";
     ctx.lineWidth = 2;
@@ -1489,6 +1634,12 @@
       ctx.lineTo(pickup.x + 9, pickup.y);
       ctx.lineTo(pickup.x - 5, pickup.y + 8);
       ctx.fill();
+    } else if (pickup.kind === "shield") {
+      ctx.strokeStyle = "rgba(5,12,22,.5)";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(pickup.x, pickup.y - 2, 7, 0, Math.PI * 2);
+      ctx.stroke();
     }
     ctx.restore();
   }
@@ -1640,6 +1791,23 @@
           ctx.fillRect(-46 - streak * 18, -10 + streak * 8, 26, 3);
         }
       }
+      if (player.drifting) {
+        const charge = clamp(player.driftCharge || 0, 0, 1.65);
+        ctx.fillStyle =
+          charge > 1 ? "rgba(255,210,90,.78)" : "rgba(66,215,255,.58)";
+        for (let puff = 0; puff < 4; puff += 1) {
+          const side = puff % 2 ? 1 : -1;
+          ctx.beginPath();
+          ctx.arc(
+            -34 - puff * 7,
+            side * (15 + charge * 3),
+            5 + charge * 3,
+            0,
+            Math.PI * 2,
+          );
+          ctx.fill();
+        }
+      }
       const body = ctx.createLinearGradient(-28, -18, 28, 18);
       body.addColorStop(0, "#07111f");
       body.addColorStop(0.45, player.color);
@@ -1674,6 +1842,13 @@
         ctx.fill();
       }
     } else if (game === "snake") {
+      if (player.boosted) {
+        ctx.strokeStyle = "rgba(248,248,113,.86)";
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.arc(0, 0, 34, -0.8, 0.8);
+        ctx.stroke();
+      }
       ctx.strokeStyle = "rgba(7,17,31,.55)";
       ctx.lineWidth = 7;
       ctx.beginPath();
@@ -1706,6 +1881,13 @@
         ctx.lineWidth = 5;
         ctx.beginPath();
         ctx.arc(0, 0, 29, -0.9, 0.9);
+        ctx.stroke();
+      }
+      if (game === "coin" && (player.shielded || player.shield > 0)) {
+        ctx.strokeStyle = "rgba(105,220,255,.9)";
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(0, 0, 34, 0, Math.PI * 2);
         ctx.stroke();
       }
       ctx.fillStyle = "#0b1220";
@@ -1754,7 +1936,15 @@
       ctx.arc(effect.x, effect.y, 24 + (1 - alpha) * 20, 0, Math.PI * 2);
       ctx.fill();
     } else if (
-      ["boost", "dash", "lap", "checkpoint", "respawn"].includes(effect.kind)
+      [
+        "boost",
+        "dash",
+        "lap",
+        "checkpoint",
+        "respawn",
+        "shield",
+        "gem",
+      ].includes(effect.kind)
     ) {
       ctx.strokeStyle = color;
       ctx.lineWidth = 5;
@@ -1834,7 +2024,14 @@
       ctx.fillRect(x + bomb.x * mapScale - 2, y + bomb.y * mapScale - 2, 4, 4);
     });
     state.pickups.slice(0, 36).forEach((pickup) => {
-      ctx.fillStyle = pickup.kind === "boost" ? "#42d7ff" : "#f8f871";
+      ctx.fillStyle =
+        pickup.kind === "shield"
+          ? "#69dcff"
+          : pickup.kind === "boost"
+            ? "#42d7ff"
+            : pickup.kind === "gem"
+              ? "#ffd166"
+              : "#f8f871";
       ctx.beginPath();
       ctx.arc(
         x + pickup.x * mapScale,

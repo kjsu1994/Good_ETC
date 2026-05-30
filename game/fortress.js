@@ -11,13 +11,18 @@
       : requestedRole === "spectator"
         ? "spectator"
         : "client";
-  const assetVersion = params.get("v") || "20260530v";
+  const assetVersion = params.get("v") || "20260530z";
   const world = { width: 2600, height: 980 };
   const gravity = 300;
   const moveBudgetMax = 130;
   const moveCost = 10;
   const defaultWeapon = "standard";
   const weaponOrder = ["standard", "impact", "burst", "split", "drill"];
+  const supplyKinds = {
+    repair: { label: "수리", color: "#55e68f" },
+    shield: { label: "보호막", color: "#69dcff" },
+    power: { label: "강화탄", color: "#ffd166" },
+  };
   const weapons = {
     standard: {
       key: "Z",
@@ -241,6 +246,7 @@
   let socket = null;
   let mySlot = mode === "multi" ? -1 : 0;
   let lastFrame = performance.now();
+  let nextSupplyId = 1;
   let state = createInitialState();
   let latestShareUrl = "";
   let netInfoCopyTimer = 0;
@@ -262,6 +268,7 @@
   function normalizeState(nextState) {
     nextState.players.forEach(normalizePlayer);
     if (!Array.isArray(nextState.impactMarks)) nextState.impactMarks = [];
+    if (!Array.isArray(nextState.supplyCrates)) nextState.supplyCrates = [];
     if (!Array.isArray(nextState.projectiles)) {
       nextState.projectiles = nextState.projectile
         ? [nextState.projectile]
@@ -283,16 +290,19 @@
     ];
     const terrain = buildTerrain();
     placePlayers(players, terrain);
+    nextSupplyId = 1;
     return normalizeState({
       world,
       terrain,
       players,
       turn: 0,
+      turnCount: 1,
       wind: randomWind(),
       projectile: null,
       projectiles: [],
       explosion: null,
       impactMarks: [],
+      supplyCrates: [createSupplyCrate(terrain, true, players)],
       gameOver: false,
       ready: true,
       status: "P1 턴. 이동, 포각, 파워를 조절하세요.",
@@ -357,6 +367,40 @@
     });
   }
 
+  function placeSupplyCrates(terrain, crates) {
+    (crates || []).forEach((crate) => {
+      crate.y = terrainAt(terrain, crate.x) - 27;
+    });
+  }
+
+  function createSupplyCrate(terrain, centered = false, players = []) {
+    const kind = weightedSupplyKind();
+    let x = centered
+      ? world.width / 2
+      : 360 + Math.random() * (world.width - 720);
+    for (
+      let attempt = 0;
+      !centered && attempt < 40 && players.length;
+      attempt += 1
+    ) {
+      x = 360 + Math.random() * (world.width - 720);
+      if (players.every((player) => Math.abs(player.x - x) > 170)) break;
+    }
+    return {
+      id: nextSupplyId++,
+      x,
+      y: terrainAt(terrain, x) - 27,
+      kind,
+    };
+  }
+
+  function weightedSupplyKind() {
+    const roll = Math.random();
+    if (roll < 0.46) return "repair";
+    if (roll < 0.74) return "shield";
+    return "power";
+  }
+
   function currentPlayer() {
     return state.players[state.turn];
   }
@@ -413,6 +457,7 @@
     player.x = nextX;
     player.y = terrainAt(state.terrain, player.x) - 18;
     player.moveLeft = Math.max(0, (player.moveLeft || 0) - moveCost);
+    collectSupplyCrates(player);
   }
 
   function adjustAngle(delta) {
@@ -460,6 +505,24 @@
     state.status = player.activeItem
       ? `${player.name} 강화탄 장전.`
       : `${player.name} 강화탄 취소.`;
+  }
+
+  function collectSupplyCrates(player) {
+    let collected = null;
+    state.supplyCrates = (state.supplyCrates || []).filter((crate) => {
+      if (
+        !collected &&
+        Math.hypot(player.x - crate.x, player.y - crate.y) < 42
+      ) {
+        collected = crate;
+        return false;
+      }
+      return true;
+    });
+    if (!collected) return;
+    const kind = supplyKinds[collected.kind] ? collected.kind : "repair";
+    player.items[kind] = (player.items[kind] || 0) + 1;
+    state.status = `${player.name} 보급상자 획득: ${supplyKinds[kind].label} +1`;
   }
 
   function fire() {
@@ -527,8 +590,18 @@
   function nextTurn() {
     currentPlayer().activeItem = "";
     state.turn = state.turn === 0 ? 1 : 0;
+    state.turnCount = (state.turnCount || 1) + 1;
     currentPlayer().moveLeft = moveBudgetMax;
     state.wind = randomWind();
+    if (
+      state.turnCount % 2 === 0 &&
+      (state.supplyCrates || []).length < 3 &&
+      Math.random() <= 0.58
+    ) {
+      state.supplyCrates.push(
+        createSupplyCrate(state.terrain, false, state.players),
+      );
+    }
     state.turnDelayAt = 0;
     state.status = `${currentPlayer().name} 턴. 이동, 포각, 파워를 조절하세요.`;
   }
@@ -635,6 +708,7 @@
     carveTerrain(x, y, shot.radius, shot.carve || 1);
     applyExplosionDamage(x, y, shot.radius, shot.damage);
     placePlayers(state.players, state.terrain);
+    placeSupplyCrates(state.terrain, state.supplyCrates);
   }
 
   function addImpactMark(x, y, radius, weapon) {
@@ -1319,6 +1393,51 @@
     });
   }
 
+  function drawSupplyCrates() {
+    const crates = state.supplyCrates || [];
+    if (!crates.length) return;
+    const scale = getView().scale;
+    crates.forEach((crate) => {
+      const point = toScreen(crate.x, crate.y);
+      const supply = supplyKinds[crate.kind] || supplyKinds.repair;
+      ctx.save();
+      ctx.translate(point.x, point.y);
+      ctx.shadowColor = supply.color;
+      ctx.shadowBlur = 14 * scale;
+      ctx.fillStyle = "rgba(0,0,0,.26)";
+      ctx.beginPath();
+      ctx.ellipse(0, 18 * scale, 24 * scale, 7 * scale, 0, 0, Math.PI * 2);
+      ctx.fill();
+      const size = 31 * scale;
+      const gradient = ctx.createLinearGradient(-size, -size, size, size);
+      gradient.addColorStop(0, "#fff3c4");
+      gradient.addColorStop(0.22, supply.color);
+      gradient.addColorStop(1, "#233044");
+      ctx.fillStyle = gradient;
+      ctx.strokeStyle = "rgba(8,17,25,.72)";
+      ctx.lineWidth = Math.max(1, 2 * scale);
+      ctx.beginPath();
+      drawRoundRect(-size / 2, -size / 2, size, size, 5 * scale);
+      ctx.fill();
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = "rgba(255,255,255,.55)";
+      ctx.lineWidth = Math.max(1, 2 * scale);
+      ctx.beginPath();
+      ctx.moveTo(-size / 2, -2 * scale);
+      ctx.lineTo(size / 2, -2 * scale);
+      ctx.moveTo(0, -size / 2);
+      ctx.lineTo(0, size / 2);
+      ctx.stroke();
+      ctx.fillStyle = "#07111f";
+      ctx.font = `900 ${Math.max(9, 11 * scale)}px system-ui, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(supply.label[0], 0, 2 * scale);
+      ctx.restore();
+    });
+  }
+
   function drawAimGuide() {
     const player = currentPlayer();
     if (!player || !state.ready || hasProjectiles() || state.gameOver) return;
@@ -1707,6 +1826,19 @@
       ctx.stroke();
     });
 
+    (state.supplyCrates || []).forEach((crate) => {
+      const supply = supplyKinds[crate.kind] || supplyKinds.repair;
+      ctx.fillStyle = supply.color;
+      ctx.strokeStyle = "rgba(7,17,31,.72)";
+      ctx.lineWidth = 1;
+      const markerX = x + crate.x * mapScale;
+      const markerY = y + crate.y * mapScale;
+      ctx.beginPath();
+      ctx.rect(markerX - 3, markerY - 3, 6, 6);
+      ctx.fill();
+      ctx.stroke();
+    });
+
     state.players.forEach((player, index) => {
       ctx.fillStyle =
         player.health <= 0
@@ -1786,6 +1918,7 @@
     }
     drawTerrain();
     drawImpactMarks();
+    drawSupplyCrates();
     drawAimGuide();
     state.players.forEach(drawPlayer);
     drawProjectile();

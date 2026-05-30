@@ -32,6 +32,11 @@ FIRE_COOLDOWN = 0.22
 RESPAWN_DELAY = 1.8
 TICK_RATE = 30
 ARENA_PICKUP_TARGET = 12
+ARENA_CONTROL_POINT_SPECS = [
+    {"id": "alpha", "x": 650, "y": 520, "radius": 118, "label": "A"},
+    {"id": "bravo", "x": 1300, "y": 800, "radius": 132, "label": "B"},
+    {"id": "charlie", "x": 1990, "y": 1080, "radius": 118, "label": "C"},
+]
 ARENA_OBSTACLES = [
     {"x": 320, "y": 260, "w": 210, "h": 76},
     {"x": 760, "y": 460, "w": 170, "h": 92},
@@ -270,7 +275,7 @@ PARTY_GAME_TYPES = {"kart", "bomb", "snake", "coin"}
 PARTY_GAME_CONFIGS: dict[str, dict[str, Any]] = {
     "kart": {
         "name": "카트 랠리",
-        "goal": "3바퀴를 가장 먼저 완주하세요.",
+        "goal": "3바퀴를 가장 먼저 완주하고 드리프트 미니부스터를 활용하세요.",
         "duration": 240,
         "laps": 3,
         "speed": 360,
@@ -293,13 +298,13 @@ PARTY_GAME_CONFIGS: dict[str, dict[str, Any]] = {
     },
     "snake": {
         "name": "스네이크 배틀",
-        "goal": "먹이를 모아 길어지고 벽과 꼬리를 피하세요.",
+        "goal": "먹이를 모아 길어지고 벽과 꼬리를 피하며 순간 질주로 빈틈을 빠져나가세요.",
         "duration": 180,
         "speed": 205,
     },
     "coin": {
         "name": "코인 러시",
-        "goal": "위험 구역을 피해 코인을 가장 많이 모으세요.",
+        "goal": "위험 구역을 피해 코인과 보석을 모으고 실드로 위기를 버티세요.",
         "duration": 150,
         "speed": 270,
     },
@@ -404,6 +409,20 @@ class ArenaEffect:
     text: str = ""
 
 
+def create_arena_control_points() -> list[dict[str, Any]]:
+    return [
+        {
+            **spec,
+            "ownerId": "",
+            "ownerName": "",
+            "ownerColor": "",
+            "capture": 0.0,
+            "nextScoreAt": 0.0,
+        }
+        for spec in ARENA_CONTROL_POINT_SPECS
+    ]
+
+
 @dataclass
 class ArenaRoom:
     id: str
@@ -411,6 +430,7 @@ class ArenaRoom:
     bullets: list[Bullet] = field(default_factory=list)
     pickups: list[ArenaPickup] = field(default_factory=list)
     effects: list[ArenaEffect] = field(default_factory=list)
+    control_points: list[dict[str, Any]] = field(default_factory=create_arena_control_points)
     next_client_id: int = 1
     next_bullet_id: int = 1
     next_pickup_id: int = 1
@@ -512,6 +532,9 @@ class PartyClient:
     respawn_at: float = 0.0
     cooldown_until: float = 0.0
     boosted_until: float = 0.0
+    shield_until: float = 0.0
+    drift_charge: float = 0.0
+    drifting: bool = False
     action_latched: bool = False
     connected_at: float = field(default_factory=time.time)
     write_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
@@ -595,6 +618,9 @@ class FortressMatch:
         self.projectile: dict[str, Any] | None = None
         self.explosion: dict[str, Any] | None = None
         self.impact_marks: list[dict[str, Any]] = []
+        self.supply_crates: list[dict[str, Any]] = []
+        self.next_supply_id = 1
+        self.turn_count = 1
         self.game_over = False
         self.status = ""
         self.turn_delay_at = 0.0
@@ -680,6 +706,10 @@ class FortressMatch:
         self.set_projectiles([])
         self.explosion = None
         self.impact_marks = []
+        self.supply_crates = []
+        self.next_supply_id = 1
+        self.turn_count = 1
+        self.spawn_supply_crate(force=True)
         self.game_over = False
         self.turn_delay_at = 0.0
         self.status = "P1 턴. 이동, 포각, 파워를 조절하세요."
@@ -736,6 +766,35 @@ class FortressMatch:
     def place_players(self) -> None:
         for player in self.players:
             player["y"] = self.terrain_at(player["x"]) - 18
+        self.place_supply_crates()
+
+    def place_supply_crates(self) -> None:
+        for crate in self.supply_crates:
+            crate["y"] = self.terrain_at(float(crate["x"])) - 27
+
+    def spawn_supply_crate(self, force: bool = False) -> None:
+        if not force and (len(self.supply_crates) >= 3 or random.random() > 0.58):
+            return
+        for _ in range(40):
+            x = random.uniform(360, FORTRESS_WIDTH - 360)
+            if all(abs(x - player["x"]) > 170 for player in self.players):
+                break
+        else:
+            x = FORTRESS_WIDTH / 2
+        kind = random.choices(
+            ["repair", "shield", "power"],
+            weights=[0.46, 0.28, 0.26],
+            k=1,
+        )[0]
+        self.supply_crates.append(
+            {
+                "id": self.next_supply_id,
+                "x": round(x, 1),
+                "y": self.terrain_at(x) - 27,
+                "kind": kind,
+            }
+        )
+        self.next_supply_id += 1
 
     def current_player(self) -> dict[str, Any]:
         return self.players[self.turn]
@@ -801,6 +860,7 @@ class FortressMatch:
         player["x"] = next_x
         player["y"] = self.terrain_at(player["x"]) - 18
         player["moveLeft"] = max(0, int(player.get("moveLeft", 0)) - FORTRESS_MOVE_COST)
+        self.collect_supply_crates(player)
 
     def adjust_angle(self, delta: float) -> None:
         player = self.current_player()
@@ -843,6 +903,24 @@ class FortressMatch:
             if player["activeItem"]
             else f"{player['name']} 강화탄 취소."
         )
+
+    def collect_supply_crates(self, player: dict[str, Any]) -> None:
+        remaining: list[dict[str, Any]] = []
+        collected: dict[str, Any] | None = None
+        for crate in self.supply_crates:
+            if collected is None and math.hypot(player["x"] - crate["x"], player["y"] - crate["y"]) < 42:
+                collected = crate
+                continue
+            remaining.append(crate)
+        self.supply_crates = remaining
+        if not collected:
+            return
+        kind = str(collected.get("kind") or "")
+        if kind not in player["items"]:
+            kind = "repair"
+        player["items"][kind] = int(player["items"].get(kind, 0)) + 1
+        label = {"repair": "수리", "shield": "보호막", "power": "강화탄"}[kind]
+        self.status = f"{player['name']} 보급상자 획득: {label} +1"
 
     def fire(self) -> None:
         player = self.current_player()
@@ -910,8 +988,11 @@ class FortressMatch:
     def next_turn(self) -> None:
         self.current_player()["activeItem"] = ""
         self.turn = 1 - self.turn
+        self.turn_count += 1
         self.current_player()["moveLeft"] = FORTRESS_MOVE_BUDGET_MAX
         self.wind = self.random_wind()
+        if self.turn_count % 2 == 0:
+            self.spawn_supply_crate()
         self.turn_delay_at = 0.0
         self.status = f"{self.current_player()['name']} 턴. 이동, 포각, 파워를 조절하세요."
 
@@ -1082,6 +1163,7 @@ class FortressMatch:
             "projectiles": self.visible_projectiles(),
             "explosion": self.visible_explosion(),
             "impactMarks": self.visible_impact_marks(),
+            "supplyCrates": self.visible_supply_crates(),
             "gameOver": self.game_over,
             "ready": self.ready(),
             "turnLocked": bool(self.turn_delay_at),
@@ -1133,6 +1215,17 @@ class FortressMatch:
                 "color": mark.get("color"),
             }
             for mark in self.impact_marks[-18:]
+        ]
+
+    def visible_supply_crates(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "id": int(crate["id"]),
+                "x": round(float(crate["x"]), 2),
+                "y": round(float(crate["y"]), 2),
+                "kind": str(crate.get("kind") or "repair"),
+            }
+            for crate in self.supply_crates
         ]
 
     def safe_float(self, value: Any, fallback: float) -> float:
@@ -1844,6 +1937,12 @@ class PartyRoom:
             player.alive = True
             player.vx = 0
             player.vy = 0
+            player.cooldown_until = 0
+            player.boosted_until = 0
+            player.shield_until = 0
+            player.drift_charge = 0
+            player.drifting = False
+            player.action_latched = False
             self.place_client(player)
         self.status = "라운드를 다시 시작했습니다."
         return ""
@@ -1866,18 +1965,42 @@ class PartyRoom:
         client.vy = 0
         client.alive = True
         client.respawn_at = 0
+        client.shield_until = 0
+        client.drift_charge = 0
+        client.drifting = False
+        client.action_latched = False
         client.trail = [(client.x, client.y)]
 
     def seed_pickups(self) -> None:
         target = {"kart": 9, "bomb": 12, "snake": 34, "coin": 30}[self.game_type]
         while len(self.pickups) < target:
+            kind = "coin"
+            value = 1
+            if self.game_type == "kart" and random.random() < 0.35:
+                kind = "boost"
+            elif self.game_type == "snake":
+                if random.random() < 0.16:
+                    kind = "boost"
+                    value = 2
+                elif random.random() < 0.16:
+                    kind = "gem"
+                    value = 3
+            elif self.game_type == "coin":
+                roll = random.random()
+                if roll < 0.12:
+                    kind = "shield"
+                elif roll < 0.28:
+                    kind = "gem"
+                    value = 5
+                elif random.random() < 0.2:
+                    value = 3
             self.pickups.append(
                 PartyPickup(
                     id=self.next_pickup_id,
                     x=random.uniform(80, PARTY_WIDTH - 80),
                     y=random.uniform(80, PARTY_HEIGHT - 80),
-                    kind="boost" if self.game_type == "kart" and random.random() < 0.35 else "coin",
-                    value=3 if self.game_type == "coin" and random.random() < 0.2 else 1,
+                    kind=kind,
+                    value=value,
                 )
             )
             self.next_pickup_id += 1
@@ -1973,25 +2096,41 @@ class PartyRoom:
         checkpoints = self.config["track"]
         for client in self.clients.values():
             controls = client.input
-            if controls.get("left"):
-                client.angle -= 3.2 * dt
-            if controls.get("right"):
-                client.angle += 3.2 * dt
+            turn = float(controls.get("right", False)) - float(controls.get("left", False))
+            if turn:
+                client.angle += turn * 3.2 * dt
             throttle = float(controls.get("up", False)) - 0.5 * float(controls.get("down", False))
             boost = 1.45 if now < client.boosted_until else 1.0
-            if controls.get("action") and now >= client.cooldown_until:
-                client.boosted_until = now + 1.2
-                client.cooldown_until = now + 4.0
-                boost = 1.45
-                self.add_effect(client.x, client.y, "boost", client.color, 0.55, "BOOST")
+            speed = math.hypot(client.vx, client.vy)
+            action = bool(controls.get("action"))
+            can_drift = action and abs(turn) > 0 and throttle > 0 and speed > 90 and now >= client.cooldown_until
+            if can_drift:
+                client.drifting = True
+                client.drift_charge = min(1.65, client.drift_charge + dt * (0.75 + speed / 440))
+                client.angle += turn * 0.85 * dt
+            elif client.action_latched and not action:
+                if client.drift_charge >= 0.42:
+                    boost_duration = min(1.6, 0.45 + client.drift_charge * 0.78)
+                    client.boosted_until = now + boost_duration
+                    client.cooldown_until = now + 1.15
+                    boost = 1.45
+                    self.add_effect(client.x, client.y, "boost", client.color, 0.7, "MINI")
+                client.drift_charge = 0
+                client.drifting = False
+            else:
+                client.drifting = False
+                if not action:
+                    client.drift_charge = max(0, client.drift_charge - dt * 1.8)
+            client.action_latched = action
             track_distance = party_distance_to_polyline(client.x, client.y, checkpoints)
             on_track = track_distance <= 62
-            grip = 1.0 if on_track else 0.58
+            grip = (0.82 if on_track else 0.48) if client.drifting else (1.0 if on_track else 0.58)
             accel = 520 * throttle * boost * grip
             client.vx += math.cos(client.angle) * accel * dt
             client.vy += math.sin(client.angle) * accel * dt
             speed = math.hypot(client.vx, client.vy)
-            max_speed = float(self.config["speed"]) * boost * (1.0 if on_track else 0.68)
+            drift_limit = 0.92 if client.drifting else 1.0
+            max_speed = float(self.config["speed"]) * boost * drift_limit * (1.0 if on_track else 0.68)
             if speed > max_speed:
                 client.vx = client.vx / speed * max_speed
                 client.vy = client.vy / speed * max_speed
@@ -2050,11 +2189,18 @@ class PartyRoom:
             dx = float(controls.get("right", False)) - float(controls.get("left", False))
             dy = float(controls.get("down", False)) - float(controls.get("up", False))
             if dx or dy:
-                client.angle = math.atan2(dy, dx)
+                next_angle = math.atan2(dy, dx)
+                if math.cos(next_angle - client.angle) > -0.35:
+                    client.angle = next_angle
+            if controls.get("action") and now >= client.cooldown_until:
+                client.boosted_until = now + 0.75
+                client.cooldown_until = now + 3.2
+                self.add_effect(client.x, client.y, "boost", client.color, 0.55, "SPRINT")
+            move_speed = speed * (1.5 if now < client.boosted_until else 1.0)
             self.move_client(
                 client,
-                math.cos(client.angle) * speed * dt,
-                math.sin(client.angle) * speed * dt,
+                math.cos(client.angle) * move_speed * dt,
+                math.sin(client.angle) * move_speed * dt,
                 bounce=False,
             )
             if (
@@ -2126,6 +2272,10 @@ class PartyRoom:
         for hazard in self.hazards(now):
             for client in self.clients.values():
                 if client.alive and party_distance(client.x, client.y, hazard["x"], hazard["y"]) < hazard["radius"] + 8:
+                    if now < client.shield_until:
+                        client.shield_until = 0
+                        self.add_effect(client.x, client.y, "shield", "#69dcff", 0.75, "SAFE")
+                        continue
                     self.knock_out(client, now, "위험 구역에 닿았습니다.")
 
     def collect_pickups(self, now: float) -> None:
@@ -2146,9 +2296,20 @@ class PartyRoom:
                 collector.boosted_until = max(collector.boosted_until, now + 1.6)
                 collector.score += 3
                 self.add_effect(pickup.x, pickup.y, "boost", collector.color, 0.65, "BOOST")
+            elif pickup.kind == "shield":
+                collector.shield_until = max(collector.shield_until, now + 5.0)
+                collector.score += 1
+                self.add_effect(pickup.x, pickup.y, "shield", "#69dcff", 0.75, "SHIELD")
             else:
                 collector.score += pickup.value
-                self.add_effect(pickup.x, pickup.y, "pickup", collector.color, 0.65, f"+{pickup.value}")
+                self.add_effect(
+                    pickup.x,
+                    pickup.y,
+                    "gem" if pickup.kind == "gem" else "pickup",
+                    collector.color,
+                    0.65,
+                    f"+{pickup.value}",
+                )
         self.pickups = remaining
 
     def maybe_drop_bomb(self, client: PartyClient, now: float) -> None:
@@ -2303,6 +2464,10 @@ class PartyRoom:
                     "alive": client.alive,
                     "isHost": client.id == self.host_id,
                     "boosted": now < client.boosted_until,
+                    "drifting": client.drifting,
+                    "driftCharge": round(client.drift_charge, 2),
+                    "shielded": now < client.shield_until,
+                    "shield": max(0, round(client.shield_until - now, 1)),
                     "cooldown": max(0, round(client.cooldown_until - now, 1)),
                     "trail": [[round(x, 1), round(y, 1)] for x, y in client.trail[-120:]],
                 }
@@ -3392,6 +3557,7 @@ class ArenaServer:
                 if controls.get("fire") and now - client.last_fire >= cooldown:
                     self.spawn_bullet(room, client)
                     client.last_fire = now
+            self.update_arena_control_points(room, dt, now)
             self.update_bullets(room, dt)
 
     def tick_arena_effect(self, effect: ArenaEffect, dt: float) -> bool:
@@ -3410,6 +3576,63 @@ class ArenaServer:
     ) -> None:
         room.effects.append(ArenaEffect(x=x, y=y, kind=kind, color=color, ttl=ttl, text=text))
         room.effects = room.effects[-36:]
+
+    def update_arena_control_points(self, room: ArenaRoom, dt: float, now: float) -> None:
+        for point in room.control_points:
+            occupants = [
+                client
+                for client in room.clients.values()
+                if client.alive
+                and math.hypot(client.x - float(point["x"]), client.y - float(point["y"]))
+                <= float(point["radius"])
+            ]
+            if len(occupants) != 1:
+                if not point.get("ownerId"):
+                    point["capture"] = max(0.0, float(point.get("capture", 0.0)) - dt * 0.32)
+                continue
+
+            client = occupants[0]
+            if point.get("ownerId") == client.id:
+                point["capture"] = 1.0
+                if now >= float(point.get("nextScoreAt", 0.0)):
+                    client.score += 1
+                    client.health = min(100, client.health + 4)
+                    point["nextScoreAt"] = now + 2.6
+                    self.add_arena_effect(
+                        room,
+                        float(point["x"]),
+                        float(point["y"]),
+                        "control",
+                        client.color,
+                        0.55,
+                        "+1",
+                    )
+                continue
+
+            if point.get("ownerId") and float(point.get("capture", 0.0)) > 0:
+                point["capture"] = max(0.0, float(point.get("capture", 0.0)) - dt * 0.78)
+                if point["capture"] > 0:
+                    continue
+                point["ownerId"] = ""
+                point["ownerName"] = ""
+                point["ownerColor"] = ""
+
+            point["capture"] = min(1.0, float(point.get("capture", 0.0)) + dt * 0.52)
+            if point["capture"] >= 1.0:
+                point["ownerId"] = client.id
+                point["ownerName"] = client.name
+                point["ownerColor"] = client.color
+                point["nextScoreAt"] = now + 1.0
+                client.score += 2
+                self.add_arena_effect(
+                    room,
+                    float(point["x"]),
+                    float(point["y"]),
+                    "control",
+                    client.color,
+                    0.9,
+                    f"{point['label']} 점령",
+                )
 
     def move_arena_client(self, client: Client, dx: float, dy: float) -> None:
         next_x = max(PLAYER_RADIUS, min(ARENA_WIDTH - PLAYER_RADIUS, client.x + dx))
@@ -3571,6 +3794,20 @@ class ArenaServer:
                         "kind": pickup.kind,
                     }
                     for pickup in room.pickups
+                ],
+                "controlPoints": [
+                    {
+                        "id": point["id"],
+                        "label": point["label"],
+                        "x": round(float(point["x"]), 2),
+                        "y": round(float(point["y"]), 2),
+                        "radius": round(float(point["radius"]), 2),
+                        "ownerId": point.get("ownerId", ""),
+                        "ownerName": point.get("ownerName", ""),
+                        "ownerColor": point.get("ownerColor", ""),
+                        "capture": round(float(point.get("capture", 0.0)), 3),
+                    }
+                    for point in room.control_points
                 ],
                 "bullets": [
                     {

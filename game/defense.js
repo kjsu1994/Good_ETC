@@ -1,7 +1,7 @@
 (() => {
   const params = new URLSearchParams(window.location.search);
   const isSolo = ["solo", "local"].includes(params.get("mode") || "");
-  const assetVersion = params.get("v") || "20260530v";
+  const assetVersion = params.get("v") || "20260530z";
   const world = { width: 1536, height: 960, cell: 24, columns: 64, rows: 40 };
   let defenseMaps = {
     classic: {
