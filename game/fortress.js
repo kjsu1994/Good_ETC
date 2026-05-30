@@ -11,7 +11,7 @@
       : requestedRole === "spectator"
         ? "spectator"
         : "client";
-  const assetVersion = params.get("v") || "20260530m";
+  const assetVersion = params.get("v") || "20260530r";
   const world = { width: 2200, height: 920 };
   const gravity = 300;
   const moveBudgetMax = 130;
@@ -261,6 +261,7 @@
 
   function normalizeState(nextState) {
     nextState.players.forEach(normalizePlayer);
+    if (!Array.isArray(nextState.impactMarks)) nextState.impactMarks = [];
     if (!Array.isArray(nextState.projectiles)) {
       nextState.projectiles = nextState.projectile
         ? [nextState.projectile]
@@ -291,6 +292,7 @@
       projectile: null,
       projectiles: [],
       explosion: null,
+      impactMarks: [],
       gameOver: false,
       ready: true,
       status: "P1 턴. 이동, 포각, 파워를 조절하세요.",
@@ -514,6 +516,7 @@
       splitAt: config.splitAt || 0,
       splitDone,
       age,
+      trail: [[x, y]],
     };
   }
 
@@ -547,6 +550,7 @@
     let exploded = false;
     for (const shot of state.projectiles || []) {
       shot.age += dt;
+      shot.trail = [...(shot.trail || []), [shot.x, shot.y]].slice(-22);
       shot.vx += state.wind * 0.22 * dt;
       shot.vy += gravity * dt;
       shot.x += shot.vx * dt;
@@ -627,9 +631,24 @@
 
   function explodeProjectile(shot, x, y) {
     state.explosion = { x, y, radius: shot.radius, age: 0 };
+    addImpactMark(x, y, shot.radius, shot.weapon);
     carveTerrain(x, y, shot.radius, shot.carve || 1);
     applyExplosionDamage(x, y, shot.radius, shot.damage);
     placePlayers(state.players, state.terrain);
+  }
+
+  function addImpactMark(x, y, radius, weapon) {
+    const config = weaponConfig(weapon);
+    state.impactMarks = [
+      ...(state.impactMarks || []),
+      {
+        x,
+        y,
+        radius,
+        weapon: weapons[weapon] ? weapon : defaultWeapon,
+        color: config.color,
+      },
+    ].slice(-18);
   }
 
   function carveTerrain(cx, cy, radius, carve = 1) {
@@ -1255,6 +1274,51 @@
     }
   }
 
+  function drawImpactMarks() {
+    const marks = state.impactMarks || [];
+    if (!marks.length) return;
+    const scale = getView().scale;
+    marks.slice(-18).forEach((mark, index) => {
+      const groundY = terrainAt(state.terrain, mark.x);
+      const point = toScreen(mark.x, Math.min(mark.y, groundY) + 3);
+      const ageFade = 0.38 + (index / Math.max(1, marks.length)) * 0.34;
+      const radius = Math.max(10, mark.radius * 0.48 * scale);
+      ctx.save();
+      ctx.globalAlpha = ageFade;
+      ctx.fillStyle = "rgba(9, 12, 14, 0.68)";
+      ctx.beginPath();
+      ctx.ellipse(point.x, point.y, radius, radius * 0.26, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = mark.color || "rgba(255, 188, 84, 0.7)";
+      ctx.lineWidth = Math.max(1, 2 * scale);
+      ctx.beginPath();
+      ctx.ellipse(
+        point.x,
+        point.y - 1 * scale,
+        radius * 1.08,
+        radius * 0.32,
+        0,
+        0,
+        Math.PI * 2,
+      );
+      ctx.stroke();
+      ctx.fillStyle = "rgba(255, 232, 142, 0.25)";
+      for (let pebble = 0; pebble < 5; pebble += 1) {
+        const angle = pebble * 1.41 + mark.x * 0.01;
+        ctx.beginPath();
+        ctx.arc(
+          point.x + Math.cos(angle) * radius * 0.78,
+          point.y + Math.sin(angle) * radius * 0.18,
+          Math.max(1, 2.2 * scale),
+          0,
+          Math.PI * 2,
+        );
+        ctx.fill();
+      }
+      ctx.restore();
+    });
+  }
+
   function drawAimGuide() {
     const player = currentPlayer();
     if (!player || !state.ready || hasProjectiles() || state.gameOver) return;
@@ -1475,6 +1539,38 @@
     const point = toScreen(shot.x, shot.y);
     const scale = getView().scale;
     const strong = shot.radius > 52 || shot.weapon === "impact";
+    const trail = shot.trail || [];
+    if (trail.length > 1) {
+      ctx.save();
+      ctx.lineCap = "round";
+      trail.forEach(([x, y], index) => {
+        if (index === 0) return;
+        const start = toScreen(trail[index - 1][0], trail[index - 1][1]);
+        const end = toScreen(x, y);
+        const alpha = 0.08 + (index / trail.length) * 0.28;
+        ctx.strokeStyle = strong
+          ? `rgba(255, 95, 109, ${alpha})`
+          : `rgba(245, 251, 255, ${alpha})`;
+        ctx.lineWidth = Math.max(2, (2 + (index / trail.length) * 5) * scale);
+        ctx.beginPath();
+        ctx.moveTo(start.x, start.y);
+        ctx.lineTo(end.x, end.y);
+        ctx.stroke();
+        if (index % 4 === 0) {
+          ctx.fillStyle = `rgba(215, 226, 235, ${alpha * 0.7})`;
+          ctx.beginPath();
+          ctx.arc(
+            start.x,
+            start.y,
+            Math.max(1, (1.8 + index * 0.08) * scale),
+            0,
+            Math.PI * 2,
+          );
+          ctx.fill();
+        }
+      });
+      ctx.restore();
+    }
     if (Number.isFinite(shot.vx) && Number.isFinite(shot.vy)) {
       ctx.strokeStyle = strong
         ? "rgba(255, 95, 109, 0.36)"
@@ -1597,6 +1693,20 @@
     }
     ctx.stroke();
 
+    (state.impactMarks || []).slice(-12).forEach((mark) => {
+      ctx.strokeStyle = mark.color || "rgba(255,188,84,.78)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(
+        x + mark.x * mapScale,
+        y + mark.y * mapScale,
+        Math.max(2.5, mark.radius * mapScale * 0.38),
+        0,
+        Math.PI * 2,
+      );
+      ctx.stroke();
+    });
+
     state.players.forEach((player, index) => {
       ctx.fillStyle =
         player.health <= 0
@@ -1675,6 +1785,7 @@
       );
     }
     drawTerrain();
+    drawImpactMarks();
     drawAimGuide();
     state.players.forEach(drawPlayer);
     drawProjectile();

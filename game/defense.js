@@ -1,7 +1,7 @@
 (() => {
   const params = new URLSearchParams(window.location.search);
   const isSolo = ["solo", "local"].includes(params.get("mode") || "");
-  const assetVersion = params.get("v") || "20260530m";
+  const assetVersion = params.get("v") || "20260530r";
   const world = { width: 1280, height: 832, cell: 32, columns: 40, rows: 26 };
   let defenseMaps = {
     classic: {
@@ -1392,6 +1392,10 @@
     const config = towerTypes[tower.type] || towerTypes.basic;
     const center = cellCenter(tower.cellX, tower.cellY);
     const selected = tower.id === selectedTowerId;
+    const target = findVisibleTowerTarget(tower, center, config);
+    const aim = target
+      ? Math.atan2(target.y - center.y, target.x - center.x)
+      : -Math.PI / 2;
     ctx.fillStyle = selected ? "rgba(255,255,255,.18)" : "rgba(0,0,0,.12)";
     ctx.beginPath();
     ctx.arc(center.x, center.y, tower.range || config.range, 0, Math.PI * 2);
@@ -1415,16 +1419,41 @@
       ctx.beginPath();
       ctx.arc(center.x, center.y, 18, 0, Math.PI * 2);
       ctx.stroke();
+      ctx.strokeStyle = `rgba(255,255,255,${0.18 + Math.sin(performance.now() / 240) * 0.06})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, tower.range || config.range, 0, Math.PI * 2);
+      ctx.stroke();
     } else {
       ctx.fillRect(center.x - 10, center.y - 10, 20, 20);
       ctx.fillStyle = "rgba(255,255,255,.28)";
       ctx.fillRect(center.x - 5, center.y - 15, 10, 8);
-      ctx.strokeStyle = config.color;
-      ctx.lineWidth = 4;
+      ctx.save();
+      ctx.translate(center.x, center.y);
+      ctx.rotate(aim);
+      ctx.strokeStyle = "rgba(0,0,0,.38)";
+      ctx.lineWidth = 8;
+      ctx.lineCap = "round";
       ctx.beginPath();
-      ctx.moveTo(center.x, center.y - 2);
-      ctx.lineTo(center.x + 18, center.y - 13);
+      ctx.moveTo(-2, 0);
+      ctx.lineTo(24, 0);
       ctx.stroke();
+      ctx.strokeStyle = config.color;
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(-2, 0);
+      ctx.lineTo(24, 0);
+      ctx.stroke();
+      if (target) {
+        ctx.fillStyle = "#f5fbff";
+        ctx.shadowColor = config.color;
+        ctx.shadowBlur = 10;
+        ctx.beginPath();
+        ctx.arc(27, 0, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      }
+      ctx.restore();
     }
     ctx.fillStyle = "#fff";
     ctx.font = "bold 13px monospace";
@@ -1433,9 +1462,49 @@
     ctx.fillText(String(tower.level), center.x, center.y);
   }
 
+  function findVisibleTowerTarget(tower, center, config) {
+    if (config.boost || !state.enemies?.length) return null;
+    const range = tower.range || config.range;
+    return state.enemies
+      .filter(
+        (enemy) => Math.hypot(enemy.x - center.x, enemy.y - center.y) <= range,
+      )
+      .sort(
+        (a, b) =>
+          (b.segment || 0) - (a.segment || 0) ||
+          Math.hypot(a.x - center.x, a.y - center.y) -
+            Math.hypot(b.x - center.x, b.y - center.y),
+      )[0];
+  }
+
+  function enemyDirection(enemy) {
+    if (!pathPixels.length) return 0;
+    const segment =
+      typeof enemy.segment === "number"
+        ? enemy.segment
+        : closestPathSegment(enemy.x, enemy.y);
+    const next = pathPixels[Math.min(pathPixels.length - 1, segment + 1)];
+    if (!next) return 0;
+    return Math.atan2(next.y - enemy.y, next.x - enemy.x);
+  }
+
+  function closestPathSegment(x, y) {
+    let bestIndex = 0;
+    let bestDistance = Infinity;
+    pathPixels.forEach((point, index) => {
+      const nextDistance = Math.hypot(point.x - x, point.y - y);
+      if (nextDistance < bestDistance) {
+        bestDistance = nextDistance;
+        bestIndex = index;
+      }
+    });
+    return bestIndex;
+  }
+
   function drawEnemy(enemy) {
     const config = enemyTypes[enemy.type] || enemyTypes.normal;
     const size = enemy.type === "boss" ? 34 : 22;
+    const direction = enemyDirection(enemy);
     ctx.save();
     ctx.fillStyle = "rgba(0,0,0,.28)";
     ctx.beginPath();
@@ -1494,13 +1563,37 @@
       Math.PI * 2,
     );
     ctx.fill();
+    ctx.save();
+    ctx.translate(enemy.x, enemy.y);
+    ctx.rotate(direction);
+    ctx.fillStyle = "rgba(11,18,32,.58)";
+    ctx.beginPath();
+    ctx.moveTo(size * 0.5, 0);
+    ctx.lineTo(size * 0.05, -size * 0.22);
+    ctx.lineTo(size * 0.12, 0);
+    ctx.lineTo(size * 0.05, size * 0.22);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
     ctx.restore();
     if (enemy.shield > 0) {
-      ctx.strokeStyle = "#6fe8ff";
-      ctx.lineWidth = 3;
+      const shieldRatio = Math.max(
+        0.15,
+        enemy.shield / (enemy.maxShield || enemy.shield),
+      );
+      ctx.strokeStyle = `rgba(111,232,255,${0.38 + shieldRatio * 0.5})`;
+      ctx.lineWidth = 2 + shieldRatio * 3;
+      ctx.setLineDash([8, 6]);
       ctx.beginPath();
-      ctx.arc(enemy.x, enemy.y, size / 2 + 6, 0, Math.PI * 2);
+      ctx.arc(
+        enemy.x,
+        enemy.y,
+        size / 2 + 6 + Math.sin(performance.now() / 180) * 1.5,
+        0,
+        Math.PI * 2,
+      );
       ctx.stroke();
+      ctx.setLineDash([]);
     }
     ctx.fillStyle = "#0b1220";
     ctx.fillRect(enemy.x - 16, enemy.y - 22, 32, 5);

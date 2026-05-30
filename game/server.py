@@ -392,11 +392,22 @@ class ArenaPickup:
 
 
 @dataclass
+class ArenaEffect:
+    x: float
+    y: float
+    kind: str
+    color: str
+    ttl: float = 0.7
+    text: str = ""
+
+
+@dataclass
 class ArenaRoom:
     id: str
     clients: dict[str, Client] = field(default_factory=dict)
     bullets: list[Bullet] = field(default_factory=list)
     pickups: list[ArenaPickup] = field(default_factory=list)
+    effects: list[ArenaEffect] = field(default_factory=list)
     next_client_id: int = 1
     next_bullet_id: int = 1
     next_pickup_id: int = 1
@@ -514,6 +525,16 @@ class PartyBomb:
 
 
 @dataclass
+class PartyEffect:
+    x: float
+    y: float
+    kind: str
+    color: str
+    ttl: float = 0.8
+    text: str = ""
+
+
+@dataclass
 class HubClient:
     id: str
     writer: asyncio.StreamWriter
@@ -552,6 +573,7 @@ class FortressMatch:
         self.projectiles: list[dict[str, Any]] = []
         self.projectile: dict[str, Any] | None = None
         self.explosion: dict[str, Any] | None = None
+        self.impact_marks: list[dict[str, Any]] = []
         self.game_over = False
         self.status = ""
         self.turn_delay_at = 0.0
@@ -636,6 +658,7 @@ class FortressMatch:
         self.wind = self.random_wind()
         self.set_projectiles([])
         self.explosion = None
+        self.impact_marks = []
         self.game_over = False
         self.turn_delay_at = 0.0
         self.status = "P1 턴. 이동, 포각, 파워를 조절하세요."
@@ -857,6 +880,7 @@ class FortressMatch:
             "splitAt": weapon.get("splitAt", 0),
             "splitDone": split_done,
             "age": age,
+            "trail": [(x, y)],
         }
 
     def finish_turn_soon(self) -> None:
@@ -885,6 +909,9 @@ class FortressMatch:
         exploded = False
         for shot in list(self.projectiles):
             shot["age"] += dt
+            trail = list(shot.get("trail") or [])
+            trail.append((shot["x"], shot["y"]))
+            shot["trail"] = trail[-22:]
             shot["vx"] += self.wind * 0.22 * dt
             shot["vy"] += FORTRESS_GRAVITY * dt
             shot["x"] += shot["vx"] * dt
@@ -954,6 +981,17 @@ class FortressMatch:
 
     def explode_projectile(self, shot: dict[str, Any], x: float, y: float) -> None:
         self.explosion = {"x": x, "y": y, "radius": shot["radius"], "age": 0.0}
+        self.impact_marks.append(
+            {
+                "x": x,
+                "y": y,
+                "radius": shot["radius"],
+                "weapon": self.weapon_key(shot.get("weapon")),
+                "color": shot.get("color")
+                or self.weapon_config(str(shot.get("weapon") or ""))["color"],
+            }
+        )
+        self.impact_marks = self.impact_marks[-18:]
         self.carve_terrain(x, y, shot["radius"], shot.get("carve", 1.0))
         self.apply_explosion_damage(x, y, shot["radius"], shot["damage"])
         self.place_players()
@@ -1022,6 +1060,7 @@ class FortressMatch:
             "projectile": self.visible_projectile(),
             "projectiles": self.visible_projectiles(),
             "explosion": self.visible_explosion(),
+            "impactMarks": self.visible_impact_marks(),
             "gameOver": self.game_over,
             "ready": self.ready(),
             "turnLocked": bool(self.turn_delay_at),
@@ -1045,6 +1084,10 @@ class FortressMatch:
                 "weapon": self.weapon_key(shot.get("weapon")),
                 "color": shot.get("color"),
                 "age": round(shot["age"], 3),
+                "trail": [
+                    [round(float(x), 2), round(float(y), 2)]
+                    for x, y in shot.get("trail", [])[-22:]
+                ],
             }
             for shot in self.projectiles
         ]
@@ -1058,6 +1101,18 @@ class FortressMatch:
             "radius": self.explosion["radius"],
             "age": round(self.explosion["age"], 3),
         }
+
+    def visible_impact_marks(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "x": round(mark["x"], 2),
+                "y": round(mark["y"], 2),
+                "radius": round(mark["radius"], 2),
+                "weapon": self.weapon_key(mark.get("weapon")),
+                "color": mark.get("color"),
+            }
+            for mark in self.impact_marks[-18:]
+        ]
 
     def safe_float(self, value: Any, fallback: float) -> float:
         try:
@@ -1590,6 +1645,7 @@ class DefenseRoom:
                     "maxHealth": round(enemy.max_health, 1),
                     "slowed": enemy.slow_until > 0,
                     "type": enemy.enemy_type,
+                    "segment": enemy.segment,
                     "shield": round(enemy.shield, 1),
                     "maxShield": round(enemy.max_shield, 1),
                 }
@@ -1623,6 +1679,7 @@ class PartyRoom:
         self.next_bomb_id = 1
         self.pickups: list[PartyPickup] = []
         self.bombs: list[PartyBomb] = []
+        self.effects: list[PartyEffect] = []
         self.started_at = time.time()
         self.ends_at = self.started_at + float(self.config["duration"])
         self.finished = False
@@ -1673,6 +1730,7 @@ class PartyRoom:
             return "방장만 라운드를 다시 시작할 수 있습니다."
         self.pickups.clear()
         self.bombs.clear()
+        self.effects.clear()
         self.started_at = time.time()
         self.ends_at = self.started_at + float(self.config["duration"])
         self.finished = False
@@ -1745,6 +1803,7 @@ class PartyRoom:
         return ""
 
     def update(self, dt: float, now: float) -> None:
+        self.effects = [effect for effect in self.effects if self.tick_effect(effect, dt)]
         if self.finished:
             return
         if now >= self.ends_at:
@@ -1763,6 +1822,22 @@ class PartyRoom:
             self.update_coin_hazards(now)
         self.collect_pickups(now)
 
+    def tick_effect(self, effect: PartyEffect, dt: float) -> bool:
+        effect.ttl -= dt
+        return effect.ttl > 0
+
+    def add_effect(
+        self,
+        x: float,
+        y: float,
+        kind: str,
+        color: str,
+        ttl: float = 0.8,
+        text: str = "",
+    ) -> None:
+        self.effects.append(PartyEffect(x=x, y=y, kind=kind, color=color, ttl=ttl, text=text))
+        self.effects = self.effects[-48:]
+
     def update_kart(self, dt: float, now: float) -> None:
         checkpoints = self.config["track"]
         for client in self.clients.values():
@@ -1777,6 +1852,7 @@ class PartyRoom:
                 client.boosted_until = now + 1.2
                 client.cooldown_until = now + 4.0
                 boost = 1.45
+                self.add_effect(client.x, client.y, "boost", client.color, 0.55, "BOOST")
             track_distance = party_distance_to_polyline(client.x, client.y, checkpoints)
             on_track = track_distance <= 62
             grip = 1.0 if on_track else 0.58
@@ -1796,10 +1872,12 @@ class PartyRoom:
             if party_distance(client.x, client.y, float(target[0]), float(target[1])) < 72:
                 client.checkpoint += 1
                 client.score += 8
+                self.add_effect(client.x, client.y, "checkpoint", client.color, 0.55, "CHECK")
                 if client.checkpoint >= len(checkpoints):
                     client.checkpoint = 0
                     client.lap += 1
                     client.score += 100
+                    self.add_effect(client.x, client.y, "lap", client.color, 0.9, f"{client.lap} LAP")
                     self.status = f"{client.name}님이 {client.lap}바퀴를 완료했습니다."
                     if client.lap >= int(self.config["laps"]):
                         self.finish_round(f"{client.name}님 완주")
@@ -1826,6 +1904,7 @@ class PartyRoom:
             ):
                 client.boosted_until = now + 0.32
                 client.cooldown_until = now + 3.0
+                self.add_effect(client.x, client.y, "dash", client.color, 0.45, "DASH")
             move_speed = speed * (2.15 if self.game_type == "coin" and now < client.boosted_until else 1.0)
             self.move_client(client, dx * move_speed * dt, dy * move_speed * dt)
             if self.game_type == "bomb":
@@ -1880,6 +1959,7 @@ class PartyRoom:
                 continue
             bomb.blast_ttl = 0.35
             alive.append(bomb)
+            self.add_effect(bomb.x, bomb.y, "blast", "#ffba5a", 0.5, "BOOM")
             owner = self.clients.get(bomb.owner_id)
             for client in self.clients.values():
                 if not client.alive:
@@ -1913,8 +1993,10 @@ class PartyRoom:
             if pickup.kind == "boost":
                 collector.boosted_until = max(collector.boosted_until, now + 1.6)
                 collector.score += 3
+                self.add_effect(pickup.x, pickup.y, "boost", collector.color, 0.65, "BOOST")
             else:
                 collector.score += pickup.value
+                self.add_effect(pickup.x, pickup.y, "pickup", collector.color, 0.65, f"+{pickup.value}")
         self.pickups = remaining
 
     def maybe_drop_bomb(self, client: PartyClient, now: float) -> None:
@@ -1934,6 +2016,14 @@ class PartyRoom:
                 y=round(client.y / 40) * 40,
             )
         )
+        self.add_effect(
+            round(client.x / 40) * 40,
+            round(client.y / 40) * 40,
+            "bomb",
+            client.color,
+            0.5,
+            "BOMB",
+        )
         self.next_bomb_id += 1
 
     def move_client(self, client: PartyClient, dx: float, dy: float, bounce: bool = True) -> None:
@@ -1952,6 +2042,7 @@ class PartyRoom:
         client.respawn_at = now + 1.7
         client.trail.clear()
         client.score = max(0, client.score - 2)
+        self.add_effect(client.x, client.y, "down", client.color, 0.85, "-2")
         self.status = f"{client.name}님이 {reason}"
 
     def ensure_alive(self, client: PartyClient, now: float) -> bool:
@@ -1960,6 +2051,7 @@ class PartyRoom:
         if now < client.respawn_at:
             return False
         self.place_client(client)
+        self.add_effect(client.x, client.y, "respawn", client.color, 0.9, "READY")
         return True
 
     def finish_round(self, reason: str) -> None:
@@ -2080,6 +2172,17 @@ class PartyRoom:
                 for bomb in self.bombs
             ],
             "hazards": self.hazards(now),
+            "effects": [
+                {
+                    "x": round(effect.x, 1),
+                    "y": round(effect.y, 1),
+                    "kind": effect.kind,
+                    "color": effect.color,
+                    "ttl": round(max(0, effect.ttl), 3),
+                    "text": effect.text,
+                }
+                for effect in self.effects
+            ],
             "serverTime": round(now, 3),
         }
 
@@ -3078,6 +3181,9 @@ class ArenaServer:
 
     def update_players(self, dt: float, now: float) -> None:
         for room in list(self.arena_rooms.values()):
+            room.effects = [
+                effect for effect in room.effects if self.tick_arena_effect(effect, dt)
+            ]
             self.ensure_arena_pickups(room)
             for client in list(room.clients.values()):
                 if not client.alive:
@@ -3088,6 +3194,15 @@ class ArenaServer:
                         client.shield_until = 0
                         client.haste_until = 0
                         client.rapid_until = 0
+                        self.add_arena_effect(
+                            room,
+                            client.x,
+                            client.y,
+                            "respawn",
+                            client.color,
+                            0.9,
+                            "READY",
+                        )
                     continue
 
                 controls = client.input
@@ -3110,6 +3225,23 @@ class ArenaServer:
                     self.spawn_bullet(room, client)
                     client.last_fire = now
             self.update_bullets(room, dt)
+
+    def tick_arena_effect(self, effect: ArenaEffect, dt: float) -> bool:
+        effect.ttl -= dt
+        return effect.ttl > 0
+
+    def add_arena_effect(
+        self,
+        room: ArenaRoom,
+        x: float,
+        y: float,
+        kind: str,
+        color: str,
+        ttl: float = 0.7,
+        text: str = "",
+    ) -> None:
+        room.effects.append(ArenaEffect(x=x, y=y, kind=kind, color=color, ttl=ttl, text=text))
+        room.effects = room.effects[-36:]
 
     def move_arena_client(self, client: Client, dx: float, dy: float) -> None:
         next_x = max(PLAYER_RADIUS, min(ARENA_WIDTH - PLAYER_RADIUS, client.x + dx))
@@ -3147,6 +3279,15 @@ class ArenaServer:
                 client.haste_until = now + 5.0
             elif pickup.kind == "rapid":
                 client.rapid_until = now + 5.0
+            self.add_arena_effect(
+                room,
+                pickup.x,
+                pickup.y,
+                "pickup",
+                client.color,
+                0.65,
+                pickup.kind.upper(),
+            )
         room.pickups = remaining
 
     def spawn_bullet(self, room: ArenaRoom, client: Client) -> None:
@@ -3179,12 +3320,14 @@ class ArenaServer:
                 or bullet.y < 0
                 or bullet.y > ARENA_HEIGHT
             ):
+                self.add_arena_effect(room, bullet.x, bullet.y, "impact", bullet.color, 0.45)
                 continue
             if self.arena_circle_hits_obstacle(bullet.x, bullet.y, BULLET_RADIUS):
+                self.add_arena_effect(room, bullet.x, bullet.y, "impact", bullet.color, 0.45)
                 continue
             hit = self.find_bullet_hit(bullet, players)
             if hit:
-                self.damage_player(room, hit, bullet.owner_id)
+                self.damage_player(room, hit, bullet.owner_id, bullet.color)
                 continue
             alive_bullets.append(bullet)
         room.bullets = alive_bullets
@@ -3197,10 +3340,21 @@ class ArenaServer:
                 return player
         return None
 
-    def damage_player(self, room: ArenaRoom, victim: Client, attacker_id: str) -> None:
+    def damage_player(
+        self, room: ArenaRoom, victim: Client, attacker_id: str, color: str
+    ) -> None:
         now = time.monotonic()
         damage = 10 if now < victim.shield_until else 25
         victim.health = max(0, victim.health - damage)
+        self.add_arena_effect(
+            room,
+            victim.x,
+            victim.y,
+            "hit" if victim.health > 0 else "down",
+            color,
+            0.75,
+            f"-{damage}",
+        )
         if victim.health > 0:
             return
         victim.alive = False
@@ -3234,6 +3388,7 @@ class ArenaServer:
                         "score": client.score,
                         "color": client.color,
                         "alive": client.alive,
+                        "respawnIn": max(0, round(client.respawn_at - now, 2)),
                         "shielded": now < client.shield_until,
                         "hasted": now < client.haste_until,
                         "rapid": now < client.rapid_until,
@@ -3260,6 +3415,17 @@ class ArenaServer:
                         "color": bullet.color,
                     }
                     for bullet in room.bullets
+                ],
+                "effects": [
+                    {
+                        "x": round(effect.x, 2),
+                        "y": round(effect.y, 2),
+                        "kind": effect.kind,
+                        "color": effect.color,
+                        "ttl": round(max(0, effect.ttl), 3),
+                        "text": effect.text,
+                    }
+                    for effect in room.effects
                 ],
                 "serverTime": round(time.time(), 3),
             }

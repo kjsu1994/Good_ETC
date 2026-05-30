@@ -60,6 +60,7 @@ let latestState = {
   players: [],
   bullets: [],
   pickups: fallbackPickups,
+  effects: [],
 };
 let lastInputSent = 0;
 let latestShareUrl = "";
@@ -134,7 +135,7 @@ function safeUrl(value) {
 }
 
 function currentAssetVersion() {
-  return new URLSearchParams(window.location.search).get("v") || "20260530m";
+  return new URLSearchParams(window.location.search).get("v") || "20260530r";
 }
 
 function nowSeconds() {
@@ -396,6 +397,10 @@ function connect() {
     }
     if (message.type === "state") {
       latestState = message;
+      latestState.effects = latestState.effects || [];
+      latestState.bullets = latestState.bullets || [];
+      latestState.pickups = latestState.pickups || [];
+      latestState.players = latestState.players || [];
       renderScoreboard();
       return;
     }
@@ -482,6 +487,7 @@ function startLocalArena() {
     ],
     bullets: [],
     pickups: seedLocalArenaPickups(),
+    effects: [],
     local: true,
   };
   setStatus("훈련장", false);
@@ -516,6 +522,7 @@ function createLocalArenaPlayer(id, name, color, x, y, bot) {
     shielded: false,
     hasted: false,
     rapid: false,
+    respawnIn: 0,
     bot,
     targetX: x,
     targetY: y,
@@ -590,13 +597,25 @@ function respawnLocalArenaPlayer(player, now) {
   player.health = 100;
   player.alive = true;
   player.respawnAt = 0;
+  player.respawnIn = 0;
   player.shieldUntil = 0;
   player.hasteUntil = 0;
   player.rapidUntil = 0;
+  addLocalArenaEffect({
+    x: player.x,
+    y: player.y,
+    kind: "respawn",
+    color: player.color,
+    ttl: 0.9,
+    text: "READY",
+  });
 }
 
 function updateLocalArena(dt, now) {
   if (!isLocalArena) return;
+  latestState.effects = (latestState.effects || [])
+    .map((effect) => ({ ...effect, ttl: effect.ttl - dt }))
+    .filter((effect) => effect.ttl > 0);
   const input = buildInput();
   const player = latestState.players.find((item) => item.id === playerId);
   if (!player) return;
@@ -610,8 +629,13 @@ function updateLocalArena(dt, now) {
     item.shielded = now < item.shieldUntil;
     item.hasted = now < item.hasteUntil;
     item.rapid = now < item.rapidUntil;
+    item.respawnIn = item.alive ? 0 : Math.max(0, item.respawnAt - now);
   });
   renderScoreboard();
+}
+
+function addLocalArenaEffect(effect) {
+  latestState.effects = [...(latestState.effects || []), effect].slice(-36);
 }
 
 function updateLocalArenaActor(player, input, dt, now) {
@@ -713,16 +737,27 @@ function spawnLocalArenaBullet(player, now) {
     localArenaConfig.fireCooldown * (now < player.rapidUntil ? 0.55 : 1);
   if (now - player.lastFire < cooldown) return;
   player.lastFire = now;
+  const muzzleX =
+    player.x + Math.cos(player.angle) * (localArenaConfig.playerRadius + 10);
+  const muzzleY =
+    player.y + Math.sin(player.angle) * (localArenaConfig.playerRadius + 10);
   latestState.bullets.push({
     id: localArenaIds.bullet++,
     ownerId: player.id,
-    x: player.x + Math.cos(player.angle) * (localArenaConfig.playerRadius + 10),
-    y: player.y + Math.sin(player.angle) * (localArenaConfig.playerRadius + 10),
+    x: muzzleX,
+    y: muzzleY,
     vx: Math.cos(player.angle) * localArenaConfig.bulletSpeed,
     vy: Math.sin(player.angle) * localArenaConfig.bulletSpeed,
     radius: localArenaConfig.bulletRadius,
     ttl: localArenaConfig.bulletTtl,
     color: player.color,
+  });
+  addLocalArenaEffect({
+    x: muzzleX,
+    y: muzzleY,
+    kind: "muzzle",
+    color: player.color,
+    ttl: 0.16,
   });
 }
 
@@ -740,6 +775,13 @@ function updateLocalArenaBullets(dt, now) {
       bullet.y > localArenaConfig.height ||
       arenaCircleHitsObstacle(bullet.x, bullet.y, localArenaConfig.bulletRadius)
     ) {
+      addLocalArenaEffect({
+        x: bullet.x,
+        y: bullet.y,
+        kind: "impact",
+        color: bullet.color,
+        ttl: 0.45,
+      });
       continue;
     }
     const hit = latestState.players.find(
@@ -750,7 +792,7 @@ function updateLocalArenaBullets(dt, now) {
           localArenaConfig.playerRadius + localArenaConfig.bulletRadius,
     );
     if (hit) {
-      damageLocalArenaPlayer(hit, bullet.ownerId, now);
+      damageLocalArenaPlayer(hit, bullet.ownerId, now, bullet.color);
       continue;
     }
     alive.push(bullet);
@@ -758,12 +800,21 @@ function updateLocalArenaBullets(dt, now) {
   latestState.bullets = alive;
 }
 
-function damageLocalArenaPlayer(victim, attackerId, now) {
+function damageLocalArenaPlayer(victim, attackerId, now, color) {
   const damage = now < victim.shieldUntil ? 10 : 25;
   victim.health = Math.max(0, victim.health - damage);
+  addLocalArenaEffect({
+    x: victim.x,
+    y: victim.y,
+    kind: victim.health > 0 ? "hit" : "down",
+    color,
+    ttl: 0.75,
+    text: `-${damage}`,
+  });
   if (victim.health > 0) return;
   victim.alive = false;
   victim.respawnAt = now + localArenaConfig.respawnDelay;
+  victim.respawnIn = localArenaConfig.respawnDelay;
   const attacker = latestState.players.find(
     (player) => player.id === attackerId,
   );
@@ -783,6 +834,14 @@ function collectLocalArenaPickups(player, now) {
     if (pickup.kind === "shield") player.shieldUntil = now + 5;
     if (pickup.kind === "haste") player.hasteUntil = now + 5;
     if (pickup.kind === "rapid") player.rapidUntil = now + 5;
+    addLocalArenaEffect({
+      x: pickup.x,
+      y: pickup.y,
+      kind: "pickup",
+      color: player.color,
+      ttl: 0.65,
+      text: pickup.kind.toUpperCase(),
+    });
     return false;
   });
 }
@@ -957,12 +1016,68 @@ function drawBullet(bullet) {
   ctx.restore();
 }
 
+function drawArenaEffect(effect) {
+  const x = effect.x - camera.x;
+  const y = effect.y - camera.y;
+  if (
+    x < -80 ||
+    y < -80 ||
+    x > window.innerWidth + 80 ||
+    y > window.innerHeight + 80
+  ) {
+    return;
+  }
+  const ttl = Number(effect.ttl || 0);
+  const alpha = clamp(ttl / 0.75, 0.08, 1);
+  const lift = (1 - alpha) * 28;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  if (effect.kind === "impact" || effect.kind === "muzzle") {
+    const radius = effect.kind === "muzzle" ? 20 : 30;
+    ctx.strokeStyle = effect.color || "#f8f871";
+    ctx.lineWidth = effect.kind === "muzzle" ? 3 : 4;
+    ctx.beginPath();
+    ctx.arc(x, y, radius * (1.08 - alpha * 0.36), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = effect.color || "#f8f871";
+    ctx.beginPath();
+    ctx.arc(x, y, Math.max(2, 8 * alpha), 0, Math.PI * 2);
+    ctx.fill();
+  } else if (effect.kind === "pickup" || effect.kind === "respawn") {
+    ctx.shadowColor = effect.color || "#53e2a8";
+    ctx.shadowBlur = 18;
+    ctx.strokeStyle = effect.color || "#53e2a8";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(x, y, 22 + (1 - alpha) * 18, 0, Math.PI * 2);
+    ctx.stroke();
+  } else {
+    ctx.strokeStyle = effect.color || "#ff5f6d";
+    ctx.lineWidth = effect.kind === "down" ? 6 : 4;
+    ctx.beginPath();
+    ctx.arc(x, y, 28 + (1 - alpha) * 16, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  if (effect.text) {
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "#f5fbff";
+    ctx.font = `800 ${effect.kind === "down" ? 18 : 14}px system-ui, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.fillText(effect.text, x, y - 28 - lift);
+  }
+  ctx.restore();
+}
+
 function drawPlayer(player) {
   const x = player.x - camera.x;
   const y = player.y - camera.y;
   const radius = player.radius || 18;
 
   if (!player.alive) {
+    const respawnIn =
+      Number(player.respawnIn) ||
+      Math.max(0, (player.respawnAt || 0) - performance.now() / 1000);
+    const progress = clamp(1 - respawnIn / localArenaConfig.respawnDelay, 0, 1);
     ctx.save();
     ctx.globalAlpha = 0.38;
     ctx.strokeStyle = player.color;
@@ -970,6 +1085,22 @@ function drawPlayer(player) {
     ctx.beginPath();
     ctx.arc(x, y, radius + 8, 0, Math.PI * 2);
     ctx.stroke();
+    ctx.globalAlpha = 0.78;
+    ctx.strokeStyle = "#f5fbff";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(
+      x,
+      y,
+      radius + 14,
+      -Math.PI / 2,
+      -Math.PI / 2 + progress * Math.PI * 2,
+    );
+    ctx.stroke();
+    ctx.fillStyle = "#f5fbff";
+    ctx.font = "800 11px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("RESPAWN", x, y - radius - 18);
     ctx.restore();
     return;
   }
@@ -1107,6 +1238,7 @@ function draw() {
   (latestState.pickups || []).forEach(drawPickup);
   latestState.bullets.forEach(drawBullet);
   latestState.players.forEach(drawPlayer);
+  (latestState.effects || []).forEach(drawArenaEffect);
   drawMinimap();
   sendInput(performance.now());
   requestAnimationFrame(draw);

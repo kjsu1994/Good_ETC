@@ -2,7 +2,7 @@
   const params = new URLSearchParams(window.location.search);
   const gameKey = params.get("game") || "kart";
   const isSolo = ["solo", "local"].includes(params.get("mode") || "");
-  const assetVersion = params.get("v") || "20260530m";
+  const assetVersion = params.get("v") || "20260530r";
   const world = { width: 2200, height: 1400 };
   const gameTypes = {
     kart: {
@@ -153,6 +153,8 @@
   let finishNoticeKey = "";
   let camera = { scale: 1, offsetX: 0, offsetY: 0 };
   let localIds = { pickup: 1, bomb: 1 };
+  const botColors = ["#ffba5a", "#8be66f", "#d08cff"];
+  const botNames = ["AI 루나", "AI 제트", "AI 모카"];
   const input = {
     up: false,
     down: false,
@@ -181,10 +183,8 @@
       cooldown: 0,
       isHost: true,
     };
-    if (game !== "kart") {
-      player.x = 420;
-      player.y = 420;
-    }
+    placeLocalPlayer(player, 0);
+    const bots = isSolo ? [0, 1, 2].map(createLocalBot) : [];
     return {
       type: "party_state",
       roomId: params.get("room") || "LOCAL",
@@ -200,10 +200,11 @@
       winnerId: "",
       winnerName: "",
       scores: [],
-      players: [player],
+      players: [player, ...bots],
       pickups: seedLocalPickups(),
       bombs: [],
       hazards: [],
+      effects: [],
       clientId: "local",
       isHost: true,
     };
@@ -219,6 +220,55 @@
       kind: game === "kart" && Math.random() < 0.35 ? "boost" : "coin",
       value: game === "coin" && Math.random() < 0.2 ? 3 : 1,
     }));
+  }
+
+  function createLocalBot(index) {
+    const bot = {
+      id: `bot${index + 1}`,
+      name: botNames[index] || `AI ${index + 1}`,
+      color: botColors[index % botColors.length],
+      x: 250,
+      y: 720,
+      vx: 0,
+      vy: 0,
+      angle: index * 0.45,
+      score: 0,
+      lap: 0,
+      checkpoint: 0,
+      alive: true,
+      trail: [],
+      boosted: false,
+      cooldown: 0,
+      isHost: false,
+      isBot: true,
+      botIndex: index,
+    };
+    placeLocalPlayer(bot, index + 1);
+    return bot;
+  }
+
+  function placeLocalPlayer(player, slot = 0) {
+    if (game === "kart") {
+      player.x = 230 + (slot % 4) * 42;
+      player.y = 695 + Math.floor(slot / 4) * 46;
+      player.angle = 0;
+    } else {
+      const spots = [
+        [420, 420],
+        [world.width - 420, 420],
+        [420, world.height - 420],
+        [world.width - 420, world.height - 420],
+      ];
+      const [x, y] = spots[slot % spots.length];
+      player.x = x;
+      player.y = y;
+      player.angle = slot * 0.72;
+    }
+    player.vx = 0;
+    player.vy = 0;
+    player.alive = true;
+    player.respawn = 0;
+    player.trail = [[player.x, player.y]];
   }
 
   function defaultServerUrl() {
@@ -422,6 +472,11 @@
         clearTimeout(connectTimer);
         clientId = message.clientId || clientId;
         state = message;
+        state.effects = state.effects || [];
+        state.pickups = state.pickups || [];
+        state.bombs = state.bombs || [];
+        state.hazards = state.hazards || [];
+        state.players = state.players || [];
         setCenter("");
         renderHud();
         return;
@@ -495,7 +550,6 @@
 
   function updateLocal(dt) {
     if (!isSolo) return;
-    const player = state.players[0];
     state.remaining = Math.max(
       0,
       Math.ceil(state.duration - (Date.now() - state.startedAtMs) / 1000),
@@ -505,36 +559,287 @@
       finishLocalRound("시간 종료");
       return;
     }
-    if (!player.alive) {
-      player.respawn = Math.max(0, (player.respawn || 0) - dt);
-      if (player.respawn <= 0) {
-        player.alive = true;
-        player.x = 220;
-        player.y = 220;
-        player.trail = [];
-      }
-      return;
-    }
-    if (game === "kart") updateLocalKart(player, dt);
-    else if (game === "snake") updateLocalSnake(player, dt);
-    else updateLocalWalker(player, dt);
-    updateLocalBombs(player, dt);
-    collectLocalPickups(player);
-    if (game === "coin") updateLocalCoinHazards(player);
+    updateLocalSquad(dt);
+  }
+
+  function updateLocalSquad(dt) {
+    state.effects = (state.effects || [])
+      .map((effect) => ({ ...effect, ttl: effect.ttl - dt }))
+      .filter((effect) => effect.ttl > 0);
+    const players = state.players || [];
+    players.forEach((player, index) => {
+      if (!updateLocalRespawn(player, dt, index)) return;
+      const controls = player.isBot ? localBotControls(player) : input;
+      updateLocalPlayer(player, dt, controls);
+      collectLocalPickups(player);
+      if (game === "snake" && player.alive) checkLocalSnakeCollision(player);
+    });
+    updateLocalBombsForAll(dt);
+    if (game === "coin") updateLocalCoinHazardsForAll();
     if (
       state.pickups.length < (game === "snake" ? 24 : game === "coin" ? 18 : 6)
     )
       state.pickups.push(...seedLocalPickups().slice(0, 2));
+    return true;
   }
 
-  function finishLocalRound(reason) {
-    const winner = [...state.players].sort((a, b) =>
+  function addPartyEffect(effect) {
+    state.effects = [...(state.effects || []), effect].slice(-48);
+  }
+
+  function updateLocalRespawn(player, dt, index) {
+    if (player.alive) return true;
+    player.respawn = Math.max(0, (player.respawn || 0) - dt);
+    if (player.respawn > 0) return false;
+    placeLocalPlayer(player, index);
+    addPartyEffect({
+      x: player.x,
+      y: player.y,
+      kind: "respawn",
+      color: player.color,
+      ttl: 0.9,
+      text: "READY",
+    });
+    return true;
+  }
+
+  function updateLocalPlayer(player, dt, controls) {
+    const previous = { ...input };
+    Object.assign(input, controls);
+    if (game === "kart") updateLocalKart(player, dt);
+    else if (game === "snake") updateLocalSnake(player, dt);
+    else updateLocalWalker(player, dt);
+    Object.assign(input, previous);
+  }
+
+  function localBotControls(player) {
+    if (game === "kart") return localBotKartControls(player);
+    const avoid = localBotAvoidTarget(player);
+    const target = avoid ||
+      (game === "bomb" ? localBotBombTarget(player) : null) ||
+      localClosestPickup(player) || {
+        x: world.width / 2,
+        y: world.height / 2,
+      };
+    const dx = target.x - player.x;
+    const dy = target.y - player.y;
+    const action =
+      game === "coin"
+        ? Boolean(avoid) && (player.cooldown || 0) <= 0
+        : game === "bomb" && localClosestOpponentDistance(player) < 124;
+    return {
+      up: dy < -18,
+      down: dy > 18,
+      left: dx < -18,
+      right: dx > 18,
+      action,
+    };
+  }
+
+  function localBotKartControls(player) {
+    const track = state.config?.track || config.track || [];
+    const target = track[player.checkpoint % track.length] || [
+      world.width / 2,
+      world.height / 2,
+    ];
+    const desired = Math.atan2(target[1] - player.y, target[0] - player.x);
+    const turn = normalizeAngle(desired - (player.angle || 0));
+    const trackDistance = distanceToTrack(player.x, player.y, track);
+    return {
+      up: true,
+      down: trackDistance > 150 && Math.abs(turn) > 1.9,
+      left: turn < -0.12,
+      right: turn > 0.12,
+      action:
+        Math.abs(turn) < 0.42 &&
+        trackDistance < 92 &&
+        (player.cooldown || 0) <= 0,
+    };
+  }
+
+  function localBotAvoidTarget(player) {
+    let vx = 0;
+    let vy = 0;
+    const margin = 120;
+    if (player.x < margin) vx += margin - player.x;
+    if (player.x > world.width - margin)
+      vx -= player.x - (world.width - margin);
+    if (player.y < margin) vy += margin - player.y;
+    if (player.y > world.height - margin)
+      vy -= player.y - (world.height - margin);
+    state.hazards?.forEach((hazard) => {
+      const dx = player.x - hazard.x;
+      const dy = player.y - hazard.y;
+      const gap = Math.hypot(dx, dy);
+      const danger = hazard.radius + 120;
+      if (gap && gap < danger) {
+        const force = (danger - gap) / danger;
+        vx += (dx / gap) * force * 260;
+        vy += (dy / gap) * force * 260;
+      }
+    });
+    state.bombs?.forEach((bomb) => {
+      const hot = bomb.blastTtl > 0 || bomb.ttl < 0.85;
+      if (
+        !hot ||
+        !inBombBlast(player.x, player.y, bomb.x, bomb.y, bomb.radius + 36)
+      )
+        return;
+      const dx = player.x - bomb.x || 1;
+      const dy = player.y - bomb.y || 1;
+      const gap = Math.hypot(dx, dy);
+      vx += (dx / gap) * 320;
+      vy += (dy / gap) * 320;
+    });
+    if (game === "snake") {
+      state.players.forEach((other) => {
+        other.trail?.slice(-70).forEach(([x, y]) => {
+          const dx = player.x - x;
+          const dy = player.y - y;
+          const gap = Math.hypot(dx, dy);
+          if (gap && gap < 70) {
+            vx += (dx / gap) * (70 - gap);
+            vy += (dy / gap) * (70 - gap);
+          }
+        });
+      });
+    }
+    if (Math.hypot(vx, vy) < 12) return null;
+    return {
+      x: clamp(player.x + vx, 40, world.width - 40),
+      y: clamp(player.y + vy, 40, world.height - 40),
+    };
+  }
+
+  function localBotBombTarget(player) {
+    const opponents = state.players.filter(
+      (item) => item.id !== player.id && item.alive,
+    );
+    const closest = opponents.sort(
+      (a, b) =>
+        distance(player.x, player.y, a.x, a.y) -
+        distance(player.x, player.y, b.x, b.y),
+    )[0];
+    if (closest && distance(player.x, player.y, closest.x, closest.y) < 240)
+      return closest;
+    return null;
+  }
+
+  function localClosestOpponentDistance(player) {
+    return state.players
+      .filter((item) => item.id !== player.id && item.alive)
+      .reduce(
+        (closest, item) =>
+          Math.min(closest, distance(player.x, player.y, item.x, item.y)),
+        Infinity,
+      );
+  }
+
+  function localClosestPickup(player) {
+    return [...state.pickups].sort(
+      (a, b) =>
+        distance(player.x, player.y, a.x, a.y) -
+        distance(player.x, player.y, b.x, b.y),
+    )[0];
+  }
+
+  function updateLocalBombsForAll(dt) {
+    const exploded = [];
+    state.bombs.forEach((bomb) => {
+      if (bomb.blastTtl > 0) {
+        bomb.blastTtl -= dt;
+        return;
+      }
+      bomb.ttl -= dt;
+      if (bomb.ttl <= 0) {
+        bomb.blastTtl = 0.35;
+        exploded.push(bomb);
+        addPartyEffect({
+          x: bomb.x,
+          y: bomb.y,
+          kind: "blast",
+          color: "#ffba5a",
+          ttl: 0.5,
+          text: "BOOM",
+        });
+      }
+    });
+    exploded.forEach((bomb) => {
+      const owner = state.players.find((player) => player.id === bomb.ownerId);
+      state.players.forEach((player) => {
+        if (!player.alive) return;
+        if (!inBombBlast(player.x, player.y, bomb.x, bomb.y, bomb.radius))
+          return;
+        knockLocal(player, "폭발에 맞았습니다.");
+        addPartyEffect({
+          x: player.x,
+          y: player.y,
+          kind: "down",
+          color: owner?.color || "#ff5f6d",
+          ttl: 0.8,
+          text: "HIT",
+        });
+        if (owner && owner.id !== player.id) owner.score += 5;
+      });
+    });
+    state.bombs = state.bombs.filter(
+      (bomb) => bomb.ttl > 0 || bomb.blastTtl > 0,
+    );
+  }
+
+  function updateLocalCoinHazardsForAll() {
+    refreshLocalCoinHazards();
+    state.players.forEach((player) => {
+      if (!player.alive) return;
+      state.hazards.forEach((hazard) => {
+        if (
+          distance(player.x, player.y, hazard.x, hazard.y) <
+          hazard.radius + 8
+        )
+          knockLocal(player, "위험 구역에 닿았습니다.");
+      });
+    });
+  }
+
+  function checkLocalSnakeCollision(player) {
+    for (const other of state.players) {
+      if (!other.alive) continue;
+      const trail =
+        other.id === player.id ? other.trail.slice(0, -10) : other.trail;
+      if (trail?.some(([x, y]) => distance(player.x, player.y, x, y) < 13)) {
+        knockLocal(player, "꼬리에 부딪혔습니다.");
+        addPartyEffect({
+          x: player.x,
+          y: player.y,
+          kind: "down",
+          color: player.color,
+          ttl: 0.8,
+          text: "CRASH",
+        });
+        return;
+      }
+    }
+  }
+
+  function normalizeAngle(angle) {
+    let next = angle;
+    while (next > Math.PI) next -= Math.PI * 2;
+    while (next < -Math.PI) next += Math.PI * 2;
+    return next;
+  }
+
+  function rankPlayers(players) {
+    return [...players].sort((a, b) =>
       game === "kart"
         ? (b.lap || 0) - (a.lap || 0) ||
           (b.checkpoint || 0) - (a.checkpoint || 0) ||
           (b.score || 0) - (a.score || 0)
         : (b.score || 0) - (a.score || 0),
-    )[0];
+    );
+  }
+
+  function finishLocalRound(reason) {
+    const winner = rankPlayers(state.players)[0];
     state.finished = true;
     state.winnerId = winner?.id || "";
     state.winnerName = winner?.name || "";
@@ -558,6 +863,14 @@
       player.boosted = true;
       player.boost = 1.2;
       player.cooldown = 4;
+      addPartyEffect({
+        x: player.x,
+        y: player.y,
+        kind: "boost",
+        color: player.color,
+        ttl: 0.55,
+        text: "BOOST",
+      });
     }
     player.boost = Math.max(0, (player.boost || 0) - dt);
     player.cooldown = Math.max(0, (player.cooldown || 0) - dt);
@@ -582,10 +895,26 @@
     if (distance(player.x, player.y, target[0], target[1]) < 72) {
       player.checkpoint += 1;
       player.score += 8;
+      addPartyEffect({
+        x: player.x,
+        y: player.y,
+        kind: "checkpoint",
+        color: player.color,
+        ttl: 0.55,
+        text: "CHECK",
+      });
       if (player.checkpoint >= config.track.length) {
         player.checkpoint = 0;
         player.lap += 1;
         player.score += 100;
+        addPartyEffect({
+          x: player.x,
+          y: player.y,
+          kind: "lap",
+          color: player.color,
+          ttl: 0.9,
+          text: `${player.lap} LAP`,
+        });
         state.status = `${player.lap}바퀴 완료`;
         if (player.lap >= 3) finishLocalRound("완주");
       }
@@ -605,6 +934,14 @@
     ) {
       player.dash = 0.32;
       player.cooldown = 3;
+      addPartyEffect({
+        x: player.x,
+        y: player.y,
+        kind: "dash",
+        color: player.color,
+        ttl: 0.45,
+        text: "DASH",
+      });
     }
     player.dash = Math.max(0, (player.dash || 0) - dt);
     const speed = (game === "coin" ? 270 : 245) * (player.dash > 0 ? 2.15 : 1);
@@ -618,11 +955,20 @@
       player.cooldown = 1;
       state.bombs.push({
         id: localIds.bomb++,
+        ownerId: player.id,
         x: Math.round(player.x / 40) * 40,
         y: Math.round(player.y / 40) * 40,
         ttl: 1.9,
         blastTtl: 0,
         radius: 96,
+      });
+      addPartyEffect({
+        x: Math.round(player.x / 40) * 40,
+        y: Math.round(player.y / 40) * 40,
+        kind: "bomb",
+        color: player.color,
+        ttl: 0.5,
+        text: "BOMB",
       });
     }
     player.cooldown = Math.max(0, (player.cooldown || 0) - dt);
@@ -671,6 +1017,10 @@
     );
   }
 
+  function refreshLocalCoinHazards() {
+    updateLocalCoinHazards();
+  }
+
   function updateLocalCoinHazards(player) {
     const t = performance.now() / 1000;
     state.hazards = [
@@ -690,6 +1040,7 @@
         radius: 58,
       },
     ];
+    if (!player) return;
     state.hazards.forEach((hazard) => {
       if (distance(player.x, player.y, hazard.x, hazard.y) < hazard.radius + 8)
         knockLocal(player, "위험 구역에 닿았습니다.");
@@ -704,6 +1055,14 @@
         player.boosted = true;
         player.boost = 1.6;
       }
+      addPartyEffect({
+        x: pickup.x,
+        y: pickup.y,
+        kind: pickup.kind === "boost" ? "boost" : "pickup",
+        color: player.color,
+        ttl: 0.65,
+        text: pickup.kind === "boost" ? "BOOST" : `+${pickup.value || 1}`,
+      });
       return false;
     });
   }
@@ -725,6 +1084,14 @@
     player.trail = [];
     player.score = Math.max(0, player.score - 2);
     state.status = reason;
+    addPartyEffect({
+      x: player.x,
+      y: player.y,
+      kind: "down",
+      color: player.color,
+      ttl: 0.85,
+      text: "-2",
+    });
   }
 
   function draw() {
@@ -793,6 +1160,7 @@
     state.bombs?.forEach(drawBomb);
     state.players.forEach(drawTrail);
     state.players.forEach(drawPlayer);
+    (state.effects || []).forEach(drawPartyEffect);
     ctx.restore();
     drawMiniMap();
   }
@@ -1167,6 +1535,51 @@
     ctx.fillText(player.name || "Player", player.x, player.y - 28);
   }
 
+  function drawPartyEffect(effect) {
+    const alpha = clamp((effect.ttl || 0) / 0.9, 0.08, 1);
+    const color = effect.color || config.accent;
+    const lift = (1 - alpha) * 32;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 18;
+    if (["blast", "down"].includes(effect.kind)) {
+      ctx.strokeStyle = effect.kind === "blast" ? "#ffba5a" : "#ff5f6d";
+      ctx.lineWidth = effect.kind === "blast" ? 8 : 5;
+      ctx.beginPath();
+      ctx.arc(effect.x, effect.y, 46 + (1 - alpha) * 42, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = `rgba(255,95,109,${0.2 * alpha})`;
+      ctx.beginPath();
+      ctx.arc(effect.x, effect.y, 24 + (1 - alpha) * 20, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (
+      ["boost", "dash", "lap", "checkpoint", "respawn"].includes(effect.kind)
+    ) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.arc(effect.x, effect.y, 26 + (1 - alpha) * 28, 0, Math.PI * 2);
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(effect.x, effect.y, 12 + (1 - alpha) * 18, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (effect.text) {
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "#f5fbff";
+      ctx.font = `900 ${effect.kind === "lap" ? 22 : 16}px Malgun Gothic, system-ui, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = "rgba(7,17,31,.78)";
+      ctx.strokeText(effect.text, effect.x, effect.y - 28 - lift);
+      ctx.fillText(effect.text, effect.x, effect.y - 28 - lift);
+    }
+    ctx.restore();
+  }
+
   function drawMiniMap() {
     const mapScale = Math.min(210 / world.width, 132 / world.height);
     const width = world.width * mapScale;
@@ -1268,9 +1681,7 @@
   }
 
   function renderHud() {
-    const players = [...(state.players || [])].sort(
-      (a, b) => (b.score || 0) - (a.score || 0),
-    );
+    const players = rankPlayers(state.players || []);
     const me = state.players?.find((player) => player.id === clientId);
     ui.mode.textContent = isSolo ? "혼자" : state.isHost ? "방장" : "참가";
     ui.time.textContent = Number.isFinite(Number(state.remaining))
