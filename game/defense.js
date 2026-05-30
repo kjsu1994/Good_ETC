@@ -1,7 +1,7 @@
 (() => {
   const params = new URLSearchParams(window.location.search);
   const isSolo = ["solo", "local"].includes(params.get("mode") || "");
-  const assetVersion = params.get("v") || "20260530h";
+  const assetVersion = params.get("v") || "20260530m";
   const world = { width: 1280, height: 832, cell: 32, columns: 40, rows: 26 };
   let defenseMaps = {
     classic: {
@@ -1222,6 +1222,7 @@
     drawMapDecor();
     drawGrid();
     drawPath();
+    drawSpawnPortal();
     drawPlacementPreview();
     state.towers.forEach(drawTower);
     state.enemies.forEach(drawEnemy);
@@ -1283,16 +1284,89 @@
     ctx.strokeStyle = "rgba(255,238,184,.35)";
     ctx.lineWidth = 3;
     ctx.stroke();
+    drawPathArrows();
+  }
+
+  function drawPathArrows() {
+    ctx.save();
+    ctx.fillStyle = "rgba(255,255,255,.46)";
+    for (let index = 0; index < pathPixels.length - 1; index += 1) {
+      const start = pathPixels[index];
+      const end = pathPixels[index + 1];
+      const dx = end.x - start.x;
+      const dy = end.y - start.y;
+      const length = Math.hypot(dx, dy);
+      if (length < world.cell * 2.4) continue;
+      const steps = Math.max(1, Math.floor(length / (world.cell * 5)));
+      for (let step = 1; step <= steps; step += 1) {
+        const t = step / (steps + 1);
+        const x = start.x + dx * t;
+        const y = start.y + dy * t;
+        const angle = Math.atan2(dy, dx);
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(angle);
+        ctx.beginPath();
+        ctx.moveTo(12, 0);
+        ctx.lineTo(-8, -7);
+        ctx.lineTo(-4, 0);
+        ctx.lineTo(-8, 7);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+    ctx.restore();
+  }
+
+  function drawSpawnPortal() {
+    const start = pathPixels[0];
+    if (!start) return;
+    const pulse = 0.5 + Math.sin(performance.now() / 240) * 0.5;
+    ctx.save();
+    ctx.shadowColor = "rgba(98,230,255,.88)";
+    ctx.shadowBlur = 18 + pulse * 10;
+    ctx.fillStyle = `rgba(98,230,255,${0.1 + pulse * 0.08})`;
+    ctx.beginPath();
+    ctx.arc(
+      start.x,
+      start.y,
+      world.cell * (0.88 + pulse * 0.16),
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+    ctx.strokeStyle = "rgba(245,251,255,.64)";
+    ctx.lineWidth = 3;
+    ctx.setLineDash([8, 7]);
+    ctx.beginPath();
+    ctx.arc(start.x, start.y, world.cell * 0.76, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = "#62e6ff";
+    ctx.beginPath();
+    ctx.arc(start.x, start.y, 7 + pulse * 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
   }
 
   function drawBase() {
     const end = pathPixels[pathPixels.length - 1];
+    const pulse = 0.5 + Math.sin(performance.now() / 260) * 0.5;
     ctx.fillStyle = "rgba(0,0,0,.28)";
     ctx.fillRect(end.x - 27, end.y - 16, 54, 36);
     ctx.fillStyle = "#f6f3c8";
     ctx.fillRect(end.x - 24, end.y - 34, 48, 58);
+    ctx.shadowColor = "rgba(139,230,111,.8)";
+    ctx.shadowBlur = 12 + pulse * 10;
     ctx.fillStyle = "#8be66f";
     ctx.fillRect(end.x - 13, end.y - 48, 26, 16);
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = `rgba(139,230,111,${0.24 + pulse * 0.28})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(end.x, end.y - 16, 38 + pulse * 9, 0, Math.PI * 2);
+    ctx.stroke();
     ctx.fillStyle = "#ff6a6a";
     ctx.fillRect(
       end.x - 16,
@@ -1330,13 +1404,27 @@
     ctx.fillRect(center.x - 15, center.y - 15, 30, 30);
     ctx.fillStyle = config.color;
     if (config.boost) {
+      ctx.shadowColor = config.color;
+      ctx.shadowBlur = 12;
       ctx.beginPath();
       ctx.arc(center.x, center.y, 12, 0, Math.PI * 2);
       ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = "rgba(255,255,255,.34)";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, 18, 0, Math.PI * 2);
+      ctx.stroke();
     } else {
       ctx.fillRect(center.x - 10, center.y - 10, 20, 20);
       ctx.fillStyle = "rgba(255,255,255,.28)";
       ctx.fillRect(center.x - 5, center.y - 15, 10, 8);
+      ctx.strokeStyle = config.color;
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(center.x, center.y - 2);
+      ctx.lineTo(center.x + 18, center.y - 13);
+      ctx.stroke();
     }
     ctx.fillStyle = "#fff";
     ctx.font = "bold 13px monospace";
@@ -1364,7 +1452,37 @@
     ctx.fillStyle =
       enemy.slowed || enemy.slowUntil > 0 ? "#88e66f" : config.color;
     ctx.beginPath();
-    ctx.arc(enemy.x, enemy.y, size / 2, 0, Math.PI * 2);
+    if (enemy.type === "runner") {
+      ctx.ellipse(
+        enemy.x,
+        enemy.y,
+        size * 0.62,
+        size * 0.38,
+        0,
+        0,
+        Math.PI * 2,
+      );
+    } else if (enemy.type === "tank") {
+      ctx.rect(
+        enemy.x - size * 0.48,
+        enemy.y - size * 0.42,
+        size * 0.96,
+        size * 0.84,
+      );
+    } else if (enemy.type === "boss") {
+      ctx.moveTo(enemy.x, enemy.y - size * 0.6);
+      for (let index = 1; index < 8; index += 1) {
+        const angle = -Math.PI / 2 + index * (Math.PI / 4);
+        const radius = index % 2 ? size * 0.62 : size * 0.42;
+        ctx.lineTo(
+          enemy.x + Math.cos(angle) * radius,
+          enemy.y + Math.sin(angle) * radius,
+        );
+      }
+      ctx.closePath();
+    } else {
+      ctx.arc(enemy.x, enemy.y, size / 2, 0, Math.PI * 2);
+    }
     ctx.fill();
     ctx.fillStyle = "rgba(255,255,255,.25)";
     ctx.beginPath();
@@ -1410,14 +1528,25 @@
   }
 
   function drawShot(shot) {
+    const alpha = Math.max(0.2, Math.min(1, (shot.ttl || 0.1) / 0.18));
+    ctx.save();
     ctx.strokeStyle = shot.color || "#fff";
-    ctx.lineWidth = 3;
-    ctx.globalAlpha = Math.max(0.2, Math.min(1, (shot.ttl || 0.1) / 0.18));
+    ctx.lineWidth = 7;
+    ctx.globalAlpha = alpha * 0.22;
     ctx.beginPath();
     ctx.moveTo(shot.x, shot.y);
     ctx.lineTo(shot.targetX, shot.targetY);
     ctx.stroke();
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha = alpha;
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.fillStyle = shot.color || "#fff";
+    ctx.shadowColor = shot.color || "#fff";
+    ctx.shadowBlur = 12;
+    ctx.beginPath();
+    ctx.arc(shot.targetX, shot.targetY, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
   }
 
   function cellFromEvent(event) {

@@ -2,7 +2,7 @@
   const params = new URLSearchParams(window.location.search);
   const gameKey = params.get("game") || "kart";
   const isSolo = ["solo", "local"].includes(params.get("mode") || "");
-  const assetVersion = params.get("v") || "20260530h";
+  const assetVersion = params.get("v") || "20260530m";
   const world = { width: 2200, height: 1400 };
   const gameTypes = {
     kart: {
@@ -563,18 +563,22 @@
     player.cooldown = Math.max(0, (player.cooldown || 0) - dt);
     player.boosted = player.boost > 0;
     const throttle = Number(input.up) - Number(input.down) * 0.5;
-    player.vx += Math.cos(player.angle) * 520 * throttle * boost * dt;
-    player.vy += Math.sin(player.angle) * 520 * throttle * boost * dt;
+    const track = state.config?.track || config.track;
+    const onTrack = distanceToTrack(player.x, player.y, track) <= 62;
+    const grip = onTrack ? 1 : 0.58;
+    player.vx += Math.cos(player.angle) * 520 * throttle * boost * grip * dt;
+    player.vy += Math.sin(player.angle) * 520 * throttle * boost * grip * dt;
     const speed = Math.hypot(player.vx, player.vy);
-    const maxSpeed = 360 * (player.boosted ? 1.45 : 1);
+    const maxSpeed = 360 * (player.boosted ? 1.45 : 1) * (onTrack ? 1 : 0.68);
     if (speed > maxSpeed) {
       player.vx = (player.vx / speed) * maxSpeed;
       player.vy = (player.vy / speed) * maxSpeed;
     }
-    player.vx *= 0.988;
-    player.vy *= 0.988;
+    const drag = onTrack ? 0.988 : 0.965;
+    player.vx *= drag;
+    player.vy *= drag;
     moveLocal(player, player.vx * dt, player.vy * dt, true);
-    const target = config.track[player.checkpoint % config.track.length];
+    const target = track[player.checkpoint % track.length];
     if (distance(player.x, player.y, target[0], target[1]) < 72) {
       player.checkpoint += 1;
       player.score += 8;
@@ -589,11 +593,21 @@
   }
 
   function updateLocalWalker(player, dt) {
-    const speed = game === "coin" ? 270 : 245;
     const dx = Number(input.right) - Number(input.left);
     const dy = Number(input.down) - Number(input.up);
     const length = Math.hypot(dx, dy) || 1;
     if (dx || dy) player.angle = Math.atan2(dy, dx);
+    if (
+      game === "coin" &&
+      input.action &&
+      (dx || dy) &&
+      (player.cooldown || 0) <= 0
+    ) {
+      player.dash = 0.32;
+      player.cooldown = 3;
+    }
+    player.dash = Math.max(0, (player.dash || 0) - dt);
+    const speed = (game === "coin" ? 270 : 245) * (player.dash > 0 ? 2.15 : 1);
     moveLocal(
       player,
       (dx / length) * speed * dt,
@@ -612,6 +626,7 @@
       });
     }
     player.cooldown = Math.max(0, (player.cooldown || 0) - dt);
+    player.boosted = player.dash > 0;
   }
 
   function updateLocalSnake(player, dt) {
@@ -647,7 +662,7 @@
       else bomb.ttl -= dt;
       if (bomb.ttl <= 0 && bomb.blastTtl <= 0) {
         bomb.blastTtl = 0.35;
-        if (distance(player.x, player.y, bomb.x, bomb.y) <= bomb.radius)
+        if (inBombBlast(player.x, player.y, bomb.x, bomb.y, bomb.radius))
           knockLocal(player, "폭발에 맞았습니다.");
       }
     });
@@ -779,6 +794,7 @@
     state.players.forEach(drawTrail);
     state.players.forEach(drawPlayer);
     ctx.restore();
+    drawMiniMap();
   }
 
   function drawArena() {
@@ -796,21 +812,24 @@
     ctx.fillStyle = ground;
     ctx.fillRect(0, 0, world.width, world.height);
 
-    ctx.strokeStyle = "rgba(255,255,255,.045)";
+    const gridSize = game === "bomb" ? 40 : game === "snake" ? 48 : 32;
+    ctx.strokeStyle =
+      game === "coin" ? "rgba(208,140,255,.07)" : "rgba(255,255,255,.045)";
     ctx.lineWidth = 1;
-    for (let x = 0; x <= world.width; x += 32) {
+    for (let x = 0; x <= world.width; x += gridSize) {
       ctx.beginPath();
       ctx.moveTo(x, 0);
       ctx.lineTo(x, world.height);
       ctx.stroke();
     }
-    for (let y = 0; y <= world.height; y += 32) {
+    for (let y = 0; y <= world.height; y += gridSize) {
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(world.width, y);
       ctx.stroke();
     }
     drawWorldDecorations();
+    drawGameTerrain();
     ctx.strokeStyle = "rgba(255,255,255,.18)";
     ctx.lineWidth = 10;
     ctx.strokeRect(5, 5, world.width - 10, world.height - 10);
@@ -843,6 +862,59 @@
         ctx.beginPath();
         ctx.arc(x, y, 28 + (index % 4) * 5, 0, Math.PI * 2);
         ctx.fill();
+      }
+    }
+  }
+
+  function drawGameTerrain() {
+    if (game === "bomb") {
+      for (let x = 180; x < world.width - 140; x += 160) {
+        for (let y = 180; y < world.height - 140; y += 160) {
+          ctx.fillStyle = "rgba(5,8,16,.28)";
+          ctx.fillRect(x - 30, y - 30, 60, 60);
+          ctx.fillStyle = "#3f344d";
+          ctx.fillRect(x - 26, y - 26, 52, 52);
+          ctx.fillStyle = "rgba(255,255,255,.11)";
+          ctx.fillRect(x - 26, y - 26, 52, 8);
+        }
+      }
+      for (let index = 0; index < 44; index += 1) {
+        const x = 100 + ((index * 233) % (world.width - 200));
+        const y = 120 + ((index * 149) % (world.height - 240));
+        ctx.fillStyle = "rgba(255,186,90,.16)";
+        ctx.fillRect(x - 22, y - 18, 44, 36);
+        ctx.strokeStyle = "rgba(255,220,150,.22)";
+        ctx.strokeRect(x - 22, y - 18, 44, 36);
+      }
+      return;
+    }
+    if (game === "snake") {
+      ctx.strokeStyle = "rgba(139,230,111,.14)";
+      ctx.lineWidth = 10;
+      for (let y = 120; y < world.height; y += 180) {
+        ctx.beginPath();
+        ctx.moveTo(70, y);
+        for (let x = 70; x < world.width - 70; x += 120) {
+          ctx.lineTo(x, y + Math.sin((x + y) * 0.01) * 26);
+        }
+        ctx.stroke();
+      }
+      return;
+    }
+    if (game === "coin") {
+      for (let index = 0; index < 18; index += 1) {
+        const x = 130 + ((index * 421) % (world.width - 260));
+        const y = 150 + ((index * 277) % (world.height - 300));
+        const gradient = ctx.createRadialGradient(x, y, 12, x, y, 78);
+        gradient.addColorStop(0, "rgba(208,140,255,.20)");
+        gradient.addColorStop(1, "rgba(66,215,255,0)");
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(x, y, 78, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "rgba(208,140,255,.24)";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x - 48, y - 34, 96, 68);
       }
     }
   }
@@ -882,12 +954,16 @@
   }
 
   function drawPickup(pickup) {
-    ctx.fillStyle =
+    const color =
       pickup.kind === "boost"
         ? "#42d7ff"
         : pickup.value > 1
           ? "#ffd166"
           : "#f8f871";
+    ctx.save();
+    ctx.shadowColor = color;
+    ctx.shadowBlur = pickup.kind === "boost" ? 18 : 10;
+    ctx.fillStyle = color;
     ctx.beginPath();
     ctx.arc(
       pickup.x,
@@ -897,45 +973,114 @@
       Math.PI * 2,
     );
     ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = "rgba(255,255,255,.72)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(
+      pickup.x,
+      pickup.y,
+      pickup.kind === "boost" ? 18 : 15,
+      0,
+      Math.PI * 2,
+    );
+    ctx.stroke();
+    if (pickup.kind === "boost") {
+      ctx.fillStyle = "rgba(5,12,22,.72)";
+      ctx.beginPath();
+      ctx.moveTo(pickup.x - 5, pickup.y - 8);
+      ctx.lineTo(pickup.x + 9, pickup.y);
+      ctx.lineTo(pickup.x - 5, pickup.y + 8);
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   function drawHazard(hazard) {
-    ctx.fillStyle = "rgba(255,95,109,.24)";
+    const pulse = 0.5 + Math.sin(performance.now() / 180) * 0.5;
+    ctx.save();
+    ctx.shadowColor = "rgba(255,95,109,.8)";
+    ctx.shadowBlur = 22;
+    ctx.fillStyle = `rgba(255,95,109,${0.18 + pulse * 0.08})`;
     ctx.strokeStyle = "#ff5f6d";
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.arc(hazard.x, hazard.y, hazard.radius, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = "rgba(255,255,255,.24)";
+    ctx.lineWidth = 2;
+    for (let index = 0; index < 8; index += 1) {
+      const angle = index * (Math.PI / 4) + performance.now() / 900;
+      ctx.beginPath();
+      ctx.moveTo(
+        hazard.x + Math.cos(angle) * hazard.radius * 0.32,
+        hazard.y + Math.sin(angle) * hazard.radius * 0.32,
+      );
+      ctx.lineTo(
+        hazard.x + Math.cos(angle) * hazard.radius,
+        hazard.y + Math.sin(angle) * hazard.radius,
+      );
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   function drawBomb(bomb) {
     if (bomb.blastTtl > 0) {
-      ctx.fillStyle = "rgba(255,186,90,.28)";
+      const alpha = Math.max(0.18, Math.min(0.48, bomb.blastTtl / 0.35));
+      ctx.save();
+      ctx.shadowColor = "rgba(255,186,90,.9)";
+      ctx.shadowBlur = 24;
+      ctx.fillStyle = `rgba(255,186,90,${alpha})`;
+      ctx.fillRect(bomb.x - bomb.radius, bomb.y - 24, bomb.radius * 2, 48);
+      ctx.fillRect(bomb.x - 24, bomb.y - bomb.radius, 48, bomb.radius * 2);
+      ctx.fillStyle = `rgba(255,95,109,${alpha + 0.12})`;
       ctx.beginPath();
-      ctx.arc(bomb.x, bomb.y, bomb.radius, 0, Math.PI * 2);
+      ctx.arc(bomb.x, bomb.y, 38, 0, Math.PI * 2);
       ctx.fill();
+      ctx.restore();
       return;
     }
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,.65)";
+    ctx.shadowBlur = 10;
     ctx.fillStyle = "#111827";
     ctx.beginPath();
     ctx.arc(bomb.x, bomb.y, 17, 0, Math.PI * 2);
     ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = "rgba(255,255,255,.28)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(bomb.x - 4, bomb.y - 5, 6, Math.PI, Math.PI * 1.7);
+    ctx.stroke();
     ctx.fillStyle = "#ffba5a";
     ctx.fillRect(bomb.x - 8, bomb.y - 25, 16 * Math.max(0, bomb.ttl / 1.9), 4);
+    ctx.restore();
   }
 
   function drawTrail(player) {
     if (!player.trail?.length) return;
+    ctx.save();
     ctx.strokeStyle = player.color;
-    ctx.globalAlpha = 0.34;
-    ctx.lineWidth = 12;
+    ctx.globalAlpha = game === "snake" ? 0.78 : 0.34;
+    ctx.lineWidth = game === "snake" ? 18 : 12;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
     ctx.beginPath();
     player.trail.forEach(([x, y], index) =>
       index ? ctx.lineTo(x, y) : ctx.moveTo(x, y),
     );
     ctx.stroke();
-    ctx.globalAlpha = 1;
+    if (game === "snake") {
+      ctx.globalAlpha = 0.2;
+      ctx.strokeStyle = "#f5fbff";
+      ctx.lineWidth = 5;
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   function drawPlayer(player) {
@@ -972,6 +1117,20 @@
         ctx.lineTo(-30, 8);
         ctx.fill();
       }
+    } else if (game === "snake") {
+      ctx.fillStyle = player.color;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 24, 18, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,.34)";
+      ctx.beginPath();
+      ctx.ellipse(4, -7, 12, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#07111f";
+      ctx.beginPath();
+      ctx.arc(12, -6, 3, 0, Math.PI * 2);
+      ctx.arc(12, 6, 3, 0, Math.PI * 2);
+      ctx.fill();
     } else {
       ctx.fillStyle = "rgba(255,255,255,.18)";
       ctx.beginPath();
@@ -981,6 +1140,13 @@
       ctx.beginPath();
       ctx.arc(0, 0, 18, 0, Math.PI * 2);
       ctx.fill();
+      if (game === "coin" && player.boosted) {
+        ctx.strokeStyle = "rgba(208,140,255,.82)";
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.arc(0, 0, 29, -0.9, 0.9);
+        ctx.stroke();
+      }
       ctx.fillStyle = "#0b1220";
       ctx.fillRect(5, -4, 13, 8);
       if (game === "bomb") {
@@ -989,6 +1155,9 @@
         ctx.beginPath();
         ctx.arc(-2, 0, 25, -0.7, 0.7);
         ctx.stroke();
+        ctx.fillStyle = "#f8f871";
+        ctx.fillRect(-13, -17, 11, 8);
+        ctx.fillRect(-13, 9, 11, 8);
       }
     }
     ctx.restore();
@@ -996,6 +1165,106 @@
     ctx.font = "12px Malgun Gothic, sans-serif";
     ctx.textAlign = "center";
     ctx.fillText(player.name || "Player", player.x, player.y - 28);
+  }
+
+  function drawMiniMap() {
+    const mapScale = Math.min(210 / world.width, 132 / world.height);
+    const width = world.width * mapScale;
+    const height = world.height * mapScale;
+    const x = 18;
+    const y = Math.max(86, window.innerHeight - height - 18);
+    ctx.save();
+    ctx.fillStyle = "rgba(7,17,31,.82)";
+    ctx.strokeStyle = "rgba(245,251,255,.22)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect?.(x, y, width, height, 8);
+    if (!ctx.roundRect) ctx.rect(x, y, width, height);
+    ctx.fill();
+    ctx.stroke();
+    const theme =
+      game === "kart"
+        ? "rgba(66,215,255,.08)"
+        : game === "bomb"
+          ? "rgba(255,186,90,.08)"
+          : game === "snake"
+            ? "rgba(139,230,111,.08)"
+            : "rgba(208,140,255,.08)";
+    ctx.fillStyle = theme;
+    ctx.fillRect(x + 3, y + 3, width - 6, height - 6);
+    if (game === "kart") drawMiniMapTrack(x, y, mapScale);
+    state.hazards?.forEach((hazard) => {
+      ctx.strokeStyle = "rgba(255,95,109,.8)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(
+        x + hazard.x * mapScale,
+        y + hazard.y * mapScale,
+        Math.max(3, hazard.radius * mapScale),
+        0,
+        Math.PI * 2,
+      );
+      ctx.stroke();
+    });
+    state.bombs?.forEach((bomb) => {
+      ctx.fillStyle = bomb.blastTtl > 0 ? "#ff5f6d" : "#ffba5a";
+      ctx.fillRect(x + bomb.x * mapScale - 2, y + bomb.y * mapScale - 2, 4, 4);
+    });
+    state.pickups.slice(0, 36).forEach((pickup) => {
+      ctx.fillStyle = pickup.kind === "boost" ? "#42d7ff" : "#f8f871";
+      ctx.beginPath();
+      ctx.arc(
+        x + pickup.x * mapScale,
+        y + pickup.y * mapScale,
+        2,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+    });
+    state.players.forEach((player) => {
+      ctx.fillStyle = player.alive ? player.color : "rgba(255,255,255,.32)";
+      ctx.beginPath();
+      ctx.arc(
+        x + player.x * mapScale,
+        y + player.y * mapScale,
+        player.id === clientId ? 4 : 3,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+    });
+    const viewLeft = Math.max(0, -camera.offsetX / camera.scale);
+    const viewTop = Math.max(0, -camera.offsetY / camera.scale);
+    ctx.strokeStyle = "rgba(255,255,255,.82)";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(
+      x + viewLeft * mapScale,
+      y + viewTop * mapScale,
+      Math.min(width, (window.innerWidth / camera.scale) * mapScale),
+      Math.min(height, (window.innerHeight / camera.scale) * mapScale),
+    );
+    ctx.fillStyle = "#eef6ff";
+    ctx.font = "700 11px system-ui, sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("미니맵", x + 8, y + 15);
+    ctx.restore();
+  }
+
+  function drawMiniMapTrack(x, y, mapScale) {
+    const track = state.config?.track || config.track;
+    if (!track?.length) return;
+    ctx.strokeStyle = "rgba(245,251,255,.46)";
+    ctx.lineWidth = 5;
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    track.forEach(([pointX, pointY], index) =>
+      index
+        ? ctx.lineTo(x + pointX * mapScale, y + pointY * mapScale)
+        : ctx.moveTo(x + pointX * mapScale, y + pointY * mapScale),
+    );
+    ctx.closePath();
+    ctx.stroke();
   }
 
   function renderHud() {
@@ -1049,6 +1318,38 @@
 
   function distance(ax, ay, bx, by) {
     return Math.hypot(ax - bx, ay - by);
+  }
+
+  function distanceToSegment(px, py, ax, ay, bx, by) {
+    const abx = bx - ax;
+    const aby = by - ay;
+    const lengthSq = abx * abx + aby * aby;
+    if (!lengthSq) return distance(px, py, ax, ay);
+    const ratio = clamp(((px - ax) * abx + (py - ay) * aby) / lengthSq, 0, 1);
+    return distance(px, py, ax + abx * ratio, ay + aby * ratio);
+  }
+
+  function distanceToTrack(px, py, points) {
+    if (!points?.length) return 0;
+    let closest = Infinity;
+    for (let index = 0; index < points.length; index += 1) {
+      const start = points[index];
+      const end = points[(index + 1) % points.length];
+      closest = Math.min(
+        closest,
+        distanceToSegment(px, py, start[0], start[1], end[0], end[1]),
+      );
+    }
+    return closest;
+  }
+
+  function inBombBlast(px, py, bx, by, radius) {
+    const lane = 26;
+    if (distance(px, py, bx, by) <= 34) return true;
+    return (
+      (Math.abs(py - by) <= lane && Math.abs(px - bx) <= radius) ||
+      (Math.abs(px - bx) <= lane && Math.abs(py - by) <= radius)
+    );
   }
 
   function clamp(value, min, max) {

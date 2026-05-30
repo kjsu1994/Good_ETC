@@ -4309,7 +4309,7 @@
         e.textContent = "Connection info unavailable: " + n.message;
       }
     }
-    const GAME_ASSET_VERSION = "20260530h";
+    const GAME_ASSET_VERSION = "20260530m";
     const PARTY_GAME_LABELS = {
       kart: "카트 랠리",
       bomb: "폭탄 그리드",
@@ -4396,6 +4396,11 @@
     function gameLocalClientUrl(e = !1) {
       const n = new URL("game/index.html", window.location.href);
       return gameApplyClientParams(n, e);
+    }
+    function gameArenaSoloUrl() {
+      const e = new URL("game/index.html", window.location.href);
+      e.searchParams.set("mode", "solo");
+      return gameApplyClientParams(e, !1);
     }
     function gameServerClientUrl(o = !1) {
       const n = gameLauncherParams(),
@@ -4560,7 +4565,9 @@
       ((t("gameOpenServer").innerHTML = '<i class="fas fa-play"></i> 호스트'),
         (t("gameOpenLocal").innerHTML =
           '<i class="fas fa-folder-open"></i> 입장하기'),
-        (t("gameOpenSolo").style.display = "none"));
+        (t("gameOpenSolo").style.display = ""),
+        (t("gameOpenSolo").innerHTML =
+          '<i class="fas fa-user"></i> LAN 아레나 훈련장'));
     }
     function gameSetActiveTab(e) {
       gameActiveTab = [
@@ -4648,11 +4655,13 @@
         (t("gameOpenSolo").onclick = () => {
           try {
             gameOpenUrl(
-              "defense" === gameActiveTab
-                ? gameDefenseSoloUrl()
-                : PARTY_GAME_TYPES.includes(gameActiveTab)
-                  ? gamePartySoloUrl(gameActiveTab)
-                  : gameFortressSoloUrl(),
+              "arena" === gameActiveTab
+                ? gameArenaSoloUrl()
+                : "defense" === gameActiveTab
+                  ? gameDefenseSoloUrl()
+                  : PARTY_GAME_TYPES.includes(gameActiveTab)
+                    ? gamePartySoloUrl(gameActiveTab)
+                    : gameFortressSoloUrl(),
             );
           } catch (e) {
             t("gameStatus").innerText = e.message;

@@ -31,6 +31,17 @@ BULLET_TTL = 1.6
 FIRE_COOLDOWN = 0.22
 RESPAWN_DELAY = 1.8
 TICK_RATE = 30
+ARENA_PICKUP_TARGET = 10
+ARENA_OBSTACLES = [
+    {"x": 320, "y": 260, "w": 210, "h": 76},
+    {"x": 760, "y": 460, "w": 170, "h": 92},
+    {"x": 1230, "y": 245, "w": 240, "h": 82},
+    {"x": 1690, "y": 520, "w": 190, "h": 96},
+    {"x": 410, "y": 845, "w": 230, "h": 82},
+    {"x": 990, "y": 930, "w": 190, "h": 105},
+    {"x": 1540, "y": 1040, "w": 255, "h": 76},
+    {"x": 1830, "y": 250, "w": 118, "h": 220},
+]
 COLORS = [
     "#53e2a8",
     "#48a5ff",
@@ -300,6 +311,44 @@ def party_distance(ax: float, ay: float, bx: float, by: float) -> float:
     return math.hypot(ax - bx, ay - by)
 
 
+def party_distance_to_segment(px: float, py: float, ax: float, ay: float, bx: float, by: float) -> float:
+    abx = bx - ax
+    aby = by - ay
+    length_sq = abx * abx + aby * aby
+    if length_sq <= 0:
+        return party_distance(px, py, ax, ay)
+    ratio = party_clamp(((px - ax) * abx + (py - ay) * aby) / length_sq, 0.0, 1.0)
+    return party_distance(px, py, ax + abx * ratio, ay + aby * ratio)
+
+
+def party_distance_to_polyline(px: float, py: float, points: list[list[int]]) -> float:
+    if len(points) < 2:
+        return 0.0
+    distances: list[float] = []
+    pairs = list(zip(points, points[1:])) + [(points[-1], points[0])]
+    for start, end in pairs:
+        distances.append(
+            party_distance_to_segment(
+                px,
+                py,
+                float(start[0]),
+                float(start[1]),
+                float(end[0]),
+                float(end[1]),
+            )
+        )
+    return min(distances)
+
+
+def party_in_bomb_blast(px: float, py: float, bx: float, by: float, radius: float) -> bool:
+    lane = 26.0
+    if party_distance(px, py, bx, by) <= 34:
+        return True
+    horizontal = abs(py - by) <= lane and abs(px - bx) <= radius
+    vertical = abs(px - bx) <= lane and abs(py - by) <= radius
+    return horizontal or vertical
+
+
 @dataclass
 class Client:
     id: str
@@ -315,6 +364,9 @@ class Client:
     alive: bool = True
     respawn_at: float = 0
     last_fire: float = 0
+    shield_until: float = 0
+    haste_until: float = 0
+    rapid_until: float = 0
     input: dict[str, Any] = field(default_factory=dict)
     write_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
@@ -332,12 +384,22 @@ class Bullet:
 
 
 @dataclass
+class ArenaPickup:
+    id: int
+    x: float
+    y: float
+    kind: str
+
+
+@dataclass
 class ArenaRoom:
     id: str
     clients: dict[str, Client] = field(default_factory=dict)
     bullets: list[Bullet] = field(default_factory=list)
+    pickups: list[ArenaPickup] = field(default_factory=list)
     next_client_id: int = 1
     next_bullet_id: int = 1
+    next_pickup_id: int = 1
     created_at: float = field(default_factory=time.time)
 
 
@@ -1715,16 +1777,20 @@ class PartyRoom:
                 client.boosted_until = now + 1.2
                 client.cooldown_until = now + 4.0
                 boost = 1.45
-            accel = 520 * throttle * boost
+            track_distance = party_distance_to_polyline(client.x, client.y, checkpoints)
+            on_track = track_distance <= 62
+            grip = 1.0 if on_track else 0.58
+            accel = 520 * throttle * boost * grip
             client.vx += math.cos(client.angle) * accel * dt
             client.vy += math.sin(client.angle) * accel * dt
             speed = math.hypot(client.vx, client.vy)
-            max_speed = float(self.config["speed"]) * boost
+            max_speed = float(self.config["speed"]) * boost * (1.0 if on_track else 0.68)
             if speed > max_speed:
                 client.vx = client.vx / speed * max_speed
                 client.vy = client.vy / speed * max_speed
-            client.vx *= 0.988
-            client.vy *= 0.988
+            drag = 0.988 if on_track else 0.965
+            client.vx *= drag
+            client.vy *= drag
             self.move_client(client, client.vx * dt, client.vy * dt)
             target = checkpoints[client.checkpoint % len(checkpoints)]
             if party_distance(client.x, client.y, float(target[0]), float(target[1])) < 72:
@@ -1752,7 +1818,16 @@ class PartyRoom:
                 dx /= length
                 dy /= length
                 client.angle = math.atan2(dy, dx)
-            self.move_client(client, dx * speed * dt, dy * speed * dt)
+            if (
+                self.game_type == "coin"
+                and controls.get("action")
+                and length
+                and now >= client.cooldown_until
+            ):
+                client.boosted_until = now + 0.32
+                client.cooldown_until = now + 3.0
+            move_speed = speed * (2.15 if self.game_type == "coin" and now < client.boosted_until else 1.0)
+            self.move_client(client, dx * move_speed * dt, dy * move_speed * dt)
             if self.game_type == "bomb":
                 self.maybe_drop_bomb(client, now)
 
@@ -1809,7 +1884,7 @@ class PartyRoom:
             for client in self.clients.values():
                 if not client.alive:
                     continue
-                if party_distance(client.x, client.y, bomb.x, bomb.y) <= bomb.radius:
+                if party_in_bomb_blast(client.x, client.y, bomb.x, bomb.y, bomb.radius):
                     self.knock_out(client, now, "폭발에 맞았습니다.")
                     if owner and owner.id != client.id:
                         owner.score += 5
@@ -2884,10 +2959,20 @@ class ArenaServer:
         )
 
     def random_spawn(self) -> tuple[float, float]:
-        return (
-            random.uniform(PLAYER_RADIUS + 60, ARENA_WIDTH - PLAYER_RADIUS - 60),
-            random.uniform(PLAYER_RADIUS + 60, ARENA_HEIGHT - PLAYER_RADIUS - 60),
-        )
+        for _ in range(80):
+            x = random.uniform(PLAYER_RADIUS + 80, ARENA_WIDTH - PLAYER_RADIUS - 80)
+            y = random.uniform(PLAYER_RADIUS + 80, ARENA_HEIGHT - PLAYER_RADIUS - 80)
+            if not self.arena_circle_hits_obstacle(x, y, PLAYER_RADIUS + 12):
+                return (x, y)
+        return (ARENA_WIDTH / 2, ARENA_HEIGHT / 2)
+
+    def arena_circle_hits_obstacle(self, x: float, y: float, radius: float) -> bool:
+        return any(self.circle_rect_intersects(x, y, radius, obstacle) for obstacle in ARENA_OBSTACLES)
+
+    def circle_rect_intersects(self, x: float, y: float, radius: float, rect: dict[str, int]) -> bool:
+        closest_x = max(float(rect["x"]), min(x, float(rect["x"] + rect["w"])))
+        closest_y = max(float(rect["y"]), min(y, float(rect["y"] + rect["h"])))
+        return math.hypot(x - closest_x, y - closest_y) <= radius
 
     def handle_client_message(self, client: Client, raw: str) -> None:
         try:
@@ -2993,12 +3078,16 @@ class ArenaServer:
 
     def update_players(self, dt: float, now: float) -> None:
         for room in list(self.arena_rooms.values()):
+            self.ensure_arena_pickups(room)
             for client in list(room.clients.values()):
                 if not client.alive:
                     if now >= client.respawn_at:
                         client.x, client.y = self.random_spawn()
                         client.health = 100
                         client.alive = True
+                        client.shield_until = 0
+                        client.haste_until = 0
+                        client.rapid_until = 0
                     continue
 
                 controls = client.input
@@ -3008,23 +3097,57 @@ class ArenaServer:
                 if length:
                     dx /= length
                     dy /= length
-                client.x = max(
-                    PLAYER_RADIUS,
-                    min(ARENA_WIDTH - PLAYER_RADIUS, client.x + dx * PLAYER_SPEED * dt),
-                )
-                client.y = max(
-                    PLAYER_RADIUS,
-                    min(ARENA_HEIGHT - PLAYER_RADIUS, client.y + dy * PLAYER_SPEED * dt),
-                )
+                speed = PLAYER_SPEED * (1.32 if now < client.haste_until else 1.0)
+                self.move_arena_client(client, dx * speed * dt, dy * speed * dt)
+                self.collect_arena_pickups(room, client, now)
 
                 aim_x = float(controls.get("aimX", client.x + 1))
                 aim_y = float(controls.get("aimY", client.y))
                 client.angle = math.atan2(aim_y - client.y, aim_x - client.x)
 
-                if controls.get("fire") and now - client.last_fire >= FIRE_COOLDOWN:
+                cooldown = FIRE_COOLDOWN * (0.55 if now < client.rapid_until else 1.0)
+                if controls.get("fire") and now - client.last_fire >= cooldown:
                     self.spawn_bullet(room, client)
                     client.last_fire = now
             self.update_bullets(room, dt)
+
+    def move_arena_client(self, client: Client, dx: float, dy: float) -> None:
+        next_x = max(PLAYER_RADIUS, min(ARENA_WIDTH - PLAYER_RADIUS, client.x + dx))
+        if not self.arena_circle_hits_obstacle(next_x, client.y, PLAYER_RADIUS):
+            client.x = next_x
+        next_y = max(PLAYER_RADIUS, min(ARENA_HEIGHT - PLAYER_RADIUS, client.y + dy))
+        if not self.arena_circle_hits_obstacle(client.x, next_y, PLAYER_RADIUS):
+            client.y = next_y
+
+    def ensure_arena_pickups(self, room: ArenaRoom) -> None:
+        kinds = ["heal", "shield", "haste", "rapid"]
+        while len(room.pickups) < ARENA_PICKUP_TARGET:
+            x, y = self.random_spawn()
+            room.pickups.append(
+                ArenaPickup(
+                    id=room.next_pickup_id,
+                    x=x,
+                    y=y,
+                    kind=random.choice(kinds),
+                )
+            )
+            room.next_pickup_id += 1
+
+    def collect_arena_pickups(self, room: ArenaRoom, client: Client, now: float) -> None:
+        remaining: list[ArenaPickup] = []
+        for pickup in room.pickups:
+            if math.hypot(client.x - pickup.x, client.y - pickup.y) > PLAYER_RADIUS + 16:
+                remaining.append(pickup)
+                continue
+            if pickup.kind == "heal":
+                client.health = min(100, client.health + 34)
+            elif pickup.kind == "shield":
+                client.shield_until = now + 5.0
+            elif pickup.kind == "haste":
+                client.haste_until = now + 5.0
+            elif pickup.kind == "rapid":
+                client.rapid_until = now + 5.0
+        room.pickups = remaining
 
     def spawn_bullet(self, room: ArenaRoom, client: Client) -> None:
         vx = math.cos(client.angle) * BULLET_SPEED
@@ -3057,6 +3180,8 @@ class ArenaServer:
                 or bullet.y > ARENA_HEIGHT
             ):
                 continue
+            if self.arena_circle_hits_obstacle(bullet.x, bullet.y, BULLET_RADIUS):
+                continue
             hit = self.find_bullet_hit(bullet, players)
             if hit:
                 self.damage_player(room, hit, bullet.owner_id)
@@ -3073,7 +3198,9 @@ class ArenaServer:
         return None
 
     def damage_player(self, room: ArenaRoom, victim: Client, attacker_id: str) -> None:
-        victim.health = max(0, victim.health - 25)
+        now = time.monotonic()
+        damage = 10 if now < victim.shield_until else 25
+        victim.health = max(0, victim.health - damage)
         if victim.health > 0:
             return
         victim.alive = False
@@ -3086,10 +3213,15 @@ class ArenaServer:
         for room_id, room in list(self.arena_rooms.items()):
             if not room.clients:
                 continue
+            now = time.monotonic()
             state = {
                 "type": "state",
                 "roomId": room_id,
-                "arena": {"width": ARENA_WIDTH, "height": ARENA_HEIGHT},
+                "arena": {
+                    "width": ARENA_WIDTH,
+                    "height": ARENA_HEIGHT,
+                    "obstacles": ARENA_OBSTACLES,
+                },
                 "players": [
                     {
                         "id": client.id,
@@ -3102,14 +3234,28 @@ class ArenaServer:
                         "score": client.score,
                         "color": client.color,
                         "alive": client.alive,
+                        "shielded": now < client.shield_until,
+                        "hasted": now < client.haste_until,
+                        "rapid": now < client.rapid_until,
                     }
                     for client in room.clients.values()
+                ],
+                "pickups": [
+                    {
+                        "id": pickup.id,
+                        "x": round(pickup.x, 2),
+                        "y": round(pickup.y, 2),
+                        "kind": pickup.kind,
+                    }
+                    for pickup in room.pickups
                 ],
                 "bullets": [
                     {
                         "id": bullet.id,
                         "x": round(bullet.x, 2),
                         "y": round(bullet.y, 2),
+                        "vx": round(bullet.vx, 2),
+                        "vy": round(bullet.vy, 2),
                         "radius": BULLET_RADIUS,
                         "color": bullet.color,
                     }

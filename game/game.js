@@ -19,15 +19,47 @@ const netInfoServer = document.getElementById("netInfoServer");
 const netInfoShare = document.getElementById("netInfoShare");
 const netInfoWarning = document.getElementById("netInfoWarning");
 
+const launchParams = new URLSearchParams(window.location.search);
+const isLocalArena = ["solo", "local"].includes(launchParams.get("mode") || "");
 const keys = new Set();
 const pointer = { x: 0, y: 0, down: false };
 const camera = { x: 0, y: 0 };
+const localArenaConfig = {
+  width: 2200,
+  height: 1400,
+  playerRadius: 18,
+  playerSpeed: 260,
+  bulletRadius: 5,
+  bulletSpeed: 650,
+  bulletTtl: 1.6,
+  fireCooldown: 0.22,
+  respawnDelay: 1.8,
+};
+const fallbackObstacles = [
+  { x: 320, y: 260, w: 210, h: 76 },
+  { x: 760, y: 460, w: 170, h: 92 },
+  { x: 1230, y: 245, w: 240, h: 82 },
+  { x: 1690, y: 520, w: 190, h: 96 },
+  { x: 410, y: 845, w: 230, h: 82 },
+  { x: 990, y: 930, w: 190, h: 105 },
+  { x: 1540, y: 1040, w: 255, h: 76 },
+  { x: 1830, y: 250, w: 118, h: 220 },
+];
+const fallbackPickups = [
+  { id: "preview-heal", x: 560, y: 385, kind: "heal" },
+  { id: "preview-shield", x: 1110, y: 560, kind: "shield" },
+  { id: "preview-haste", x: 1510, y: 850, kind: "haste" },
+  { id: "preview-rapid", x: 820, y: 1060, kind: "rapid" },
+];
 let socket = null;
 let playerId = "";
+let lastFrame = performance.now();
+let localArenaIds = { bullet: 1, pickup: 1 };
 let latestState = {
-  arena: { width: 2200, height: 1400 },
+  arena: { width: 2200, height: 1400, obstacles: fallbackObstacles },
   players: [],
   bullets: [],
+  pickups: fallbackPickups,
 };
 let lastInputSent = 0;
 let latestShareUrl = "";
@@ -102,7 +134,11 @@ function safeUrl(value) {
 }
 
 function currentAssetVersion() {
-  return new URLSearchParams(window.location.search).get("v") || "20260530h";
+  return new URLSearchParams(window.location.search).get("v") || "20260530m";
+}
+
+function nowSeconds() {
+  return performance.now() / 1000;
 }
 
 function escapeHtml(value) {
@@ -214,6 +250,30 @@ function updateNetInfo(
   serverUrl = serverUrlInput.value || getDefaultServerUrl(),
 ) {
   if (!netInfoPanel) return;
+  if (isLocalArena) {
+    latestShareUrl = "";
+    netInfoGame.textContent = "LAN 아레나 / 훈련장";
+    renderNetInfoValue(
+      netInfoPage,
+      "현재 게임 화면",
+      "서버 없이 현재 브라우저 또는 EXE 안에서 실행되는 로컬 훈련장입니다.",
+      window.location.href,
+    );
+    renderNetInfoValue(
+      netInfoServer,
+      "서버 연결",
+      "로컬 훈련장은 WebSocket 서버를 사용하지 않습니다.",
+      "혼자하기: 서버 연결 없음",
+    );
+    renderNetInfoValue(
+      netInfoShare,
+      "초대 링크",
+      "멀티 초대는 통합 입장 센터 또는 호스트/입장하기를 사용하세요.",
+      "-",
+    );
+    netInfoWarning.textContent = "";
+    return;
+  }
   latestShareUrl = buildArenaShareUrl(serverUrl);
   const room = safeUrl(serverUrl)?.searchParams.get("room") || "-";
   netInfoGame.textContent =
@@ -290,6 +350,7 @@ function buildInput() {
 }
 
 function sendInput(now) {
+  if (isLocalArena) return;
   if (
     !socket ||
     socket.readyState !== WebSocket.OPEN ||
@@ -302,6 +363,10 @@ function sendInput(now) {
 }
 
 function connect() {
+  if (isLocalArena) {
+    startLocalArena();
+    return;
+  }
   const name = cleanName(playerNameInput.value);
   const url = serverUrlInput.value.trim() || getDefaultServerUrl();
   localStorage.setItem("lan_arena_name", name);
@@ -365,6 +430,10 @@ function connect() {
 }
 
 function disconnect() {
+  if (isLocalArena) {
+    startLocalArena();
+    return;
+  }
   if (socket) socket.close();
   socket = null;
 }
@@ -388,6 +457,344 @@ function escapeHtml(value) {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
+}
+
+function startLocalArena() {
+  if (socket) socket.close();
+  socket = null;
+  playerId = "local";
+  localArenaIds = { bullet: 1, pickup: 1 };
+  const name = cleanName(playerNameInput.value);
+  localStorage.setItem("lan_arena_name", name);
+  latestState = {
+    type: "state",
+    roomId: "LOCAL",
+    arena: {
+      width: localArenaConfig.width,
+      height: localArenaConfig.height,
+      obstacles: fallbackObstacles,
+    },
+    players: [
+      createLocalArenaPlayer("local", name, "#53e2a8", 420, 420, false),
+      createLocalArenaPlayer("bot-1", "훈련 봇 A", "#48a5ff", 1720, 360, true),
+      createLocalArenaPlayer("bot-2", "훈련 봇 B", "#ffbc54", 1560, 980, true),
+      createLocalArenaPlayer("bot-3", "훈련 봇 C", "#b987ff", 720, 1080, true),
+    ],
+    bullets: [],
+    pickups: seedLocalArenaPickups(),
+    local: true,
+  };
+  setStatus("훈련장", false);
+  setConnectionPanelCollapsed(true);
+  setCenterMessage(
+    "LAN 아레나 훈련장입니다. 봇을 상대로 엄폐물과 파워업을 활용하세요.",
+  );
+  window.setTimeout(() => {
+    if (isLocalArena) setCenterMessage("");
+  }, 1800);
+  updateNetInfo();
+  renderScoreboard();
+}
+
+function createLocalArenaPlayer(id, name, color, x, y, bot) {
+  return {
+    id,
+    name,
+    color,
+    x,
+    y,
+    angle: 0,
+    radius: localArenaConfig.playerRadius,
+    health: 100,
+    score: 0,
+    alive: true,
+    respawnAt: 0,
+    lastFire: 0,
+    shieldUntil: 0,
+    hasteUntil: 0,
+    rapidUntil: 0,
+    shielded: false,
+    hasted: false,
+    rapid: false,
+    bot,
+    targetX: x,
+    targetY: y,
+    thinkAt: 0,
+  };
+}
+
+function seedLocalArenaPickups() {
+  return Array.from({ length: 10 }, () => createLocalArenaPickup());
+}
+
+function createLocalArenaPickup() {
+  const kinds = ["heal", "shield", "haste", "rapid"];
+  const point = randomArenaPoint();
+  return {
+    id: localArenaIds.pickup++,
+    x: point.x,
+    y: point.y,
+    kind: kinds[Math.floor(Math.random() * kinds.length)],
+  };
+}
+
+function randomArenaPoint() {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const x =
+      localArenaConfig.playerRadius +
+      80 +
+      Math.random() *
+        (localArenaConfig.width - localArenaConfig.playerRadius * 2 - 160);
+    const y =
+      localArenaConfig.playerRadius +
+      80 +
+      Math.random() *
+        (localArenaConfig.height - localArenaConfig.playerRadius * 2 - 160);
+    if (!arenaCircleHitsObstacle(x, y, localArenaConfig.playerRadius + 12)) {
+      return { x, y };
+    }
+  }
+  return { x: localArenaConfig.width / 2, y: localArenaConfig.height / 2 };
+}
+
+function circleRectIntersects(x, y, radius, rect) {
+  const closestX = Math.max(rect.x, Math.min(x, rect.x + rect.w));
+  const closestY = Math.max(rect.y, Math.min(y, rect.y + rect.h));
+  return Math.hypot(x - closestX, y - closestY) <= radius;
+}
+
+function arenaCircleHitsObstacle(x, y, radius) {
+  return fallbackObstacles.some((obstacle) =>
+    circleRectIntersects(x, y, radius, obstacle),
+  );
+}
+
+function moveLocalArenaPlayer(player, dx, dy) {
+  const radius = localArenaConfig.playerRadius;
+  const nextX = Math.max(
+    radius,
+    Math.min(localArenaConfig.width - radius, player.x + dx),
+  );
+  if (!arenaCircleHitsObstacle(nextX, player.y, radius)) player.x = nextX;
+  const nextY = Math.max(
+    radius,
+    Math.min(localArenaConfig.height - radius, player.y + dy),
+  );
+  if (!arenaCircleHitsObstacle(player.x, nextY, radius)) player.y = nextY;
+}
+
+function respawnLocalArenaPlayer(player, now) {
+  const point = randomArenaPoint();
+  player.x = point.x;
+  player.y = point.y;
+  player.health = 100;
+  player.alive = true;
+  player.respawnAt = 0;
+  player.shieldUntil = 0;
+  player.hasteUntil = 0;
+  player.rapidUntil = 0;
+}
+
+function updateLocalArena(dt, now) {
+  if (!isLocalArena) return;
+  const input = buildInput();
+  const player = latestState.players.find((item) => item.id === playerId);
+  if (!player) return;
+  updateLocalArenaActor(player, input, dt, now);
+  latestState.players
+    .filter((item) => item.bot)
+    .forEach((bot) => updateLocalArenaBot(bot, dt, now));
+  updateLocalArenaBullets(dt, now);
+  ensureLocalArenaPickups();
+  latestState.players.forEach((item) => {
+    item.shielded = now < item.shieldUntil;
+    item.hasted = now < item.hasteUntil;
+    item.rapid = now < item.rapidUntil;
+  });
+  renderScoreboard();
+}
+
+function updateLocalArenaActor(player, input, dt, now) {
+  if (!player.alive) {
+    if (now >= player.respawnAt) respawnLocalArenaPlayer(player, now);
+    return;
+  }
+  const dx = Number(input.right) - Number(input.left);
+  const dy = Number(input.down) - Number(input.up);
+  const length = Math.hypot(dx, dy) || 1;
+  const speed =
+    localArenaConfig.playerSpeed * (now < player.hasteUntil ? 1.32 : 1);
+  moveLocalArenaPlayer(
+    player,
+    (dx / length) * speed * dt,
+    (dy / length) * speed * dt,
+  );
+  player.angle = Math.atan2(input.aimY - player.y, input.aimX - player.x);
+  if (input.fire) spawnLocalArenaBullet(player, now);
+  collectLocalArenaPickups(player, now);
+}
+
+function updateLocalArenaBot(bot, dt, now) {
+  if (!bot.alive) {
+    if (now >= bot.respawnAt) respawnLocalArenaPlayer(bot, now);
+    return;
+  }
+  const target = nearestLocalArenaEnemy(bot);
+  if (
+    now >= bot.thinkAt ||
+    Math.hypot(bot.targetX - bot.x, bot.targetY - bot.y) < 80
+  ) {
+    bot.thinkAt = now + 0.55 + Math.random() * 0.65;
+    const pickup = nearestLocalArenaPickup(bot);
+    if (pickup && (bot.health < 65 || Math.random() < 0.45)) {
+      bot.targetX = pickup.x;
+      bot.targetY = pickup.y;
+    } else if (target) {
+      const angle =
+        Math.atan2(bot.y - target.y, bot.x - target.x) + (Math.random() - 0.5);
+      const distance = 220 + Math.random() * 260;
+      bot.targetX = clamp(
+        target.x + Math.cos(angle) * distance,
+        80,
+        localArenaConfig.width - 80,
+      );
+      bot.targetY = clamp(
+        target.y + Math.sin(angle) * distance,
+        80,
+        localArenaConfig.height - 80,
+      );
+    } else {
+      const point = randomArenaPoint();
+      bot.targetX = point.x;
+      bot.targetY = point.y;
+    }
+  }
+  const moveX = bot.targetX - bot.x;
+  const moveY = bot.targetY - bot.y;
+  const length = Math.hypot(moveX, moveY) || 1;
+  const speed = localArenaConfig.playerSpeed * 0.86;
+  moveLocalArenaPlayer(
+    bot,
+    (moveX / length) * speed * dt,
+    (moveY / length) * speed * dt,
+  );
+  if (target) {
+    bot.angle = Math.atan2(target.y - bot.y, target.x - bot.x);
+    if (
+      Math.hypot(target.x - bot.x, target.y - bot.y) < 760 &&
+      Math.random() < 0.72
+    ) {
+      spawnLocalArenaBullet(bot, now);
+    }
+  }
+  collectLocalArenaPickups(bot, now);
+}
+
+function nearestLocalArenaEnemy(player) {
+  return latestState.players
+    .filter((item) => item.alive && item.id !== player.id)
+    .sort(
+      (a, b) =>
+        Math.hypot(a.x - player.x, a.y - player.y) -
+        Math.hypot(b.x - player.x, b.y - player.y),
+    )[0];
+}
+
+function nearestLocalArenaPickup(player) {
+  return [...(latestState.pickups || [])].sort(
+    (a, b) =>
+      Math.hypot(a.x - player.x, a.y - player.y) -
+      Math.hypot(b.x - player.x, b.y - player.y),
+  )[0];
+}
+
+function spawnLocalArenaBullet(player, now) {
+  const cooldown =
+    localArenaConfig.fireCooldown * (now < player.rapidUntil ? 0.55 : 1);
+  if (now - player.lastFire < cooldown) return;
+  player.lastFire = now;
+  latestState.bullets.push({
+    id: localArenaIds.bullet++,
+    ownerId: player.id,
+    x: player.x + Math.cos(player.angle) * (localArenaConfig.playerRadius + 10),
+    y: player.y + Math.sin(player.angle) * (localArenaConfig.playerRadius + 10),
+    vx: Math.cos(player.angle) * localArenaConfig.bulletSpeed,
+    vy: Math.sin(player.angle) * localArenaConfig.bulletSpeed,
+    radius: localArenaConfig.bulletRadius,
+    ttl: localArenaConfig.bulletTtl,
+    color: player.color,
+  });
+}
+
+function updateLocalArenaBullets(dt, now) {
+  const alive = [];
+  for (const bullet of latestState.bullets) {
+    bullet.x += bullet.vx * dt;
+    bullet.y += bullet.vy * dt;
+    bullet.ttl -= dt;
+    if (
+      bullet.ttl <= 0 ||
+      bullet.x < 0 ||
+      bullet.x > localArenaConfig.width ||
+      bullet.y < 0 ||
+      bullet.y > localArenaConfig.height ||
+      arenaCircleHitsObstacle(bullet.x, bullet.y, localArenaConfig.bulletRadius)
+    ) {
+      continue;
+    }
+    const hit = latestState.players.find(
+      (player) =>
+        player.alive &&
+        player.id !== bullet.ownerId &&
+        Math.hypot(player.x - bullet.x, player.y - bullet.y) <=
+          localArenaConfig.playerRadius + localArenaConfig.bulletRadius,
+    );
+    if (hit) {
+      damageLocalArenaPlayer(hit, bullet.ownerId, now);
+      continue;
+    }
+    alive.push(bullet);
+  }
+  latestState.bullets = alive;
+}
+
+function damageLocalArenaPlayer(victim, attackerId, now) {
+  const damage = now < victim.shieldUntil ? 10 : 25;
+  victim.health = Math.max(0, victim.health - damage);
+  if (victim.health > 0) return;
+  victim.alive = false;
+  victim.respawnAt = now + localArenaConfig.respawnDelay;
+  const attacker = latestState.players.find(
+    (player) => player.id === attackerId,
+  );
+  if (attacker && attacker.id !== victim.id) attacker.score += 1;
+}
+
+function collectLocalArenaPickups(player, now) {
+  latestState.pickups = (latestState.pickups || []).filter((pickup) => {
+    if (
+      Math.hypot(player.x - pickup.x, player.y - pickup.y) >
+      localArenaConfig.playerRadius + 16
+    ) {
+      return true;
+    }
+    if (pickup.kind === "heal")
+      player.health = Math.min(100, player.health + 34);
+    if (pickup.kind === "shield") player.shieldUntil = now + 5;
+    if (pickup.kind === "haste") player.hasteUntil = now + 5;
+    if (pickup.kind === "rapid") player.rapidUntil = now + 5;
+    return false;
+  });
+}
+
+function ensureLocalArenaPickups() {
+  while ((latestState.pickups || []).length < 10) {
+    latestState.pickups.push(createLocalArenaPickup());
+  }
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
 }
 
 function drawGrid() {
@@ -423,6 +830,7 @@ function drawGrid() {
   }
 
   drawArenaScenery(arena);
+  drawArenaObstacles(arena.obstacles || []);
 
   ctx.strokeStyle = "rgba(83, 226, 168, 0.56)";
   ctx.lineWidth = 5;
@@ -453,12 +861,95 @@ function drawArenaScenery(arena) {
   }
 }
 
+function drawArenaObstacles(obstacles) {
+  obstacles.forEach((obstacle, index) => {
+    const x = obstacle.x - camera.x;
+    const y = obstacle.y - camera.y;
+    if (
+      x + obstacle.w < -80 ||
+      y + obstacle.h < -80 ||
+      x > window.innerWidth + 80 ||
+      y > window.innerHeight + 80
+    ) {
+      return;
+    }
+    const gradient = ctx.createLinearGradient(x, y, x, y + obstacle.h);
+    gradient.addColorStop(0, index % 2 ? "#304562" : "#344958");
+    gradient.addColorStop(1, "#111827");
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,.48)";
+    ctx.shadowBlur = 18;
+    ctx.fillStyle = gradient;
+    ctx.fillRect(x, y, obstacle.w, obstacle.h);
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = "rgba(245,251,255,.18)";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x + 3, y + 3, obstacle.w - 6, obstacle.h - 6);
+    ctx.fillStyle = "rgba(83,226,168,.16)";
+    ctx.fillRect(x + 12, y + 12, obstacle.w - 24, 7);
+    ctx.fillStyle = "rgba(0,0,0,.22)";
+    ctx.fillRect(x + 18, y + obstacle.h - 18, obstacle.w - 36, 8);
+    ctx.restore();
+  });
+}
+
+function pickupColor(kind) {
+  return (
+    {
+      heal: "#53e2a8",
+      shield: "#69dcff",
+      haste: "#ffcf5c",
+      rapid: "#ff8fd4",
+    }[kind] || "#f8f871"
+  );
+}
+
+function pickupLabel(kind) {
+  return { heal: "+", shield: "S", haste: ">", rapid: "R" }[kind] || "?";
+}
+
+function drawPickup(pickup) {
+  const x = pickup.x - camera.x;
+  const y = pickup.y - camera.y;
+  const color = pickupColor(pickup.kind);
+  ctx.save();
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 18;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(x, y, 14, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = "rgba(255,255,255,.75)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(x, y, 20, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = "#07111f";
+  ctx.font = "800 13px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(pickupLabel(pickup.kind), x, y);
+  ctx.restore();
+}
+
 function drawBullet(bullet) {
   const x = bullet.x - camera.x;
   const y = bullet.y - camera.y;
   ctx.save();
   ctx.shadowColor = bullet.color;
   ctx.shadowBlur = 16;
+  ctx.strokeStyle = bullet.color;
+  ctx.globalAlpha = 0.38;
+  ctx.lineWidth = 8;
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(
+    x - Math.cos(Math.atan2(bullet.vy || 0, bullet.vx || 1)) * 18,
+    y - Math.sin(Math.atan2(bullet.vy || 0, bullet.vx || 1)) * 18,
+  );
+  ctx.stroke();
+  ctx.globalAlpha = 1;
   ctx.fillStyle = bullet.color;
   ctx.beginPath();
   ctx.arc(x, y, bullet.radius || 5, 0, Math.PI * 2);
@@ -505,12 +996,26 @@ function drawPlayer(player) {
   ctx.arc(0, 0, radius, 0, Math.PI * 2);
   ctx.fill();
   ctx.shadowBlur = 0;
+  if (player.hasted || player.rapid) {
+    ctx.strokeStyle = player.hasted ? "#ffcf5c" : "#ff8fd4";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius + 5, -0.8, 0.8);
+    ctx.stroke();
+  }
   ctx.fillStyle = "rgba(255,255,255,.2)";
   ctx.beginPath();
   ctx.arc(-5, -6, radius * 0.48, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = "rgba(255, 255, 255, 0.88)";
   ctx.fillRect(5, -4, radius + 16, 8);
+  if (player.shielded) {
+    ctx.strokeStyle = "rgba(105,220,255,.86)";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius + 10, 0, Math.PI * 2);
+    ctx.stroke();
+  }
   ctx.restore();
 
   ctx.fillStyle = "rgba(0, 0, 0, 0.54)";
@@ -523,12 +1028,86 @@ function drawPlayer(player) {
   ctx.fillText(player.name, x, y + radius + 19);
 }
 
+function drawMinimap() {
+  const arena = latestState.arena || { width: 2200, height: 1400 };
+  const mapScale = Math.min(210 / arena.width, 132 / arena.height);
+  const width = arena.width * mapScale;
+  const height = arena.height * mapScale;
+  const x = 18;
+  const y = Math.max(86, window.innerHeight - height - 18);
+  ctx.save();
+  ctx.fillStyle = "rgba(7,17,31,.82)";
+  ctx.strokeStyle = "rgba(245,251,255,.22)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect?.(x, y, width, height, 8);
+  if (!ctx.roundRect) ctx.rect(x, y, width, height);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = "rgba(83,226,168,.08)";
+  ctx.fillRect(x + 3, y + 3, width - 6, height - 6);
+  (arena.obstacles || []).forEach((obstacle) => {
+    ctx.fillStyle = "rgba(148,163,184,.58)";
+    ctx.fillRect(
+      x + obstacle.x * mapScale,
+      y + obstacle.y * mapScale,
+      Math.max(2, obstacle.w * mapScale),
+      Math.max(2, obstacle.h * mapScale),
+    );
+  });
+  (latestState.pickups || []).forEach((pickup) => {
+    ctx.fillStyle = pickupColor(pickup.kind);
+    ctx.beginPath();
+    ctx.arc(
+      x + pickup.x * mapScale,
+      y + pickup.y * mapScale,
+      2.8,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+  });
+  latestState.players.forEach((player) => {
+    ctx.fillStyle = player.alive ? player.color : "rgba(255,255,255,.32)";
+    ctx.beginPath();
+    ctx.arc(
+      x + player.x * mapScale,
+      y + player.y * mapScale,
+      player.id === playerId ? 4 : 3,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+  });
+  const viewX = x + Math.max(0, camera.x) * mapScale;
+  const viewY = y + Math.max(0, camera.y) * mapScale;
+  ctx.strokeStyle = "rgba(255,255,255,.82)";
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(
+    viewX,
+    viewY,
+    Math.min(width, window.innerWidth * mapScale),
+    Math.min(height, window.innerHeight * mapScale),
+  );
+  ctx.fillStyle = "#eef6ff";
+  ctx.font = "700 11px system-ui, sans-serif";
+  ctx.textAlign = "left";
+  ctx.fillText("전황", x + 8, y + 15);
+  ctx.restore();
+}
+
 function draw() {
+  const frameNow = performance.now();
+  const dt = Math.min(0.05, (frameNow - lastFrame) / 1000);
+  lastFrame = frameNow;
+  updateLocalArena(dt, frameNow / 1000);
   resizeCanvas();
   updateCamera();
   drawGrid();
+  (latestState.pickups || []).forEach(drawPickup);
   latestState.bullets.forEach(drawBullet);
   latestState.players.forEach(drawPlayer);
+  drawMinimap();
   sendInput(performance.now());
   requestAnimationFrame(draw);
 }
@@ -582,19 +1161,25 @@ window.addEventListener("pointerup", () => {
   pointer.down = false;
 });
 
-const launchParams = new URLSearchParams(window.location.search);
-
 playerNameInput.value = localStorage.getItem("lan_arena_name") || "Player";
-serverUrlInput.value = launchParams.has("host")
-  ? getDefaultServerUrl()
-  : localStorage.getItem("lan_arena_url") || getDefaultServerUrl();
+if (isLocalArena) {
+  serverUrlInput.value = "혼자하기: 서버 연결 없음";
+  serverUrlInput.disabled = true;
+  connectButton.textContent = "훈련 재시작";
+  disconnectButton.style.display = "none";
+} else {
+  serverUrlInput.value = launchParams.has("host")
+    ? getDefaultServerUrl()
+    : localStorage.getItem("lan_arena_url") || getDefaultServerUrl();
+}
 serverUrlInput.addEventListener("input", () => updateNetInfo());
 setStatus("연결 끊김");
 updateNetInfo();
 renderScoreboard();
+if (isLocalArena) startLocalArena();
 draw();
 
-if (launchParams.get("auto") === "1") {
+if (!isLocalArena && launchParams.get("auto") === "1") {
   startAutoConnect();
 }
 

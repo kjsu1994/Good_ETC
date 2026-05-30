@@ -11,7 +11,7 @@
       : requestedRole === "spectator"
         ? "spectator"
         : "client";
-  const assetVersion = params.get("v") || "20260530h";
+  const assetVersion = params.get("v") || "20260530m";
   const world = { width: 2200, height: 920 };
   const gravity = 300;
   const moveBudgetMax = 130;
@@ -1008,11 +1008,22 @@
       window.innerWidth <= 560 ? 0.58 : window.innerWidth <= 900 ? 0.72 : 0.9;
     const viewWidth = window.innerWidth / camera.scale;
     const viewHeight = window.innerHeight / camera.scale;
-    const maxX = Math.max(0, world.width - viewWidth);
+    const panelReserve =
+      window.innerWidth > 900 && !ui.panel.classList.contains("collapsed")
+        ? 380
+        : 0;
+    const desiredScreenX = panelReserve
+      ? panelReserve + (window.innerWidth - panelReserve) / 2
+      : window.innerWidth / 2;
+    const minX = panelReserve ? -panelReserve / camera.scale : 0;
+    const maxX = Math.max(
+      minX,
+      world.width - viewWidth + panelReserve / camera.scale,
+    );
     const maxY = Math.max(0, world.height - viewHeight);
     const targetX = clamp(
-      (target.x || world.width / 2) - viewWidth / 2,
-      0,
+      (target.x || world.width / 2) - desiredScreenX / camera.scale,
+      minX,
       maxX,
     );
     const targetY = clamp(
@@ -1539,6 +1550,116 @@
     }
   }
 
+  function drawFortressMinimap() {
+    if (!state.terrain?.length) return;
+    const mapScale = Math.min(230 / world.width, 118 / world.height);
+    const width = world.width * mapScale;
+    const height = world.height * mapScale;
+    const x = Math.max(18, window.innerWidth - width - 74);
+    const y = Math.max(96, window.innerHeight - height - 18);
+    ctx.save();
+    ctx.fillStyle = "rgba(7,17,31,.82)";
+    ctx.strokeStyle = "rgba(245,251,255,.28)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect?.(x, y, width, height, 8);
+    if (!ctx.roundRect) ctx.rect(x, y, width, height);
+    ctx.fill();
+    ctx.stroke();
+
+    const sky = ctx.createLinearGradient(x, y, x, y + height);
+    sky.addColorStop(0, "rgba(92,184,255,.16)");
+    sky.addColorStop(1, "rgba(50,95,43,.24)");
+    ctx.fillStyle = sky;
+    ctx.fillRect(x + 3, y + 3, width - 6, height - 6);
+
+    ctx.fillStyle = "rgba(114,200,79,.72)";
+    ctx.beginPath();
+    ctx.moveTo(x, y + height);
+    for (let worldX = 0; worldX <= world.width; worldX += 12) {
+      ctx.lineTo(
+        x + worldX * mapScale,
+        y + (state.terrain[worldX] || world.height) * mapScale,
+      );
+    }
+    ctx.lineTo(x + width, y + height);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = "rgba(40,73,37,.82)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let worldX = 0; worldX <= world.width; worldX += 18) {
+      const pointX = x + worldX * mapScale;
+      const pointY = y + (state.terrain[worldX] || world.height) * mapScale;
+      if (worldX === 0) ctx.moveTo(pointX, pointY);
+      else ctx.lineTo(pointX, pointY);
+    }
+    ctx.stroke();
+
+    state.players.forEach((player, index) => {
+      ctx.fillStyle =
+        player.health <= 0
+          ? "rgba(255,255,255,.32)"
+          : index === state.turn
+            ? "#ffcf5c"
+            : vehiclePalettes[index % vehiclePalettes.length].trim;
+      ctx.beginPath();
+      ctx.arc(
+        x + player.x * mapScale,
+        y + player.y * mapScale,
+        index === state.turn ? 4.2 : 3.2,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+    });
+
+    (state.projectiles || []).forEach((shot) => {
+      ctx.fillStyle = shot.color || "#111827";
+      ctx.beginPath();
+      ctx.arc(
+        x + shot.x * mapScale,
+        y + shot.y * mapScale,
+        2.8,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+    });
+
+    if (state.explosion) {
+      ctx.strokeStyle = "rgba(255,95,109,.86)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(
+        x + state.explosion.x * mapScale,
+        y + state.explosion.y * mapScale,
+        Math.max(4, state.explosion.radius * mapScale),
+        0,
+        Math.PI * 2,
+      );
+      ctx.stroke();
+    }
+
+    const viewWidth = window.innerWidth / (camera.scale || 1);
+    const viewHeight = window.innerHeight / (camera.scale || 1);
+    ctx.strokeStyle = "rgba(255,255,255,.82)";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(
+      x + Math.max(0, camera.x) * mapScale,
+      y + Math.max(0, camera.y) * mapScale,
+      Math.min(width, viewWidth * mapScale),
+      Math.min(height, viewHeight * mapScale),
+    );
+
+    ctx.fillStyle = "#eef6ff";
+    ctx.font = "700 11px system-ui, sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("전술맵", x + 8, y + 15);
+    ctx.restore();
+  }
+
   function draw() {
     resizeCanvas();
     updateCamera();
@@ -1559,6 +1680,7 @@
     drawProjectile();
     drawExplosion();
     ctx.restore();
+    drawFortressMinimap();
   }
 
   function frame(now) {
