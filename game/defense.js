@@ -1,7 +1,7 @@
 (() => {
   const params = new URLSearchParams(window.location.search);
   const isSolo = ["solo", "local"].includes(params.get("mode") || "");
-  const assetVersion = params.get("v") || "20260530ae";
+  const assetVersion = params.get("v") || "20260530ah";
   const world = { width: 1536, height: 960, cell: 24, columns: 64, rows: 40 };
   let defenseMaps = {
     classic: {
@@ -114,6 +114,34 @@
     shield: { name: "보호막", color: "#6fe8ff" },
     boss: { name: "보스", color: "#ffd166" },
   };
+  let skillTypes = {
+    airstrike: {
+      name: "포격 지원",
+      cost: 90,
+      cooldown: 18,
+      radius: 104,
+      damage: 145,
+      color: "#ffba5a",
+      desc: "전방 적 범위 피해",
+    },
+    freeze: {
+      name: "빙결장",
+      cost: 70,
+      cooldown: 16,
+      radius: 118,
+      duration: 3.5,
+      color: "#69dcff",
+      desc: "전방 적 감속",
+    },
+    repair: {
+      name: "긴급 수리",
+      cost: 55,
+      cooldown: 20,
+      heal: 4,
+      color: "#8be66f",
+      desc: "기지 체력 회복",
+    },
+  };
 
   const shell = document.querySelector(".arena-shell");
   shell.className = "defense-shell";
@@ -154,6 +182,7 @@
         <p>타워를 선택한 뒤 경로가 아닌 칸을 클릭해 배치합니다. 방장은 첫 웨이브를 시작하고, 이후에는 준비 시간이 끝나면 자동으로 다음 웨이브가 시작됩니다.</p>
         <p>자원은 개인별로 관리되며 자신의 타워만 업그레이드하거나 판매할 수 있습니다. 폭발 타워는 화상, 저격 타워는 취약 표식을 남기고, 증폭기는 주변 타워의 공격 효율을 높입니다.</p>
         <p>보스는 체력이 낮아지면 격노해 더 빠르게 이동하고 기지 피해가 커집니다. 화상, 표식, 보호막, 격노 링을 보고 우선순위를 조정하세요.</p>
+        <p>전술 스킬은 자원을 사용합니다. Q 포격 지원은 전방 적 주변에 범위 피해를 주고, E 빙결장은 적 무리를 감속하며, F 긴급 수리는 기지를 회복합니다.</p>
         <p>맵은 1웨이브 시작 전, 타워 배치 전에만 변경할 수 있습니다. 멀티는 같은 방 참가자와 동기화되고, 혼자하기는 서버 없이 현재 브라우저 또는 EXE 안에서 실행됩니다.</p>
       </div>
     </section>
@@ -176,6 +205,7 @@
         <button id="defenseUpgrade" type="button">업그레이드</button>
         <button id="defenseSell" type="button">판매</button>
       </div>
+      <div class="defense-skills" id="defenseSkillButtons" aria-label="전술 스킬"></div>
       <p id="defenseSelection">타워를 선택하세요.</p>
     </section>
     <section class="hud net-info collapsed" id="netInfoPanel" aria-label="접속 정보">
@@ -222,6 +252,7 @@
     startWave: document.getElementById("defenseStartWave"),
     upgrade: document.getElementById("defenseUpgrade"),
     sell: document.getElementById("defenseSell"),
+    skills: document.getElementById("defenseSkillButtons"),
     selection: document.getElementById("defenseSelection"),
     center: document.getElementById("centerMessage"),
     netPanel: document.getElementById("netInfoPanel"),
@@ -268,6 +299,7 @@
       maps: defenseMaps,
       towerTypes,
       enemyTypes,
+      skillTypes,
       wavePreview: buildWavePreview(1),
       autoStartSeconds: 0,
       baseHealth: defenseMaps.classic.baseHealth,
@@ -289,6 +321,7 @@
           resources: defenseMaps.classic.startResources,
           kills: 0,
           score: 0,
+          skillCooldowns: {},
           isHost: true,
         },
       ],
@@ -379,6 +412,7 @@
       player.resources = nextMap.startResources || 180;
       player.kills = 0;
       player.score = 0;
+      player.skillCooldowns = {};
     });
     state.status = `${state.mapName} 맵이 선택되었습니다.`;
   }
@@ -387,6 +421,7 @@
     if (nextState.maps) defenseMaps = nextState.maps;
     if (nextState.towerTypes) towerTypes = nextState.towerTypes;
     if (nextState.enemyTypes) enemyTypes = nextState.enemyTypes;
+    if (nextState.skillTypes) skillTypes = nextState.skillTypes;
     if (nextState.pathPoints) setPath(nextState.pathPoints);
     if (nextState.lastPing) {
       const key = `${nextState.lastPing.x}:${nextState.lastPing.y}:${nextState.lastPing.time || ""}`;
@@ -744,6 +779,14 @@
     send({ type: "defense_sell", towerId: selectedTowerId });
   }
 
+  function actionSkill(skillType) {
+    if (isSolo) {
+      localUseSkill(skillType);
+      return;
+    }
+    send({ type: "defense_skill", skillType });
+  }
+
   function actionConfigureMap(mapId) {
     if (state.wave > 0 || state.towers.length) {
       setCenterToast(
@@ -923,6 +966,107 @@
     renderHud();
   }
 
+  function localUseSkill(skillType) {
+    const config = skillTypes[skillType];
+    const player = selfPlayer();
+    if (!config || !player) return;
+    player.skillCooldowns = player.skillCooldowns || {};
+    const cooldown = Number(player.skillCooldowns[skillType] || 0);
+    if (cooldown > 0) {
+      setCenterToast(
+        `${config.name} 재사용 대기 중입니다. ${Math.ceil(cooldown)}초`,
+      );
+      return;
+    }
+    if (player.resources < config.cost) {
+      setCenterToast("자원이 부족합니다.");
+      return;
+    }
+    if (["win", "defeat"].includes(state.phase)) {
+      setCenterToast("게임이 끝난 뒤에는 전술 스킬을 사용할 수 없습니다.");
+      return;
+    }
+    if (["airstrike", "freeze"].includes(skillType) && !state.enemies.length) {
+      setCenterToast("대상 적이 없습니다.");
+      return;
+    }
+    if (skillType === "repair" && state.baseHealth >= state.baseHealthMax) {
+      setCenterToast("기지가 이미 최대 체력입니다.");
+      return;
+    }
+
+    player.resources -= config.cost;
+    player.skillCooldowns[skillType] = config.cooldown || 0;
+    if (skillType === "airstrike") localAirstrike(player, config);
+    if (skillType === "freeze") localFreeze(player, config);
+    if (skillType === "repair") localRepair(player, config);
+    renderHud();
+  }
+
+  function frontLocalEnemy() {
+    return [...state.enemies].sort(
+      (a, b) => (b.segment || 0) - (a.segment || 0) || b.x + b.y - (a.x + a.y),
+    )[0];
+  }
+
+  function localAirstrike(player, config) {
+    const target = frontLocalEnemy();
+    if (!target) return;
+    const affected = state.enemies.filter(
+      (enemy) =>
+        Math.hypot(enemy.x - target.x, enemy.y - target.y) <= config.radius,
+    );
+    addDefenseEffect({
+      x: target.x,
+      y: target.y,
+      kind: "airstrike",
+      color: config.color,
+      ttl: 1.05,
+      text: "포격",
+    });
+    affected.forEach((enemy) => damageLocalEnemy(enemy, config.damage));
+    state.status = `${player.name} 포격 지원 호출.`;
+  }
+
+  function localFreeze(player, config) {
+    const target = frontLocalEnemy();
+    if (!target) return;
+    let count = 0;
+    state.enemies.forEach((enemy) => {
+      if (Math.hypot(enemy.x - target.x, enemy.y - target.y) > config.radius)
+        return;
+      enemy.slowUntil = Math.max(enemy.slowUntil || 0, config.duration || 0);
+      count += 1;
+    });
+    addDefenseEffect({
+      x: target.x,
+      y: target.y,
+      kind: "freeze",
+      color: config.color,
+      ttl: 1.05,
+      text: "빙결",
+    });
+    state.status = `${player.name} 빙결장으로 적 ${count}기를 묶었습니다.`;
+  }
+
+  function localRepair(player, config) {
+    const before = state.baseHealth;
+    state.baseHealth = Math.min(
+      state.baseHealthMax,
+      state.baseHealth + (config.heal || 0),
+    );
+    const end = pathPixels[pathPixels.length - 1];
+    addDefenseEffect({
+      x: end.x,
+      y: end.y,
+      kind: "repair",
+      color: config.color,
+      ttl: 1.05,
+      text: `+${state.baseHealth - before}`,
+    });
+    state.status = `${player.name} 기지 긴급 수리. +${state.baseHealth - before}`;
+  }
+
   function addDefenseEffect(effect) {
     state.effects = [...(state.effects || []), effect].slice(-64);
   }
@@ -933,6 +1077,15 @@
       .filter((effect) => effect.ttl > 0);
     state.shots.forEach((shot) => (shot.ttl -= dt));
     state.shots = state.shots.filter((shot) => shot.ttl > 0);
+    const player = selfPlayer();
+    if (player?.skillCooldowns) {
+      Object.keys(player.skillCooldowns).forEach((key) => {
+        player.skillCooldowns[key] = Math.max(
+          0,
+          Number(player.skillCooldowns[key] || 0) - dt,
+        );
+      });
+    }
     if (state.phase === "build" && state.autoStartAt) {
       state.autoStartSeconds = Math.max(
         0,
@@ -1277,6 +1430,7 @@
         : "1웨이브 시작 전, 타워 배치 전에만 변경할 수 있습니다."
     }`;
     renderWavePreview();
+    renderSkillButtons();
     ui.players.innerHTML =
       state.players
         .map(
@@ -1867,7 +2021,11 @@
     ctx.globalAlpha = alpha;
     ctx.shadowColor = color;
     ctx.shadowBlur = 16;
-    if (["build", "upgrade", "wave", "reward", "map"].includes(effect.kind)) {
+    if (
+      ["build", "upgrade", "wave", "reward", "map", "repair"].includes(
+        effect.kind,
+      )
+    ) {
       ctx.strokeStyle = color;
       ctx.lineWidth = effect.kind === "wave" ? 6 : 4;
       ctx.beginPath();
@@ -1877,13 +2035,17 @@
       ctx.beginPath();
       ctx.arc(effect.x, effect.y, 10 + (1 - alpha) * 16, 0, Math.PI * 2);
       ctx.fill();
-    } else if (["kill", "base_hit", "rage"].includes(effect.kind)) {
+    } else if (
+      ["kill", "base_hit", "rage", "airstrike", "freeze"].includes(effect.kind)
+    ) {
       ctx.fillStyle =
-        effect.kind === "base_hit"
+        effect.kind === "base_hit" || effect.kind === "airstrike"
           ? `rgba(255,95,109,${0.24 * alpha})`
           : effect.kind === "rage"
             ? `rgba(255,95,109,${0.24 * alpha})`
-            : `rgba(255,209,102,${0.22 * alpha})`;
+            : effect.kind === "freeze"
+              ? `rgba(105,220,255,${0.24 * alpha})`
+              : `rgba(255,209,102,${0.22 * alpha})`;
       ctx.beginPath();
       ctx.arc(effect.x, effect.y, 24 + (1 - alpha) * 24, 0, Math.PI * 2);
       ctx.fill();
@@ -1951,6 +2113,31 @@
     });
   }
 
+  function renderSkillButtons() {
+    const player = selfPlayer();
+    const cooldowns = player?.skillCooldowns || {};
+    const html = Object.entries(skillTypes)
+      .map(([key, skill]) => {
+        const cooldown = Number(cooldowns[key] || 0);
+        const disabled =
+          !player ||
+          player.resources < skill.cost ||
+          cooldown > 0 ||
+          ["win", "defeat"].includes(state.phase) ||
+          ((key === "airstrike" || key === "freeze") &&
+            (!state.enemies || !state.enemies.length)) ||
+          (key === "repair" && state.baseHealth >= state.baseHealthMax);
+        const label =
+          cooldown > 0 ? `${Math.ceil(cooldown)}s` : `${skill.cost}`;
+        return `<button type="button" data-skill="${escapeHtml(key)}" class="${disabled ? "disabled" : ""}" ${disabled ? "disabled" : ""}><span style="background:${skill.color}"></span><strong>${escapeHtml(skill.name)}</strong><small>${label} · ${escapeHtml(skill.desc || "")}</small></button>`;
+      })
+      .join("");
+    if (ui.skills.innerHTML !== html) ui.skills.innerHTML = html;
+    ui.skills.querySelectorAll("[data-skill]").forEach((button) => {
+      button.onclick = () => actionSkill(button.dataset.skill || "");
+    });
+  }
+
   ui.panelToggle.onclick = () => {
     const collapsed = ui.panel.classList.toggle("collapsed");
     ui.panelToggle.setAttribute("aria-expanded", String(!collapsed));
@@ -2015,6 +2202,9 @@
     }
     if (event.key.toLowerCase() === "u") actionUpgrade();
     if (event.key === "Delete" || event.key === "Backspace") actionSell();
+    if (event.key.toLowerCase() === "q") actionSkill("airstrike");
+    if (event.key.toLowerCase() === "e") actionSkill("freeze");
+    if (event.key.toLowerCase() === "f") actionSkill("repair");
     if (event.key === " ") {
       event.preventDefault();
       actionStartWave();

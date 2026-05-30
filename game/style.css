@@ -871,6 +871,49 @@ button:hover {
   opacity: 0.45;
 }
 
+.defense-skills {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.defense-skills button {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  gap: 1px 7px;
+  align-items: center;
+  min-height: 46px;
+  padding: 7px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.09);
+  color: #f5fbff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.defense-skills button:disabled {
+  cursor: not-allowed;
+  opacity: 0.44;
+}
+
+.defense-skills span {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  grid-row: 1 / span 2;
+}
+
+.defense-skills strong {
+  font-size: 0.77rem;
+}
+
+.defense-skills small {
+  color: rgba(245, 251, 255, 0.68);
+  font-size: 0.66rem;
+}
+
 #defenseSelection {
   margin: 8px 0 0;
   color: rgba(245, 251, 255, 0.78);
@@ -1151,6 +1194,10 @@ button:hover {
   }
 
   .defense-towers {
+    grid-template-columns: 1fr;
+  }
+
+  .defense-skills {
     grid-template-columns: 1fr;
   }
 

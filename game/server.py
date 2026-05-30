@@ -31,7 +31,55 @@ BULLET_TTL = 1.6
 FIRE_COOLDOWN = 0.22
 RESPAWN_DELAY = 1.8
 TICK_RATE = 30
-ARENA_PICKUP_TARGET = 12
+ARENA_PICKUP_TARGET = 15
+ARENA_WEAPONS: dict[str, dict[str, Any]] = {
+    "blaster": {
+        "damage": 25,
+        "speed": BULLET_SPEED,
+        "radius": BULLET_RADIUS,
+        "ttl": BULLET_TTL,
+        "cooldown": FIRE_COOLDOWN,
+        "count": 1,
+        "spread": 0.0,
+        "splash": 0.0,
+    },
+    "spread": {
+        "damage": 14,
+        "speed": 610,
+        "radius": 4.6,
+        "ttl": 1.08,
+        "cooldown": 0.42,
+        "count": 5,
+        "spread": 0.34,
+        "splash": 0.0,
+        "ammo": 12,
+        "duration": 10.0,
+    },
+    "rail": {
+        "damage": 42,
+        "speed": 930,
+        "radius": 4.0,
+        "ttl": 1.22,
+        "cooldown": 0.62,
+        "count": 1,
+        "spread": 0.0,
+        "splash": 0.0,
+        "ammo": 7,
+        "duration": 11.0,
+    },
+    "rocket": {
+        "damage": 34,
+        "speed": 430,
+        "radius": 8.0,
+        "ttl": 1.85,
+        "cooldown": 0.66,
+        "count": 1,
+        "spread": 0.0,
+        "splash": 82.0,
+        "ammo": 5,
+        "duration": 12.0,
+    },
+}
 ARENA_CONTROL_POINT_SPECS = [
     {"id": "alpha", "x": 650, "y": 520, "radius": 118, "label": "A"},
     {"id": "bravo", "x": 1300, "y": 800, "radius": 132, "label": "B"},
@@ -249,6 +297,34 @@ DEFENSE_ENEMY_TYPES: dict[str, dict[str, Any]] = {
         "color": "#ffd166",
     },
 }
+DEFENSE_SKILLS: dict[str, dict[str, Any]] = {
+    "airstrike": {
+        "name": "포격 지원",
+        "cost": 90,
+        "cooldown": 18.0,
+        "radius": 104.0,
+        "damage": 145.0,
+        "color": "#ffba5a",
+        "desc": "전방 적 주변에 범위 피해",
+    },
+    "freeze": {
+        "name": "빙결장",
+        "cost": 70,
+        "cooldown": 16.0,
+        "radius": 118.0,
+        "duration": 3.5,
+        "color": "#69dcff",
+        "desc": "전방 적 주변을 감속",
+    },
+    "repair": {
+        "name": "긴급 수리",
+        "cost": 55,
+        "cooldown": 20.0,
+        "heal": 4,
+        "color": "#8be66f",
+        "desc": "기지 체력 회복",
+    },
+}
 
 
 def defense_cell_center(cell_x: int, cell_y: int) -> tuple[float, float]:
@@ -379,6 +455,9 @@ class Client:
     shield_until: float = 0
     haste_until: float = 0
     rapid_until: float = 0
+    weapon: str = "blaster"
+    weapon_until: float = 0
+    weapon_ammo: int = 0
     input: dict[str, Any] = field(default_factory=dict)
     write_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
@@ -393,6 +472,10 @@ class Bullet:
     vy: float
     color: str
     ttl: float = BULLET_TTL
+    kind: str = "blaster"
+    damage: int = 25
+    radius: float = BULLET_RADIUS
+    splash: float = 0.0
 
 
 @dataclass
@@ -461,6 +544,7 @@ class DefenseClient:
     resources: int = DEFENSE_START_RESOURCES
     kills: int = 0
     score: int = 0
+    skill_cooldowns: dict[str, float] = field(default_factory=dict)
     connected_at: float = field(default_factory=time.time)
     write_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
@@ -753,6 +837,8 @@ class FortressMatch:
             "weapon": FORTRESS_DEFAULT_WEAPON,
             "health": 100,
             "shield": False,
+            "fallDamage": 0,
+            "fallFlash": 0.0,
             "activeItem": "",
             "items": {"repair": 1, "shield": 1, "power": 1},
         }
@@ -1018,6 +1104,8 @@ class FortressMatch:
             self.next_turn()
         if self.ready():
             self.update_projectiles(dt)
+        for player in self.players:
+            player["fallFlash"] = max(0.0, float(player.get("fallFlash", 0.0)) - dt)
         if self.explosion:
             self.explosion["age"] += dt
             if self.explosion["age"] > 0.55:
@@ -1099,6 +1187,7 @@ class FortressMatch:
         return False
 
     def explode_projectile(self, shot: dict[str, Any], x: float, y: float) -> None:
+        previous_y = [float(player["y"]) for player in self.players]
         self.explosion = {"x": x, "y": y, "radius": shot["radius"], "age": 0.0}
         self.impact_marks.append(
             {
@@ -1114,6 +1203,7 @@ class FortressMatch:
         self.carve_terrain(x, y, shot["radius"], shot.get("carve", 1.0))
         self.apply_explosion_damage(x, y, shot["radius"], shot["damage"])
         self.place_players()
+        self.apply_fall_damage(previous_y)
 
     def carve_terrain(self, cx: float, cy: float, radius: float, carve: float = 1.0) -> None:
         start = self.clamp(math.floor(cx - radius), 0, FORTRESS_WIDTH)
@@ -1144,6 +1234,35 @@ class FortressMatch:
             hits.append(f"{player['name']} -{damage}")
 
         self.status = ", ".join(hits) if hits else "빗나감."
+        loser = next((player for player in self.players if player["health"] <= 0), None)
+        if loser:
+            self.game_over = True
+            winner = next(player for player in self.players if player is not loser)
+            self.status = f"{winner['name']} 승리. R 키로 다시 시작."
+
+    def apply_fall_damage(self, previous_y: list[float]) -> None:
+        if self.game_over:
+            return
+        hits: list[str] = []
+        for index, player in enumerate(self.players):
+            fall = float(player["y"]) - previous_y[index]
+            if fall < 42 or player["health"] <= 0:
+                player["fallDamage"] = 0
+                continue
+            damage = min(28, max(4, round((fall - 32) / 6)))
+            if player["shield"]:
+                damage = math.ceil(damage * 0.45)
+                player["shield"] = False
+            player["health"] = max(0, player["health"] - damage)
+            player["fallDamage"] = damage
+            player["fallFlash"] = 1.05
+            hits.append(f"{player['name']} 낙하 -{damage}")
+        if hits:
+            self.status = (
+                f"{self.status} · {', '.join(hits)}"
+                if self.status
+                else ", ".join(hits)
+            )
         loser = next((player for player in self.players if player["health"] <= 0), None)
         if loser:
             self.game_over = True
@@ -1455,6 +1574,79 @@ class DefenseRoom:
         self.add_effect(tower_x, tower_y, "sell", "#c8f7ff", 0.65, f"+{refund}")
         self.status = f"{client.name}님이 타워를 판매했습니다. +{refund}"
         return ""
+
+    def use_skill(self, client: DefenseClient, skill_type: str) -> str:
+        config = DEFENSE_SKILLS.get(skill_type)
+        if not config:
+            return "알 수 없는 전술 스킬입니다."
+        if self.phase in {"win", "defeat"}:
+            return "게임이 끝난 뒤에는 전술 스킬을 사용할 수 없습니다."
+        now = time.time()
+        remaining = float(client.skill_cooldowns.get(skill_type, 0.0)) - now
+        if remaining > 0:
+            return f"{config['name']} 재사용 대기 중입니다. {math.ceil(remaining)}초"
+        cost = int(config["cost"])
+        if client.resources < cost:
+            return "자원이 부족합니다."
+        if skill_type in {"airstrike", "freeze"} and not self.enemies:
+            return "대상 적이 없습니다."
+        if skill_type == "repair" and self.base_health >= self.base_health_max:
+            return "기지가 이미 최대 체력입니다."
+
+        client.resources -= cost
+        client.skill_cooldowns[skill_type] = now + float(config["cooldown"])
+        if skill_type == "airstrike":
+            self.use_airstrike(client, config)
+        elif skill_type == "freeze":
+            self.use_freeze(client, config)
+        elif skill_type == "repair":
+            self.use_repair(client, config)
+        return ""
+
+    def front_enemy(self) -> DefenseEnemy | None:
+        return max(
+            self.enemies,
+            key=lambda enemy: (enemy.segment, enemy.x + enemy.y),
+            default=None,
+        )
+
+    def use_airstrike(self, client: DefenseClient, config: dict[str, Any]) -> None:
+        target = self.front_enemy()
+        if not target:
+            return
+        radius = float(config["radius"])
+        damage = float(config["damage"])
+        affected = [
+            enemy
+            for enemy in list(self.enemies)
+            if math.hypot(enemy.x - target.x, enemy.y - target.y) <= radius
+        ]
+        self.add_effect(target.x, target.y, "airstrike", str(config["color"]), 1.05, "포격")
+        for enemy in affected:
+            if enemy in self.enemies:
+                self.damage_enemy(enemy, damage, client.id)
+        self.status = f"{client.name}님이 포격 지원을 호출했습니다."
+
+    def use_freeze(self, client: DefenseClient, config: dict[str, Any]) -> None:
+        target = self.front_enemy()
+        if not target:
+            return
+        radius = float(config["radius"])
+        duration = float(config["duration"])
+        count = 0
+        for enemy in self.enemies:
+            if math.hypot(enemy.x - target.x, enemy.y - target.y) <= radius:
+                enemy.slow_until = max(enemy.slow_until, duration)
+                count += 1
+        self.add_effect(target.x, target.y, "freeze", str(config["color"]), 1.05, "빙결")
+        self.status = f"{client.name}님이 빙결장으로 적 {count}기를 묶었습니다."
+
+    def use_repair(self, client: DefenseClient, config: dict[str, Any]) -> None:
+        before = self.base_health
+        self.base_health = min(self.base_health_max, self.base_health + int(config["heal"]))
+        end_x, end_y = self.path_pixels[-1]
+        self.add_effect(end_x, end_y, "repair", str(config["color"]), 1.05, f"+{self.base_health - before}")
+        self.status = f"{client.name}님이 기지를 긴급 수리했습니다. +{self.base_health - before}"
 
     def can_place(self, cell_x: int, cell_y: int) -> bool:
         if cell_x < 0 or cell_x >= DEFENSE_COLUMNS or cell_y < 0 or cell_y >= DEFENSE_ROWS:
@@ -1822,6 +2014,7 @@ class DefenseRoom:
             "maps": DEFENSE_MAPS,
             "towerTypes": DEFENSE_TOWERS,
             "enemyTypes": DEFENSE_ENEMY_TYPES,
+            "skillTypes": DEFENSE_SKILLS,
             "wavePreview": self.wave_preview(),
             "autoStartSeconds": auto_start_seconds,
             "baseHealth": self.base_health,
@@ -1839,6 +2032,10 @@ class DefenseRoom:
                     "resources": client.resources,
                     "kills": client.kills,
                     "score": client.score,
+                    "skillCooldowns": {
+                        key: max(0, round(until - time.time(), 1))
+                        for key, until in client.skill_cooldowns.items()
+                    },
                     "isHost": client.id == self.host_id,
                     "connectedAt": round(client.connected_at, 3),
                 }
@@ -3177,6 +3374,8 @@ class ArenaServer:
             error = room.upgrade_tower(client, self.safe_int(message.get("towerId"), -1))
         elif kind == "defense_sell":
             error = room.sell_tower(client, self.safe_int(message.get("towerId"), -1))
+        elif kind == "defense_skill":
+            error = room.use_skill(client, str(message.get("skillType") or ""))
         if error:
             await self.send_json(
                 client.writer,
@@ -3789,6 +3988,9 @@ class ArenaServer:
                         client.shield_until = 0
                         client.haste_until = 0
                         client.rapid_until = 0
+                        client.weapon = "blaster"
+                        client.weapon_until = 0
+                        client.weapon_ammo = 0
                         self.add_arena_effect(
                             room,
                             client.x,
@@ -3810,12 +4012,14 @@ class ArenaServer:
                 speed = PLAYER_SPEED * (1.32 if now < client.haste_until else 1.0)
                 self.move_arena_client(client, dx * speed * dt, dy * speed * dt)
                 self.collect_arena_pickups(room, client, now)
+                self.expire_arena_weapon(client, now)
 
                 aim_x = float(controls.get("aimX", client.x + 1))
                 aim_y = float(controls.get("aimY", client.y))
                 client.angle = math.atan2(aim_y - client.y, aim_x - client.x)
 
-                cooldown = FIRE_COOLDOWN * (0.55 if now < client.rapid_until else 1.0)
+                weapon_config = ARENA_WEAPONS.get(client.weapon, ARENA_WEAPONS["blaster"])
+                cooldown = float(weapon_config["cooldown"]) * (0.55 if now < client.rapid_until else 1.0)
                 if controls.get("fire") and now - client.last_fire >= cooldown:
                     self.spawn_bullet(room, client)
                     client.last_fire = now
@@ -3838,6 +4042,15 @@ class ArenaServer:
     ) -> None:
         room.effects.append(ArenaEffect(x=x, y=y, kind=kind, color=color, ttl=ttl, text=text))
         room.effects = room.effects[-36:]
+
+    def expire_arena_weapon(self, client: Client, now: float) -> None:
+        if client.weapon == "blaster":
+            return
+        if client.weapon_ammo > 0 and now < client.weapon_until:
+            return
+        client.weapon = "blaster"
+        client.weapon_until = 0
+        client.weapon_ammo = 0
 
     def update_arena_control_points(self, room: ArenaRoom, dt: float, now: float) -> None:
         for point in room.control_points:
@@ -3905,7 +4118,15 @@ class ArenaServer:
             client.y = next_y
 
     def ensure_arena_pickups(self, room: ArenaRoom) -> None:
-        kinds = ["heal", "shield", "haste", "rapid"]
+        kinds = [
+            "heal",
+            "shield",
+            "haste",
+            "rapid",
+            "spread",
+            "rail",
+            "rocket",
+        ]
         while len(room.pickups) < ARENA_PICKUP_TARGET:
             x, y = self.random_spawn()
             room.pickups.append(
@@ -3932,6 +4153,11 @@ class ArenaServer:
                 client.haste_until = now + 5.0
             elif pickup.kind == "rapid":
                 client.rapid_until = now + 5.0
+            elif pickup.kind in ARENA_WEAPONS and pickup.kind != "blaster":
+                weapon_config = ARENA_WEAPONS[pickup.kind]
+                client.weapon = pickup.kind
+                client.weapon_until = now + float(weapon_config.get("duration", 10.0))
+                client.weapon_ammo = int(weapon_config.get("ammo", 6))
             self.add_arena_effect(
                 room,
                 pickup.x,
@@ -3944,20 +4170,47 @@ class ArenaServer:
         room.pickups = remaining
 
     def spawn_bullet(self, room: ArenaRoom, client: Client) -> None:
-        vx = math.cos(client.angle) * BULLET_SPEED
-        vy = math.sin(client.angle) * BULLET_SPEED
-        room.bullets.append(
-            Bullet(
-                id=room.next_bullet_id,
-                owner_id=client.id,
-                x=client.x + math.cos(client.angle) * (PLAYER_RADIUS + 10),
-                y=client.y + math.sin(client.angle) * (PLAYER_RADIUS + 10),
-                vx=vx,
-                vy=vy,
-                color=client.color,
+        weapon_key = client.weapon if client.weapon in ARENA_WEAPONS else "blaster"
+        weapon = ARENA_WEAPONS[weapon_key]
+        count = int(weapon.get("count", 1))
+        spread = float(weapon.get("spread", 0.0))
+        start = -spread / 2 if count > 1 else 0.0
+        step = spread / max(1, count - 1)
+        for index in range(count):
+            angle = client.angle + start + step * index
+            speed = float(weapon["speed"])
+            vx = math.cos(angle) * speed
+            vy = math.sin(angle) * speed
+            room.bullets.append(
+                Bullet(
+                    id=room.next_bullet_id,
+                    owner_id=client.id,
+                    x=client.x + math.cos(angle) * (PLAYER_RADIUS + 10),
+                    y=client.y + math.sin(angle) * (PLAYER_RADIUS + 10),
+                    vx=vx,
+                    vy=vy,
+                    color=client.color,
+                    ttl=float(weapon["ttl"]),
+                    kind=weapon_key,
+                    damage=int(weapon["damage"]),
+                    radius=float(weapon["radius"]),
+                    splash=float(weapon.get("splash", 0.0)),
+                )
             )
+            room.next_bullet_id += 1
+        self.add_arena_effect(
+            room,
+            client.x + math.cos(client.angle) * (PLAYER_RADIUS + 18),
+            client.y + math.sin(client.angle) * (PLAYER_RADIUS + 18),
+            "muzzle",
+            client.color,
+            0.16,
         )
-        room.next_bullet_id += 1
+        if weapon_key != "blaster":
+            client.weapon_ammo = max(0, client.weapon_ammo - 1)
+            if client.weapon_ammo <= 0:
+                client.weapon = "blaster"
+                client.weapon_until = 0
 
     def update_bullets(self, room: ArenaRoom, dt: float) -> None:
         alive_bullets: list[Bullet] = []
@@ -3973,14 +4226,17 @@ class ArenaServer:
                 or bullet.y < 0
                 or bullet.y > ARENA_HEIGHT
             ):
-                self.add_arena_effect(room, bullet.x, bullet.y, "impact", bullet.color, 0.45)
+                self.resolve_arena_bullet_impact(room, bullet)
                 continue
-            if self.arena_circle_hits_obstacle(bullet.x, bullet.y, BULLET_RADIUS):
-                self.add_arena_effect(room, bullet.x, bullet.y, "impact", bullet.color, 0.45)
+            if self.arena_circle_hits_obstacle(bullet.x, bullet.y, bullet.radius):
+                self.resolve_arena_bullet_impact(room, bullet)
                 continue
             hit = self.find_bullet_hit(bullet, players)
             if hit:
-                self.damage_player(room, hit, bullet.owner_id, bullet.color)
+                if bullet.splash > 0:
+                    self.resolve_arena_bullet_impact(room, bullet)
+                else:
+                    self.damage_player(room, hit, bullet.owner_id, bullet.color, bullet.damage)
                 continue
             alive_bullets.append(bullet)
         room.bullets = alive_bullets
@@ -3989,15 +4245,30 @@ class ArenaServer:
         for player in players:
             if not player.alive or player.id == bullet.owner_id:
                 continue
-            if math.hypot(player.x - bullet.x, player.y - bullet.y) <= PLAYER_RADIUS + BULLET_RADIUS:
+            if math.hypot(player.x - bullet.x, player.y - bullet.y) <= PLAYER_RADIUS + bullet.radius:
                 return player
         return None
 
+    def resolve_arena_bullet_impact(self, room: ArenaRoom, bullet: Bullet) -> None:
+        if bullet.splash <= 0:
+            self.add_arena_effect(room, bullet.x, bullet.y, "impact", bullet.color, 0.45)
+            return
+        self.add_arena_effect(room, bullet.x, bullet.y, "rocket", bullet.color, 0.72, "BOOM")
+        for player in list(room.clients.values()):
+            if not player.alive or player.id == bullet.owner_id:
+                continue
+            gap = math.hypot(player.x - bullet.x, player.y - bullet.y)
+            if gap > bullet.splash + PLAYER_RADIUS:
+                continue
+            ratio = max(0.25, 1.0 - gap / max(1.0, bullet.splash))
+            damage = max(10, round(bullet.damage * ratio))
+            self.damage_player(room, player, bullet.owner_id, bullet.color, damage)
+
     def damage_player(
-        self, room: ArenaRoom, victim: Client, attacker_id: str, color: str
+        self, room: ArenaRoom, victim: Client, attacker_id: str, color: str, amount: int = 25
     ) -> None:
         now = time.monotonic()
-        damage = 10 if now < victim.shield_until else 25
+        damage = max(6, round(amount * 0.4)) if now < victim.shield_until else amount
         victim.health = max(0, victim.health - damage)
         self.add_arena_effect(
             room,
@@ -4021,6 +4292,8 @@ class ArenaServer:
             if not room.clients:
                 continue
             now = time.monotonic()
+            for client in room.clients.values():
+                self.expire_arena_weapon(client, now)
             state = {
                 "type": "state",
                 "roomId": room_id,
@@ -4045,6 +4318,9 @@ class ArenaServer:
                         "shielded": now < client.shield_until,
                         "hasted": now < client.haste_until,
                         "rapid": now < client.rapid_until,
+                        "weapon": client.weapon,
+                        "weaponAmmo": client.weapon_ammo,
+                        "weaponTtl": max(0, round(client.weapon_until - now, 2)),
                     }
                     for client in room.clients.values()
                 ],
@@ -4078,8 +4354,9 @@ class ArenaServer:
                         "y": round(bullet.y, 2),
                         "vx": round(bullet.vx, 2),
                         "vy": round(bullet.vy, 2),
-                        "radius": BULLET_RADIUS,
+                        "radius": round(bullet.radius, 2),
                         "color": bullet.color,
+                        "kind": bullet.kind,
                     }
                     for bullet in room.bullets
                 ],

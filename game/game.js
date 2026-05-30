@@ -35,6 +35,66 @@ const localArenaConfig = {
   fireCooldown: 0.22,
   respawnDelay: 1.8,
 };
+const arenaWeaponSpecs = {
+  blaster: {
+    damage: 25,
+    speed: 650,
+    radius: 5,
+    ttl: 1.6,
+    cooldown: 0.22,
+    count: 1,
+    spread: 0,
+    splash: 0,
+    label: "기본",
+    icon: "B",
+    color: "#f5fbff",
+  },
+  spread: {
+    damage: 14,
+    speed: 610,
+    radius: 4.6,
+    ttl: 1.08,
+    cooldown: 0.42,
+    count: 5,
+    spread: 0.34,
+    splash: 0,
+    ammo: 12,
+    duration: 10,
+    label: "샷건",
+    icon: "S",
+    color: "#ffba5a",
+  },
+  rail: {
+    damage: 42,
+    speed: 930,
+    radius: 4,
+    ttl: 1.22,
+    cooldown: 0.62,
+    count: 1,
+    spread: 0,
+    splash: 0,
+    ammo: 7,
+    duration: 11,
+    label: "레일건",
+    icon: "R",
+    color: "#69dcff",
+  },
+  rocket: {
+    damage: 34,
+    speed: 430,
+    radius: 8,
+    ttl: 1.85,
+    cooldown: 0.66,
+    count: 1,
+    spread: 0,
+    splash: 82,
+    ammo: 5,
+    duration: 12,
+    label: "로켓",
+    icon: "!",
+    color: "#ff5f6d",
+  },
+};
 const arenaControlPointSpecs = [
   { id: "alpha", x: 650, y: 520, radius: 118, label: "A" },
   { id: "bravo", x: 1300, y: 800, radius: 132, label: "B" },
@@ -144,7 +204,7 @@ function safeUrl(value) {
 }
 
 function currentAssetVersion() {
-  return new URLSearchParams(window.location.search).get("v") || "20260530ae";
+  return new URLSearchParams(window.location.search).get("v") || "20260530ah";
 }
 
 function nowSeconds() {
@@ -461,9 +521,20 @@ function renderScoreboard() {
         (player) =>
           `<li><span class="score-name"><span class="score-dot" style="background:${player.color}"></span>${escapeHtml(
             player.name,
-          )}</span><span class="score-value">${player.score}</span></li>`,
+          )}</span><span class="score-value">${player.score}${escapeHtml(
+            arenaPlayerWeaponText(player),
+          )}</span></li>`,
       )
       .join("") || "<li>No players</li>";
+}
+
+function arenaPlayerWeaponText(player) {
+  const key = player.weapon || "blaster";
+  if (key === "blaster") return "";
+  const spec = arenaWeaponSpecs[key];
+  if (!spec) return "";
+  const ammo = Number(player.weaponAmmo || 0);
+  return ` · ${spec.label} ${ammo}`;
 }
 
 function escapeHtml(value) {
@@ -530,6 +601,9 @@ function createLocalArenaPlayer(id, name, color, x, y, bot) {
     shieldUntil: 0,
     hasteUntil: 0,
     rapidUntil: 0,
+    weapon: "blaster",
+    weaponUntil: 0,
+    weaponAmmo: 0,
     shielded: false,
     hasted: false,
     rapid: false,
@@ -557,7 +631,15 @@ function createLocalArenaControlPoints() {
 }
 
 function createLocalArenaPickup() {
-  const kinds = ["heal", "shield", "haste", "rapid"];
+  const kinds = [
+    "heal",
+    "shield",
+    "haste",
+    "rapid",
+    "spread",
+    "rail",
+    "rocket",
+  ];
   const point = randomArenaPoint();
   return {
     id: localArenaIds.pickup++,
@@ -623,6 +705,9 @@ function respawnLocalArenaPlayer(player, now) {
   player.shieldUntil = 0;
   player.hasteUntil = 0;
   player.rapidUntil = 0;
+  player.weapon = "blaster";
+  player.weaponUntil = 0;
+  player.weaponAmmo = 0;
   addLocalArenaEffect({
     x: player.x,
     y: player.y,
@@ -649,9 +734,11 @@ function updateLocalArena(dt, now) {
   ensureLocalArenaPickups();
   updateLocalArenaControlPoints(dt, now);
   latestState.players.forEach((item) => {
+    expireLocalArenaWeapon(item, now);
     item.shielded = now < item.shieldUntil;
     item.hasted = now < item.hasteUntil;
     item.rapid = now < item.rapidUntil;
+    item.weaponTtl = Math.max(0, (item.weaponUntil || 0) - now);
     item.respawnIn = item.alive ? 0 : Math.max(0, item.respawnAt - now);
   });
   renderScoreboard();
@@ -659,6 +746,14 @@ function updateLocalArena(dt, now) {
 
 function addLocalArenaEffect(effect) {
   latestState.effects = [...(latestState.effects || []), effect].slice(-36);
+}
+
+function expireLocalArenaWeapon(player, now) {
+  if (!player || player.weapon === "blaster") return;
+  if ((player.weaponAmmo || 0) > 0 && now < (player.weaponUntil || 0)) return;
+  player.weapon = "blaster";
+  player.weaponUntil = 0;
+  player.weaponAmmo = 0;
 }
 
 function updateLocalArenaControlPoints(dt, now) {
@@ -829,25 +924,41 @@ function nearestLocalArenaControlPoint(player) {
 }
 
 function spawnLocalArenaBullet(player, now) {
-  const cooldown =
-    localArenaConfig.fireCooldown * (now < player.rapidUntil ? 0.55 : 1);
+  expireLocalArenaWeapon(player, now);
+  const weaponKey = arenaWeaponSpecs[player.weapon] ? player.weapon : "blaster";
+  const weapon = arenaWeaponSpecs[weaponKey];
+  const cooldown = weapon.cooldown * (now < player.rapidUntil ? 0.55 : 1);
   if (now - player.lastFire < cooldown) return;
   player.lastFire = now;
+  const count = weapon.count || 1;
+  const spread = weapon.spread || 0;
+  const start = count > 1 ? -spread / 2 : 0;
+  const step = count > 1 ? spread / Math.max(1, count - 1) : 0;
+  for (let index = 0; index < count; index += 1) {
+    const angle = player.angle + start + step * index;
+    const muzzleX =
+      player.x + Math.cos(angle) * (localArenaConfig.playerRadius + 10);
+    const muzzleY =
+      player.y + Math.sin(angle) * (localArenaConfig.playerRadius + 10);
+    latestState.bullets.push({
+      id: localArenaIds.bullet++,
+      ownerId: player.id,
+      x: muzzleX,
+      y: muzzleY,
+      vx: Math.cos(angle) * weapon.speed,
+      vy: Math.sin(angle) * weapon.speed,
+      radius: weapon.radius,
+      ttl: weapon.ttl,
+      color: player.color,
+      kind: weaponKey,
+      damage: weapon.damage,
+      splash: weapon.splash || 0,
+    });
+  }
   const muzzleX =
-    player.x + Math.cos(player.angle) * (localArenaConfig.playerRadius + 10);
+    player.x + Math.cos(player.angle) * (localArenaConfig.playerRadius + 18);
   const muzzleY =
-    player.y + Math.sin(player.angle) * (localArenaConfig.playerRadius + 10);
-  latestState.bullets.push({
-    id: localArenaIds.bullet++,
-    ownerId: player.id,
-    x: muzzleX,
-    y: muzzleY,
-    vx: Math.cos(player.angle) * localArenaConfig.bulletSpeed,
-    vy: Math.sin(player.angle) * localArenaConfig.bulletSpeed,
-    radius: localArenaConfig.bulletRadius,
-    ttl: localArenaConfig.bulletTtl,
-    color: player.color,
-  });
+    player.y + Math.sin(player.angle) * (localArenaConfig.playerRadius + 18);
   addLocalArenaEffect({
     x: muzzleX,
     y: muzzleY,
@@ -855,6 +966,13 @@ function spawnLocalArenaBullet(player, now) {
     color: player.color,
     ttl: 0.16,
   });
+  if (weaponKey !== "blaster") {
+    player.weaponAmmo = Math.max(0, (player.weaponAmmo || 0) - 1);
+    if (player.weaponAmmo <= 0) {
+      player.weapon = "blaster";
+      player.weaponUntil = 0;
+    }
+  }
 }
 
 function updateLocalArenaBullets(dt, now) {
@@ -869,15 +987,13 @@ function updateLocalArenaBullets(dt, now) {
       bullet.x > localArenaConfig.width ||
       bullet.y < 0 ||
       bullet.y > localArenaConfig.height ||
-      arenaCircleHitsObstacle(bullet.x, bullet.y, localArenaConfig.bulletRadius)
+      arenaCircleHitsObstacle(
+        bullet.x,
+        bullet.y,
+        bullet.radius || localArenaConfig.bulletRadius,
+      )
     ) {
-      addLocalArenaEffect({
-        x: bullet.x,
-        y: bullet.y,
-        kind: "impact",
-        color: bullet.color,
-        ttl: 0.45,
-      });
+      resolveLocalArenaBulletImpact(bullet, now);
       continue;
     }
     const hit = latestState.players.find(
@@ -885,10 +1001,21 @@ function updateLocalArenaBullets(dt, now) {
         player.alive &&
         player.id !== bullet.ownerId &&
         Math.hypot(player.x - bullet.x, player.y - bullet.y) <=
-          localArenaConfig.playerRadius + localArenaConfig.bulletRadius,
+          localArenaConfig.playerRadius +
+            (bullet.radius || localArenaConfig.bulletRadius),
     );
     if (hit) {
-      damageLocalArenaPlayer(hit, bullet.ownerId, now, bullet.color);
+      if ((bullet.splash || 0) > 0) {
+        resolveLocalArenaBulletImpact(bullet, now);
+      } else {
+        damageLocalArenaPlayer(
+          hit,
+          bullet.ownerId,
+          now,
+          bullet.color,
+          bullet.damage || 25,
+        );
+      }
       continue;
     }
     alive.push(bullet);
@@ -896,8 +1023,39 @@ function updateLocalArenaBullets(dt, now) {
   latestState.bullets = alive;
 }
 
-function damageLocalArenaPlayer(victim, attackerId, now, color) {
-  const damage = now < victim.shieldUntil ? 10 : 25;
+function resolveLocalArenaBulletImpact(bullet, now) {
+  const splash = bullet.splash || 0;
+  if (splash <= 0) {
+    addLocalArenaEffect({
+      x: bullet.x,
+      y: bullet.y,
+      kind: "impact",
+      color: bullet.color,
+      ttl: 0.45,
+    });
+    return;
+  }
+  addLocalArenaEffect({
+    x: bullet.x,
+    y: bullet.y,
+    kind: "rocket",
+    color: bullet.color,
+    ttl: 0.72,
+    text: "BOOM",
+  });
+  latestState.players.forEach((player) => {
+    if (!player.alive || player.id === bullet.ownerId) return;
+    const gap = Math.hypot(player.x - bullet.x, player.y - bullet.y);
+    if (gap > splash + localArenaConfig.playerRadius) return;
+    const ratio = Math.max(0.25, 1 - gap / Math.max(1, splash));
+    const damage = Math.max(10, Math.round((bullet.damage || 34) * ratio));
+    damageLocalArenaPlayer(player, bullet.ownerId, now, bullet.color, damage);
+  });
+}
+
+function damageLocalArenaPlayer(victim, attackerId, now, color, amount = 25) {
+  const damage =
+    now < victim.shieldUntil ? Math.max(6, Math.round(amount * 0.4)) : amount;
   victim.health = Math.max(0, victim.health - damage);
   addLocalArenaEffect({
     x: victim.x,
@@ -930,6 +1088,12 @@ function collectLocalArenaPickups(player, now) {
     if (pickup.kind === "shield") player.shieldUntil = now + 5;
     if (pickup.kind === "haste") player.hasteUntil = now + 5;
     if (pickup.kind === "rapid") player.rapidUntil = now + 5;
+    if (arenaWeaponSpecs[pickup.kind] && pickup.kind !== "blaster") {
+      const weapon = arenaWeaponSpecs[pickup.kind];
+      player.weapon = pickup.kind;
+      player.weaponUntil = now + (weapon.duration || 10);
+      player.weaponAmmo = weapon.ammo || 6;
+    }
     addLocalArenaEffect({
       x: pickup.x,
       y: pickup.y,
@@ -1211,12 +1375,25 @@ function pickupColor(kind) {
       shield: "#69dcff",
       haste: "#ffcf5c",
       rapid: "#ff8fd4",
+      spread: arenaWeaponSpecs.spread.color,
+      rail: arenaWeaponSpecs.rail.color,
+      rocket: arenaWeaponSpecs.rocket.color,
     }[kind] || "#f8f871"
   );
 }
 
 function pickupLabel(kind) {
-  return { heal: "+", shield: "S", haste: ">", rapid: "R" }[kind] || "?";
+  return (
+    {
+      heal: "+",
+      shield: "S",
+      haste: ">",
+      rapid: "R",
+      spread: arenaWeaponSpecs.spread.icon,
+      rail: arenaWeaponSpecs.rail.icon,
+      rocket: arenaWeaponSpecs.rocket.icon,
+    }[kind] || "?"
+  );
 }
 
 function drawPickup(pickup) {
@@ -1247,24 +1424,45 @@ function drawPickup(pickup) {
 function drawBullet(bullet) {
   const x = bullet.x - camera.x;
   const y = bullet.y - camera.y;
+  const kind = bullet.kind || "blaster";
+  const spec = arenaWeaponSpecs[kind] || arenaWeaponSpecs.blaster;
   ctx.save();
-  ctx.shadowColor = bullet.color;
-  ctx.shadowBlur = 16;
-  ctx.strokeStyle = bullet.color;
+  ctx.shadowColor = spec.color || bullet.color;
+  ctx.shadowBlur = kind === "rocket" ? 22 : kind === "rail" ? 20 : 16;
+  ctx.strokeStyle = spec.color || bullet.color;
   ctx.globalAlpha = 0.38;
-  ctx.lineWidth = 8;
+  ctx.lineWidth = kind === "rail" ? 11 : 8;
   ctx.beginPath();
   ctx.moveTo(x, y);
   ctx.lineTo(
-    x - Math.cos(Math.atan2(bullet.vy || 0, bullet.vx || 1)) * 18,
-    y - Math.sin(Math.atan2(bullet.vy || 0, bullet.vx || 1)) * 18,
+    x -
+      Math.cos(Math.atan2(bullet.vy || 0, bullet.vx || 1)) *
+        (kind === "rail" ? 42 : 18),
+    y -
+      Math.sin(Math.atan2(bullet.vy || 0, bullet.vx || 1)) *
+        (kind === "rail" ? 42 : 18),
   );
   ctx.stroke();
   ctx.globalAlpha = 1;
-  ctx.fillStyle = bullet.color;
+  ctx.fillStyle = kind === "rocket" ? "#111827" : spec.color || bullet.color;
   ctx.beginPath();
   ctx.arc(x, y, bullet.radius || 5, 0, Math.PI * 2);
   ctx.fill();
+  if (kind === "rocket") {
+    ctx.strokeStyle = spec.color;
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.fillStyle = spec.color;
+    ctx.beginPath();
+    ctx.arc(
+      x - Math.cos(Math.atan2(bullet.vy || 0, bullet.vx || 1)) * 10,
+      y - Math.sin(Math.atan2(bullet.vy || 0, bullet.vx || 1)) * 10,
+      4,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+  }
   ctx.restore();
 }
 
@@ -1284,7 +1482,18 @@ function drawArenaEffect(effect) {
   const lift = (1 - alpha) * 28;
   ctx.save();
   ctx.globalAlpha = alpha;
-  if (effect.kind === "impact" || effect.kind === "muzzle") {
+  if (effect.kind === "rocket") {
+    const radius = 68 * (1.08 - alpha * 0.42);
+    ctx.fillStyle = "rgba(255,95,109,.18)";
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = effect.color || "#ff5f6d";
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.arc(x, y, radius * 0.72, 0, Math.PI * 2);
+    ctx.stroke();
+  } else if (effect.kind === "impact" || effect.kind === "muzzle") {
     const radius = effect.kind === "muzzle" ? 20 : 30;
     ctx.strokeStyle = effect.color || "#f8f871";
     ctx.lineWidth = effect.kind === "muzzle" ? 3 : 4;
@@ -1324,6 +1533,8 @@ function drawPlayer(player) {
   const x = player.x - camera.x;
   const y = player.y - camera.y;
   const radius = player.radius || 18;
+  const weaponSpec =
+    arenaWeaponSpecs[player.weapon || "blaster"] || arenaWeaponSpecs.blaster;
 
   if (!player.alive) {
     const respawnIn =
@@ -1396,7 +1607,7 @@ function drawPlayer(player) {
   ctx.stroke();
   ctx.fillStyle = "rgba(5,12,22,.88)";
   ctx.fillRect(2, -5, radius + 18, 10);
-  ctx.fillStyle = player.rapid ? "#ff8fd4" : "#f5fbff";
+  ctx.fillStyle = player.rapid ? "#ff8fd4" : weaponSpec.color || "#f5fbff";
   ctx.fillRect(radius + 11, -3, 11 + pulse * 4, 6);
   ctx.fillStyle = "rgba(5,12,22,.72)";
   ctx.beginPath();
@@ -1439,6 +1650,15 @@ function drawPlayer(player) {
   ctx.font = "700 12px system-ui, sans-serif";
   ctx.textAlign = "center";
   ctx.fillText(player.name, x, y + radius + 19);
+  if ((player.weapon || "blaster") !== "blaster") {
+    ctx.fillStyle = weaponSpec.color || "#f5fbff";
+    ctx.font = "800 11px system-ui, sans-serif";
+    ctx.fillText(
+      `${weaponSpec.label} ${Number(player.weaponAmmo || 0)}`,
+      x,
+      y + radius + 34,
+    );
+  }
 }
 
 function drawMinimap() {

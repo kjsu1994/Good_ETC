@@ -11,7 +11,7 @@
       : requestedRole === "spectator"
         ? "spectator"
         : "client";
-  const assetVersion = params.get("v") || "20260530ae";
+  const assetVersion = params.get("v") || "20260530ah";
   const world = { width: 2600, height: 980 };
   const gravity = 300;
   const moveBudgetMax = 130;
@@ -262,6 +262,8 @@
       : moveBudgetMax;
     player.weapon = weapons[player.weapon] ? player.weapon : defaultWeapon;
     player.items = player.items || { repair: 1, shield: 1, power: 1 };
+    player.fallDamage = Number(player.fallDamage || 0);
+    player.fallFlash = Number(player.fallFlash || 0);
     return player;
   }
 
@@ -323,6 +325,8 @@
       weapon: defaultWeapon,
       health: 100,
       shield: false,
+      fallDamage: 0,
+      fallFlash: 0,
       activeItem: "",
       items: { repair: 1, shield: 1, power: 1 },
       connected: true,
@@ -612,6 +616,9 @@
       nextTurn();
     }
     updateProjectiles(dt);
+    state.players.forEach((player) => {
+      player.fallFlash = Math.max(0, (player.fallFlash || 0) - dt);
+    });
     if (state.explosion) {
       state.explosion.age += dt;
       if (state.explosion.age > 0.55) state.explosion = null;
@@ -703,11 +710,13 @@
   }
 
   function explodeProjectile(shot, x, y) {
+    const previousY = state.players.map((player) => player.y);
     state.explosion = { x, y, radius: shot.radius, age: 0 };
     addImpactMark(x, y, shot.radius, shot.weapon);
     carveTerrain(x, y, shot.radius, shot.carve || 1);
     applyExplosionDamage(x, y, shot.radius, shot.damage);
     placePlayers(state.players, state.terrain);
+    applyFallDamage(previousY);
     placeSupplyCrates(state.terrain, state.supplyCrates);
   }
 
@@ -758,6 +767,38 @@
     });
     state.status = hits.length ? hits.join(", ") : "빗나감.";
 
+    const loser = state.players.find((player) => player.health <= 0);
+    if (loser) {
+      state.gameOver = true;
+      const winner = state.players.find((player) => player !== loser);
+      state.status = `${winner.name} 승리. R 키로 다시 시작.`;
+    }
+  }
+
+  function applyFallDamage(previousY) {
+    if (state.gameOver) return;
+    const hits = [];
+    state.players.forEach((player, index) => {
+      const fall = player.y - previousY[index];
+      if (fall < 42 || player.health <= 0) {
+        player.fallDamage = 0;
+        return;
+      }
+      let damage = Math.min(28, Math.max(4, Math.round((fall - 32) / 6)));
+      if (player.shield) {
+        damage = Math.ceil(damage * 0.45);
+        player.shield = false;
+      }
+      player.health = Math.max(0, player.health - damage);
+      player.fallDamage = damage;
+      player.fallFlash = 1.05;
+      hits.push(`${player.name} 낙하 -${damage}`);
+    });
+    if (hits.length) {
+      state.status = state.status
+        ? `${state.status} · ${hits.join(", ")}`
+        : hits.join(", ");
+    }
     const loser = state.players.find((player) => player.health <= 0);
     if (loser) {
       state.gameOver = true;
@@ -1610,6 +1651,18 @@
     ctx.font = `800 ${Math.max(11, 14 * scale)}px system-ui, sans-serif`;
     ctx.textAlign = "center";
     ctx.fillText(player.name, 0, -86 * scale);
+    if ((player.fallFlash || 0) > 0 && (player.fallDamage || 0) > 0) {
+      const alpha = clamp(player.fallFlash / 1.05, 0, 1);
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = "#ffd166";
+      ctx.font = `900 ${Math.max(12, 16 * scale)}px system-ui, sans-serif`;
+      ctx.fillText(
+        `낙하 -${player.fallDamage}`,
+        0,
+        (-108 - (1 - alpha) * 24) * scale,
+      );
+      ctx.globalAlpha = player.connected === false ? 0.45 : 1;
+    }
     ctx.restore();
   }
 

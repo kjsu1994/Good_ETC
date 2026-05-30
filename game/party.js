@@ -2,7 +2,7 @@
   const params = new URLSearchParams(window.location.search);
   const gameKey = params.get("game") || "kart";
   const isSolo = ["solo", "local"].includes(params.get("mode") || "");
-  const assetVersion = params.get("v") || "20260530ae";
+  const assetVersion = params.get("v") || "20260530ah";
   const world = { width: 2600, height: 1600 };
   const gameTypes = {
     kart: {
