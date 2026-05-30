@@ -1,13 +1,15 @@
 (() => {
   const params = new URLSearchParams(window.location.search);
   const isSolo = ["solo", "local"].includes(params.get("mode") || "");
-  const assetVersion = params.get("v") || "20260530bb";
+  const assetVersion = params.get("v") || "20260530bd";
   const world = { width: 1536, height: 960, cell: 24, columns: 64, rows: 40 };
+  const speedOptions = [1, 2, 3];
+  const speedStorageKey = "defense_game_speed";
   let defenseMaps = {
     classic: {
       name: "기본 우회로",
-      baseHealth: 20,
-      startResources: 180,
+      baseHealth: 24,
+      startResources: 230,
       pathPoints: [
         [0, 19],
         [10, 19],
@@ -21,8 +23,8 @@
     },
     harbor: {
       name: "항구 지그재그",
-      baseHealth: 22,
-      startResources: 170,
+      baseHealth: 26,
+      startResources: 220,
       pathPoints: [
         [0, 9],
         [11, 9],
@@ -36,8 +38,8 @@
     },
     lava: {
       name: "용암 협곡",
-      baseHealth: 18,
-      startResources: 200,
+      baseHealth: 22,
+      startResources: 250,
       pathPoints: [
         [0, 29],
         [8, 29],
@@ -56,53 +58,53 @@
   let towerTypes = {
     basic: {
       name: "기본탄",
-      cost: 60,
-      range: 140,
-      damage: 17,
-      cooldown: 0.48,
+      cost: 55,
+      range: 150,
+      damage: 20,
+      cooldown: 0.46,
       color: "#62e6ff",
       desc: "빠른 단일 공격",
     },
     slow: {
       name: "감속",
-      cost: 85,
-      range: 130,
-      damage: 8,
-      cooldown: 0.72,
-      slow: 1.4,
+      cost: 75,
+      range: 145,
+      damage: 10,
+      cooldown: 0.7,
+      slow: 1.8,
       color: "#8be66f",
       desc: "적 이동 속도 감소",
     },
     blast: {
       name: "폭발",
-      cost: 110,
-      range: 125,
-      damage: 13,
-      cooldown: 1.15,
-      splash: 58,
+      cost: 100,
+      range: 138,
+      damage: 16,
+      cooldown: 1.08,
+      splash: 64,
       burn: 2.4,
-      burnDps: 8,
+      burnDps: 10,
       color: "#ffba5a",
       desc: "범위 피해와 화상",
     },
     sniper: {
       name: "저격",
-      cost: 135,
-      range: 230,
-      damage: 55,
-      cooldown: 1.7,
+      cost: 125,
+      range: 250,
+      damage: 62,
+      cooldown: 1.55,
       mark: 2.6,
-      markBonus: 0.22,
+      markBonus: 0.3,
       color: "#c8f7ff",
       desc: "긴 사거리와 취약 표식",
     },
     boost: {
       name: "증폭기",
-      cost: 95,
-      range: 115,
+      cost: 85,
+      range: 130,
       damage: 0,
       cooldown: 9.9,
-      boost: 1.18,
+      boost: 1.24,
       color: "#d08cff",
       desc: "주변 타워 강화",
     },
@@ -117,27 +119,27 @@
   let skillTypes = {
     airstrike: {
       name: "포격 지원",
-      cost: 90,
-      cooldown: 18,
-      radius: 104,
-      damage: 145,
+      cost: 70,
+      cooldown: 14,
+      radius: 120,
+      damage: 185,
       color: "#ffba5a",
       desc: "전방 적 범위 피해",
     },
     freeze: {
       name: "빙결장",
-      cost: 70,
-      cooldown: 16,
-      radius: 118,
-      duration: 3.5,
+      cost: 55,
+      cooldown: 13,
+      radius: 130,
+      duration: 4.3,
       color: "#69dcff",
       desc: "전방 적 감속",
     },
     repair: {
       name: "긴급 수리",
-      cost: 55,
-      cooldown: 20,
-      heal: 4,
+      cost: 45,
+      cooldown: 16,
+      heal: 5,
       color: "#8be66f",
       desc: "기지 체력 회복",
     },
@@ -177,6 +179,12 @@
           <select id="defenseMapSelect"></select>
         </label>
         <p id="defenseMapHint">1웨이브 시작 전, 타워 배치 전에만 변경할 수 있습니다.</p>
+        <div class="defense-speed" aria-label="게임 속도">
+          <span>속도</span>
+          <button type="button" data-defense-speed="1">1배</button>
+          <button type="button" data-defense-speed="2">2배</button>
+          <button type="button" data-defense-speed="3">3배</button>
+        </div>
       </div>
       <div class="defense-help hidden" id="defenseHelp">
         <p>타워를 선택한 뒤 경로가 아닌 칸을 클릭해 배치합니다. 마우스를 올리면 사거리, 경로 커버 칸, 배치 가능 여부가 미리 표시됩니다.</p>
@@ -195,6 +203,7 @@
         <span>기지<strong id="defenseBase">20</strong></span>
         <span>자원<strong id="defenseResources">0</strong></span>
         <span>자동<strong id="defenseAutoStart">-</strong></span>
+        <span>속도<strong id="defenseSpeed">1배</strong></span>
       </div>
       <p id="defenseWavePreview" class="defense-wave-preview">다음 웨이브 정보 없음</p>
       <ol id="defensePlayers" class="defense-players"></ol>
@@ -239,6 +248,8 @@
     serverUrl: document.getElementById("defenseServerUrl"),
     mapSelect: document.getElementById("defenseMapSelect"),
     mapHint: document.getElementById("defenseMapHint"),
+    speed: document.getElementById("defenseSpeed"),
+    speedButtons: Array.from(document.querySelectorAll("[data-defense-speed]")),
     connect: document.getElementById("defenseConnect"),
     disconnect: document.getElementById("defenseDisconnect"),
     status: document.getElementById("defenseStatus"),
@@ -280,8 +291,14 @@
   let lastPingSeenAt = 0;
   let camera = { scale: 1, offsetX: 0, offsetY: 0 };
   let localIds = { tower: 1, enemy: 1, shot: 1 };
+  let gameSpeed = normalizeGameSpeed(localStorage.getItem(speedStorageKey));
 
   let state = createInitialState();
+
+  function normalizeGameSpeed(value) {
+    const speed = Number(value);
+    return speedOptions.includes(speed) ? speed : 1;
+  }
 
   function createInitialState() {
     return {
@@ -301,6 +318,7 @@
       towerTypes,
       enemyTypes,
       skillTypes,
+      gameSpeed,
       wavePreview: buildWavePreview(1),
       autoStartSeconds: 0,
       baseHealth: defenseMaps.classic.baseHealth,
@@ -370,7 +388,7 @@
 
   function buildWavePreview(wave) {
     const nextWave = Math.min(Math.max(1, wave), 15);
-    const total = 7 + nextWave * 3;
+    const total = 6 + nextWave * 2;
     const enemies = [
       { type: "normal", name: "일반", count: total, color: "#ff5f6d" },
     ];
@@ -423,6 +441,10 @@
     if (nextState.towerTypes) towerTypes = nextState.towerTypes;
     if (nextState.enemyTypes) enemyTypes = nextState.enemyTypes;
     if (nextState.skillTypes) skillTypes = nextState.skillTypes;
+    if (nextState.gameSpeed) {
+      gameSpeed = normalizeGameSpeed(nextState.gameSpeed);
+      localStorage.setItem(speedStorageKey, String(gameSpeed));
+    }
     if (nextState.pathPoints) setPath(nextState.pathPoints);
     if (nextState.lastPing) {
       const key = `${nextState.lastPing.x}:${nextState.lastPing.y}:${nextState.lastPing.time || ""}`;
@@ -434,6 +456,7 @@
     }
     state.pathPoints = pathPoints;
     state.pathCells = nextState.pathCells || mapPathCells();
+    state.gameSpeed = gameSpeed;
   }
 
   function cellCenter(cellX, cellY) {
@@ -788,6 +811,24 @@
     send({ type: "defense_skill", skillType });
   }
 
+  function actionGameSpeed(value) {
+    const nextSpeed = normalizeGameSpeed(value);
+    localStorage.setItem(speedStorageKey, String(nextSpeed));
+    if (isSolo) {
+      gameSpeed = nextSpeed;
+      state.gameSpeed = nextSpeed;
+      state.status = `게임 속도 ${nextSpeed}배`;
+      setCenterToast(`게임 속도 ${nextSpeed}배`);
+      renderHud();
+      return;
+    }
+    if (!isHost()) {
+      setCenterToast("방장만 게임 속도를 변경할 수 있습니다.");
+      return;
+    }
+    send({ type: "defense_speed", speed: nextSpeed });
+  }
+
   function actionConfigureMap(mapId) {
     if (state.wave > 0 || state.towers.length) {
       setCenterToast(
@@ -871,7 +912,7 @@
   }
 
   function localWaveSpawnCount(wave) {
-    return 7 + wave * 3 + ([5, 10, 15].includes(wave) ? 1 : 0);
+    return 6 + wave * 2 + ([5, 10, 15].includes(wave) ? 1 : 0);
   }
 
   function localStartWave() {
@@ -1116,10 +1157,14 @@
   }
 
   function localUpdate(dt) {
+    const simDt =
+      state.phase === "wave"
+        ? dt * normalizeGameSpeed(state.gameSpeed || gameSpeed)
+        : dt;
     state.effects = (state.effects || [])
-      .map((effect) => ({ ...effect, ttl: effect.ttl - dt }))
+      .map((effect) => ({ ...effect, ttl: effect.ttl - simDt }))
       .filter((effect) => effect.ttl > 0);
-    state.shots.forEach((shot) => (shot.ttl -= dt));
+    state.shots.forEach((shot) => (shot.ttl -= simDt));
     state.shots = state.shots.filter((shot) => shot.ttl > 0);
     const player = selfPlayer();
     if (player?.skillCooldowns) {
@@ -1138,14 +1183,14 @@
       if (Date.now() >= state.autoStartAt) localStartWave();
     }
     if (state.phase !== "wave") return;
-    state.spawnTimer -= dt;
+    state.spawnTimer -= simDt;
     while (state.spawnRemaining > 0 && state.spawnTimer <= 0) {
       spawnLocalEnemy();
       state.spawnRemaining -= 1;
-      state.spawnTimer += Math.max(0.26, 0.74 - state.wave * 0.035);
+      state.spawnTimer += Math.max(0.32, 0.84 - state.wave * 0.03);
     }
-    updateLocalEnemies(dt);
-    updateLocalTowers(dt);
+    updateLocalEnemies(simDt);
+    updateLocalTowers(simDt);
     if (state.baseHealth <= 0) {
       state.phase = "defeat";
       state.enemies = [];
@@ -1157,7 +1202,7 @@
         state.status = "모든 웨이브를 막아냈습니다.";
         setCenter(state.status);
       } else {
-        const bonus = 35 + state.wave * 9;
+        const bonus = 45 + state.wave * 12;
         state.phase = "build";
         selfPlayer().resources += bonus;
         state.status = `${state.wave} 웨이브 완료. +${bonus}`;
@@ -1185,9 +1230,9 @@
     else if (state.wave >= 8 && localIds.enemy % 8 === 0) enemyType = "shield";
     else if (state.wave >= 6 && localIds.enemy % 7 === 0) enemyType = "tank";
     else if (state.wave >= 4 && localIds.enemy % 5 === 0) enemyType = "runner";
-    let health = 48 + state.wave * 17;
-    let speed = 42 + state.wave * 2.8;
-    let reward = 11 + state.wave * 2;
+    let health = 44 + state.wave * 14;
+    let speed = 40 + state.wave * 2.3;
+    let reward = 13 + state.wave * 3;
     let baseDamage = 1;
     let shield = 0;
     if (enemyType === "runner") {
@@ -1203,13 +1248,13 @@
     if (enemyType === "shield") {
       health *= 1.12;
       speed *= 0.94;
-      shield = health * 0.55;
+      shield = health * 0.45;
       reward += 9;
     }
     if (enemyType === "boss") {
-      health = 620 + state.wave * 86;
-      speed = 28;
-      reward = 95 + state.wave * 5;
+      health = 520 + state.wave * 70;
+      speed = 27;
+      reward = 110 + state.wave * 7;
       baseDamage = 4;
     }
     state.enemies.push({
@@ -1439,13 +1484,25 @@
         : `${preview.wave || (state.wave || 0) + 1}웨이브 예고${preview.boss ? " · 보스" : ""}: ${names || "정보 없음"}`;
   }
 
+  function renderSpeedButtons() {
+    const activeSpeed = normalizeGameSpeed(state.gameSpeed || gameSpeed);
+    ui.speedButtons.forEach((button) => {
+      const speed = normalizeGameSpeed(button.dataset.defenseSpeed);
+      button.classList.toggle("active", speed === activeSpeed);
+      button.disabled = !isSolo && !isHost();
+      button.setAttribute("aria-pressed", String(speed === activeSpeed));
+    });
+  }
+
   function renderHud() {
     const player = selfPlayer();
     const selected = state.towers.find((tower) => tower.id === selectedTowerId);
+    const activeSpeed = normalizeGameSpeed(state.gameSpeed || gameSpeed);
     ui.mode.textContent = isSolo ? "혼자" : isHost() ? "방장" : "참가";
     ui.wave.textContent = `${state.wave || 0}/${state.maxWave || 15}`;
     ui.base.textContent = `${state.baseHealth ?? 0}/${state.baseHealthMax ?? 20}`;
     ui.resources.textContent = player?.resources ?? 0;
+    ui.speed.textContent = `${activeSpeed}배`;
     ui.autoStart.textContent =
       state.phase === "build" && state.autoStartSeconds
         ? `${state.autoStartSeconds}s`
@@ -1491,6 +1548,7 @@
         : "1웨이브 시작 전, 타워 배치 전에만 변경할 수 있습니다."
     }`;
     renderWavePreview();
+    renderSpeedButtons();
     renderSkillButtons();
     ui.players.innerHTML =
       state.players
@@ -2656,6 +2714,11 @@
   ui.mapSelect.addEventListener("change", () =>
     actionConfigureMap(ui.mapSelect.value),
   );
+  ui.speedButtons.forEach((button) => {
+    button.addEventListener("click", () =>
+      actionGameSpeed(button.dataset.defenseSpeed),
+    );
+  });
   canvas.addEventListener("pointermove", (event) => {
     hoverCell = cellFromEvent(event);
     if (!selectedTowerId) renderHud();

@@ -1,6 +1,6 @@
 (() => {
   const params = new URLSearchParams(window.location.search);
-  const assetVersion = params.get("v") || "20260530bc";
+  const assetVersion = params.get("v") || "20260530bd";
   const SAVE_KEY = "good_etc_rpg_save_v1";
   const SAVE_API = "/api/rpg/save";
   const MIN_FINAL_PLAY_SECONDS = 5 * 60 * 60;
@@ -41,6 +41,8 @@
         top: 16px;
         left: 16px;
         width: min(380px, calc(100vw - 32px));
+        max-height: calc(100vh - 32px);
+        overflow: auto;
         padding: 14px;
       }
       .rpg-side {
@@ -56,6 +58,8 @@
         bottom: 16px;
         transform: translateX(-50%);
         width: min(760px, calc(100vw - 32px));
+        max-height: 104px;
+        overflow: auto;
         padding: 10px 12px;
         display: flex;
         gap: 10px;
@@ -229,7 +233,15 @@
       .rpg-toast.show { opacity: 1; }
       @media (max-width: 760px) {
         .rpg-side { display: none; }
-        .rpg-top { width: calc(100vw - 32px); }
+        .rpg-top {
+          width: calc(100vw - 32px);
+          max-height: min(44vh, 320px);
+        }
+        .rpg-bottom {
+          bottom: 12px;
+          max-height: 86px;
+          font-size: .76rem;
+        }
         .rpg-actions { grid-template-columns: repeat(2, 1fr); }
       }
     </style>

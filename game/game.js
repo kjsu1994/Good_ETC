@@ -242,7 +242,7 @@ function safeUrl(value) {
 }
 
 function currentAssetVersion() {
-  return new URLSearchParams(window.location.search).get("v") || "20260530bb";
+  return new URLSearchParams(window.location.search).get("v") || "20260530bd";
 }
 
 function nowSeconds() {

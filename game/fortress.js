@@ -11,9 +11,15 @@
       : requestedRole === "spectator"
         ? "spectator"
         : "client";
-  const assetVersion = params.get("v") || "20260530bb";
+  const assetVersion = params.get("v") || "20260530bd";
   const world = { width: 5200, height: 1080 };
   const gravity = 300;
+  const powerMin = 30;
+  const powerMax = 170;
+  const defaultPower = 145;
+  const powerStep = 5;
+  const projectileBaseSpeed = 260;
+  const projectilePowerScale = 6.25;
   const moveBudgetMax = 130;
   const moveCost = 10;
   const defaultWeapon = "standard";
@@ -125,7 +131,7 @@
         <span>턴<strong id="fortressTurn">P1</strong></span>
         <span>바람<strong id="fortressWind">0</strong></span>
         <span>포각<strong id="fortressAngle">45도</strong></span>
-        <span>파워<strong id="fortressPower">60</strong></span>
+        <span>파워<strong id="fortressPower">145</strong></span>
         <span>이동<strong id="fortressMove">100</strong></span>
         <span>탄종<strong id="fortressWeapon">표준탄</strong></span>
       </div>
@@ -320,7 +326,7 @@
       angle,
       minAngle,
       maxAngle,
-      power: 60,
+      power: defaultPower,
       moveLeft: moveBudgetMax,
       weapon: defaultWeapon,
       health: 100,
@@ -476,7 +482,15 @@
 
   function adjustPower(delta) {
     const player = currentPlayer();
-    player.power = clamp(player.power + delta, 20, 100);
+    player.power = clamp(player.power + delta, powerMin, powerMax);
+  }
+
+  function projectileSpeed(player, weapon) {
+    return (
+      (projectileBaseSpeed +
+        Number(player.power || defaultPower) * projectilePowerScale) *
+      Number(weapon?.speed || 1)
+    );
   }
 
   function selectWeapon(weapon) {
@@ -535,7 +549,7 @@
     const weaponKey = weapons[player.weapon] ? player.weapon : defaultWeapon;
     const weapon = weaponConfig(weaponKey);
     const radians = (player.angle * Math.PI) / 180;
-    const speed = (145 + player.power * 5.1) * weapon.speed;
+    const speed = projectileSpeed(player, weapon);
     const powerShot = player.activeItem === "power" && player.items.power > 0;
     if (powerShot) player.items.power -= 1;
     player.activeItem = "";
@@ -1669,7 +1683,7 @@
     const maxSteps = options.maxSteps || 90;
     const includeSplit = options.includeSplit !== false;
     const radians = (player.angle * Math.PI) / 180;
-    const speed = (145 + player.power * 5.1) * config.speed;
+    const speed = projectileSpeed(player, config);
     let x = player.x + Math.cos(radians) * 31;
     let y = player.y - 21 - Math.sin(radians) * 31;
     let vx = Math.cos(radians) * speed;
@@ -2434,9 +2448,9 @@
   document.getElementById("angleUp").onclick = () =>
     action("angle", { delta: 2 });
   document.getElementById("powerDown").onclick = () =>
-    action("power", { delta: -4 });
+    action("power", { delta: -powerStep });
   document.getElementById("powerUp").onclick = () =>
-    action("power", { delta: 4 });
+    action("power", { delta: powerStep });
   document.getElementById("fireButton").onclick = () => action("fire");
   document.getElementById("restartButton").onclick = () => action("reset");
   ui.toggle.onclick = () =>
@@ -2478,8 +2492,8 @@
     if (key === "arrowright") action("move", { delta: 14 });
     if (key === "arrowup") action("angle", { delta: 2 });
     if (key === "arrowdown") action("angle", { delta: -2 });
-    if (key === "a") action("power", { delta: -4 });
-    if (key === "d") action("power", { delta: 4 });
+    if (key === "a") action("power", { delta: -powerStep });
+    if (key === "d") action("power", { delta: powerStep });
     if (key === " ") action("fire");
     const weapon = weaponOrder.find(
       (weaponKey) => weapons[weaponKey].key.toLowerCase() === key,

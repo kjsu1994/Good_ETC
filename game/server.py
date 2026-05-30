@@ -146,6 +146,11 @@ FORTRESS_WIDTH = 5200
 FORTRESS_HEIGHT = 1080
 FORTRESS_GRAVITY = 300
 FORTRESS_TICK_RATE = 30
+FORTRESS_POWER_MIN = 30
+FORTRESS_POWER_MAX = 170
+FORTRESS_DEFAULT_POWER = 145
+FORTRESS_PROJECTILE_BASE_SPEED = 260
+FORTRESS_PROJECTILE_POWER_SCALE = 6.25
 FORTRESS_MOVE_BUDGET_MAX = 130
 FORTRESS_MOVE_COST = 10
 FORTRESS_DEFAULT_WEAPON = "standard"
@@ -202,28 +207,29 @@ DEFENSE_CELL = 24
 DEFENSE_COLUMNS = DEFENSE_WIDTH // DEFENSE_CELL
 DEFENSE_ROWS = DEFENSE_HEIGHT // DEFENSE_CELL
 DEFENSE_MAX_WAVE = 15
-DEFENSE_BASE_HEALTH = 20
-DEFENSE_START_RESOURCES = 180
+DEFENSE_BASE_HEALTH = 24
+DEFENSE_START_RESOURCES = 230
 DEFENSE_AUTO_START_SECONDS = 25
 DEFENSE_BOSS_WAVES = {5, 10, 15}
+DEFENSE_SPEED_OPTIONS = {1, 2, 3}
 DEFENSE_DEFAULT_MAP_ID = "classic"
 DEFENSE_MAPS: dict[str, dict[str, Any]] = {
     "classic": {
         "name": "기본 우회로",
-        "baseHealth": 20,
-        "startResources": 180,
+        "baseHealth": 24,
+        "startResources": 230,
         "pathPoints": [(0, 19), (10, 19), (10, 8), (25, 8), (25, 30), (43, 30), (43, 14), (63, 14)],
     },
     "harbor": {
         "name": "항구 지그재그",
-        "baseHealth": 22,
-        "startResources": 170,
+        "baseHealth": 26,
+        "startResources": 220,
         "pathPoints": [(0, 9), (11, 9), (11, 32), (24, 32), (24, 12), (40, 12), (40, 27), (63, 27)],
     },
     "lava": {
         "name": "용암 협곡",
-        "baseHealth": 18,
-        "startResources": 200,
+        "baseHealth": 22,
+        "startResources": 250,
         "pathPoints": [(0, 29), (8, 29), (8, 6), (21, 6), (21, 35), (36, 35), (36, 16), (51, 16), (51, 24), (63, 24)],
     },
 }
@@ -231,53 +237,53 @@ DEFENSE_PATH_POINTS = list(DEFENSE_MAPS[DEFENSE_DEFAULT_MAP_ID]["pathPoints"])
 DEFENSE_TOWERS: dict[str, dict[str, Any]] = {
     "basic": {
         "name": "기본탄",
-        "cost": 60,
-        "range": 140,
-        "damage": 17,
-        "cooldown": 0.48,
+        "cost": 55,
+        "range": 150,
+        "damage": 20,
+        "cooldown": 0.46,
         "color": "#62e6ff",
         "desc": "빠른 단일 공격",
     },
     "slow": {
         "name": "감속",
-        "cost": 85,
-        "range": 130,
-        "damage": 8,
-        "cooldown": 0.72,
-        "slow": 1.4,
+        "cost": 75,
+        "range": 145,
+        "damage": 10,
+        "cooldown": 0.7,
+        "slow": 1.8,
         "color": "#8be66f",
         "desc": "적 이동 속도 감소",
     },
     "blast": {
         "name": "폭발",
-        "cost": 110,
-        "range": 125,
-        "damage": 13,
-        "cooldown": 1.15,
-        "splash": 58,
+        "cost": 100,
+        "range": 138,
+        "damage": 16,
+        "cooldown": 1.08,
+        "splash": 64,
         "burn": 2.4,
-        "burnDps": 8,
+        "burnDps": 10,
         "color": "#ffba5a",
         "desc": "범위 피해와 화상",
     },
     "sniper": {
         "name": "저격",
-        "cost": 135,
-        "range": 230,
-        "damage": 55,
-        "cooldown": 1.7,
+        "cost": 125,
+        "range": 250,
+        "damage": 62,
+        "cooldown": 1.55,
         "mark": 2.6,
-        "markBonus": 0.22,
+        "markBonus": 0.3,
         "color": "#c8f7ff",
         "desc": "긴 사거리와 취약 표식",
     },
     "boost": {
         "name": "증폭기",
-        "cost": 95,
-        "range": 115,
+        "cost": 85,
+        "range": 130,
         "damage": 0,
         "cooldown": 9.9,
-        "boost": 1.18,
+        "boost": 1.24,
         "color": "#d08cff",
         "desc": "주변 타워 강화",
     },
@@ -285,12 +291,12 @@ DEFENSE_TOWERS: dict[str, dict[str, Any]] = {
 DEFENSE_ENEMY_TYPES: dict[str, dict[str, Any]] = {
     "normal": {
         "name": "일반",
-        "health": 48,
-        "healthGrowth": 17,
-        "speed": 42,
-        "speedGrowth": 2.8,
-        "reward": 11,
-        "rewardGrowth": 2,
+        "health": 44,
+        "healthGrowth": 14,
+        "speed": 40,
+        "speedGrowth": 2.3,
+        "reward": 13,
+        "rewardGrowth": 3,
         "damage": 1,
         "color": "#ff5f6d",
     },
@@ -314,18 +320,18 @@ DEFENSE_ENEMY_TYPES: dict[str, dict[str, Any]] = {
         "name": "보호막",
         "healthScale": 1.12,
         "speedScale": 0.94,
-        "shieldScale": 0.55,
+        "shieldScale": 0.45,
         "rewardBonus": 9,
         "damage": 1,
         "color": "#6fe8ff",
     },
     "boss": {
         "name": "보스",
-        "health": 620,
-        "healthGrowth": 86,
-        "speed": 28,
-        "reward": 95,
-        "rewardGrowth": 5,
+        "health": 520,
+        "healthGrowth": 70,
+        "speed": 27,
+        "reward": 110,
+        "rewardGrowth": 7,
         "damage": 4,
         "color": "#ffd166",
     },
@@ -333,27 +339,27 @@ DEFENSE_ENEMY_TYPES: dict[str, dict[str, Any]] = {
 DEFENSE_SKILLS: dict[str, dict[str, Any]] = {
     "airstrike": {
         "name": "포격 지원",
-        "cost": 90,
-        "cooldown": 18.0,
-        "radius": 104.0,
-        "damage": 145.0,
+        "cost": 70,
+        "cooldown": 14.0,
+        "radius": 120.0,
+        "damage": 185.0,
         "color": "#ffba5a",
         "desc": "전방 적 주변에 범위 피해",
     },
     "freeze": {
         "name": "빙결장",
-        "cost": 70,
-        "cooldown": 16.0,
-        "radius": 118.0,
-        "duration": 3.5,
+        "cost": 55,
+        "cooldown": 13.0,
+        "radius": 130.0,
+        "duration": 4.3,
         "color": "#69dcff",
         "desc": "전방 적 주변을 감속",
     },
     "repair": {
         "name": "긴급 수리",
-        "cost": 55,
-        "cooldown": 20.0,
-        "heal": 4,
+        "cost": 45,
+        "cooldown": 16.0,
+        "heal": 5,
         "color": "#8be66f",
         "desc": "기지 체력 회복",
     },
@@ -385,8 +391,8 @@ PARTY_WIDTH = 5200
 PARTY_HEIGHT = 3200
 PARTY_PLAYER_RADIUS = 18
 PARTY_SNAKE_TRAIL_POINT_GAP = 8
-PARTY_SNAKE_SELF_SAFE_POINTS = 6
-PARTY_SNAKE_SPAWN_SAFE_SECONDS = 1.0
+PARTY_SNAKE_SELF_SAFE_POINTS = 8
+PARTY_SNAKE_SPAWN_SAFE_SECONDS = 1.5
 PARTY_GAME_TYPES = {"kart", "bomb", "snake", "coin"}
 PARTY_GAME_CONFIGS: dict[str, dict[str, Any]] = {
     "kart": {
@@ -885,7 +891,7 @@ class FortressMatch:
             "angle": angle,
             "minAngle": min_angle,
             "maxAngle": max_angle,
-            "power": 60,
+            "power": FORTRESS_DEFAULT_POWER,
             "moveLeft": FORTRESS_MOVE_BUDGET_MAX,
             "weapon": FORTRESS_DEFAULT_WEAPON,
             "health": 100,
@@ -1029,7 +1035,11 @@ class FortressMatch:
 
     def adjust_power(self, delta: float) -> None:
         player = self.current_player()
-        player["power"] = self.clamp(player["power"] + delta, 20, 100)
+        player["power"] = self.clamp(
+            player["power"] + delta,
+            FORTRESS_POWER_MIN,
+            FORTRESS_POWER_MAX,
+        )
 
     def select_weapon(self, weapon: str) -> None:
         weapon = self.weapon_key(weapon)
@@ -1084,7 +1094,10 @@ class FortressMatch:
         weapon_key = self.weapon_key(player.get("weapon"))
         weapon = self.weapon_config(weapon_key)
         radians = (player["angle"] * math.pi) / 180
-        speed = (145 + player["power"] * 5.1) * float(weapon["speed"])
+        speed = (
+            FORTRESS_PROJECTILE_BASE_SPEED
+            + float(player.get("power", FORTRESS_DEFAULT_POWER)) * FORTRESS_PROJECTILE_POWER_SCALE
+        ) * float(weapon["speed"])
         power_shot = player["activeItem"] == "power" and player["items"]["power"] > 0
         if power_shot:
             player["items"]["power"] -= 1
@@ -1457,6 +1470,7 @@ class DefenseRoom:
         self.spawn_total = 0
         self.spawn_timer = 0.0
         self.auto_start_at = 0.0
+        self.game_speed = 1
         self.last_ping: dict[str, Any] | None = None
         self.status = "타워를 배치하고 방장이 웨이브를 시작하세요."
 
@@ -1533,6 +1547,15 @@ class DefenseRoom:
         if client.id != self.host_id:
             return "방장만 웨이브를 시작할 수 있습니다."
         return self.begin_wave()
+
+    def set_game_speed(self, client: DefenseClient, speed: int) -> str:
+        if client.id != self.host_id:
+            return "방장만 게임 속도를 변경할 수 있습니다."
+        if speed not in DEFENSE_SPEED_OPTIONS:
+            return "지원하지 않는 게임 속도입니다."
+        self.game_speed = speed
+        self.status = f"게임 속도 {speed}배"
+        return ""
 
     def begin_wave(self) -> str:
         if self.phase == "wave":
@@ -1724,10 +1747,11 @@ class DefenseRoom:
         return total
 
     def update(self, dt: float) -> None:
+        sim_dt = dt * self.game_speed if self.phase == "wave" else dt
         for shot in self.shots:
-            shot.ttl -= dt
+            shot.ttl -= sim_dt
         self.shots = [shot for shot in self.shots if shot.ttl > 0]
-        self.effects = [effect for effect in self.effects if self.tick_effect(effect, dt)]
+        self.effects = [effect for effect in self.effects if self.tick_effect(effect, sim_dt)]
         if (
             self.phase == "build"
             and self.auto_start_at
@@ -1737,13 +1761,13 @@ class DefenseRoom:
             self.begin_wave()
         if self.phase != "wave":
             return
-        self.spawn_timer -= dt
+        self.spawn_timer -= sim_dt
         while self.spawn_remaining > 0 and self.spawn_timer <= 0:
             self.spawn_enemy()
             self.spawn_remaining -= 1
-            self.spawn_timer += max(0.26, 0.74 - self.wave * 0.035)
-        self.update_enemies(dt)
-        self.update_towers(dt)
+            self.spawn_timer += max(0.32, 0.84 - self.wave * 0.03)
+        self.update_enemies(sim_dt)
+        self.update_towers(sim_dt)
         if self.base_health <= 0:
             self.phase = "defeat"
             self.enemies.clear()
@@ -1756,7 +1780,7 @@ class DefenseRoom:
                 self.auto_start_at = 0.0
             else:
                 self.phase = "build"
-                bonus = 35 + self.wave * 9
+                bonus = 45 + self.wave * 12
                 for client in self.clients.values():
                     client.resources += bonus
                 self.status = f"{self.wave} 웨이브 완료. 전원 +{bonus}"
@@ -1791,7 +1815,7 @@ class DefenseRoom:
     def wave_spawn_count(self, wave: int) -> int:
         player_bonus = max(0, len(self.clients) - 1) * 2
         boss_bonus = 1 if wave in DEFENSE_BOSS_WAVES else 0
-        return 7 + wave * 3 + player_bonus + boss_bonus
+        return 6 + wave * 2 + player_bonus + boss_bonus
 
     def wave_enemy_counts(self, wave: int) -> dict[str, int]:
         total = self.wave_spawn_count(wave)
@@ -2069,6 +2093,7 @@ class DefenseRoom:
             "towerTypes": DEFENSE_TOWERS,
             "enemyTypes": DEFENSE_ENEMY_TYPES,
             "skillTypes": DEFENSE_SKILLS,
+            "gameSpeed": self.game_speed,
             "wavePreview": self.wave_preview(),
             "autoStartSeconds": auto_start_seconds,
             "baseHealth": self.base_health,
@@ -3957,6 +3982,8 @@ class ArenaServer:
                 room.status = f"{client.name}님이 전장에 핑을 표시했습니다."
         elif kind == "defense_start_wave":
             error = room.start_wave(client)
+        elif kind == "defense_speed":
+            error = room.set_game_speed(client, self.safe_int(message.get("speed"), 1))
         elif kind == "defense_build":
             error = room.build_tower(
                 client,

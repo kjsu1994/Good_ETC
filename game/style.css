@@ -428,6 +428,8 @@ button:hover {
   top: 18px;
   left: 18px;
   width: min(380px, calc(100vw - 36px));
+  max-height: calc(100vh - 36px);
+  overflow: auto;
   padding: 14px;
   border-radius: 8px;
   border: 2px solid rgba(245, 251, 255, 0.72);
@@ -444,6 +446,8 @@ button:hover {
 
 .fortress-panel.collapsed {
   width: 54px;
+  height: 54px;
+  overflow: hidden;
   padding: 8px;
 }
 
@@ -642,6 +646,8 @@ button:hover {
   left: 18px;
   top: 18px;
   width: min(360px, calc(100vw - 36px));
+  max-height: calc(100vh - 36px);
+  overflow: auto;
 }
 
 .defense-panel.collapsed {
@@ -651,12 +657,22 @@ button:hover {
   padding: 8px;
 }
 
+.defense-panel.collapsed .brand {
+  justify-content: center;
+  margin-bottom: 0;
+}
+
 .defense-panel.collapsed .brand > div,
+.defense-panel.collapsed .brand-mark,
 .defense-panel.collapsed .connect-form,
 .defense-panel.collapsed .defense-config,
 .defense-panel.collapsed .defense-help,
 .defense-panel.collapsed .defense-help-toggle {
   display: none;
+}
+
+.defense-panel.collapsed .hud-toggle {
+  margin-left: 0;
 }
 
 .defense-mark {
@@ -699,6 +715,41 @@ button:hover {
 
 .defense-config select:disabled {
   opacity: 0.7;
+}
+
+.defense-speed {
+  display: grid;
+  grid-template-columns: auto repeat(3, minmax(44px, 1fr));
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.defense-speed span {
+  color: rgba(245, 251, 255, 0.76);
+  font-size: 0.76rem;
+  font-weight: 900;
+}
+
+.defense-speed button {
+  min-height: 32px;
+  padding: 0 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f5fbff;
+  font-size: 0.78rem;
+}
+
+.defense-speed button.active {
+  border-color: #62e6ff;
+  background: #62e6ff;
+  color: #07111f;
+}
+
+.defense-speed button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .defense-config p,
@@ -940,6 +991,8 @@ button:hover {
   left: 18px;
   top: 18px;
   width: min(360px, calc(100vw - 36px));
+  max-height: calc(100vh - 36px);
+  overflow: auto;
 }
 
 .party-panel.collapsed {
@@ -949,11 +1002,21 @@ button:hover {
   padding: 8px;
 }
 
+.party-panel.collapsed .brand {
+  justify-content: center;
+  margin-bottom: 0;
+}
+
 .party-panel.collapsed .brand > div,
+.party-panel.collapsed .brand-mark,
 .party-panel.collapsed .connect-form,
 .party-panel.collapsed .party-help,
 .party-panel.collapsed .party-help-toggle {
   display: none;
+}
+
+.party-panel.collapsed .hud-toggle {
+  margin-left: 0;
 }
 
 .party-mark {
@@ -1174,14 +1237,21 @@ button:hover {
     width: auto;
   }
 
+  .fortress-panel {
+    max-height: min(46vh, 360px);
+  }
+
   .fortress-panel.collapsed {
     right: auto;
     width: 54px;
+    height: 54px;
   }
 
   .fortress-message {
     top: auto;
     bottom: 84px;
+    max-height: 120px;
+    overflow: auto;
   }
 
   .fortress-weapons {
@@ -1192,10 +1262,18 @@ button:hover {
     top: auto;
     right: 12px;
     bottom: 248px;
+    max-height: 150px;
+    overflow: auto;
   }
 
   .defense-toolbar {
     bottom: 12px;
+    max-height: 224px;
+    overflow: auto;
+  }
+
+  .defense-panel {
+    max-height: min(42vh, 340px);
   }
 
   .defense-towers {
@@ -1214,9 +1292,15 @@ button:hover {
     overflow: auto;
   }
 
+  .party-panel {
+    max-height: min(42vh, 340px);
+  }
+
   .party-toolbar {
     bottom: 126px;
     z-index: 20;
+    max-height: 80px;
+    overflow: auto;
   }
 
   .party-toolbar span {
@@ -1271,9 +1355,19 @@ button:hover {
     width: auto;
   }
 
+  .defense-panel.collapsed {
+    right: auto;
+    width: 58px;
+    height: 58px;
+  }
+
   .defense-stats {
     max-height: 170px;
     overflow: auto;
+  }
+
+  .defense-toolbar {
+    max-height: 190px;
   }
 
   .party-panel,
@@ -1281,6 +1375,12 @@ button:hover {
     left: 12px;
     right: 12px;
     width: auto;
+  }
+
+  .party-panel.collapsed {
+    right: auto;
+    width: 58px;
+    height: 58px;
   }
 
   .party-score {
