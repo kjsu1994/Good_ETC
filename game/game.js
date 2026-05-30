@@ -100,6 +100,38 @@ const arenaControlPointSpecs = [
   { id: "bravo", x: 1300, y: 800, radius: 132, label: "B" },
   { id: "charlie", x: 1990, y: 1080, radius: 118, label: "C" },
 ];
+const arenaSpeedLaneSpecs = [
+  {
+    id: "north-run",
+    x: 500,
+    y: 345,
+    w: 820,
+    h: 56,
+    label: "북측 레인",
+    color: "#42d7ff",
+    boost: 1.18,
+  },
+  {
+    id: "center-cut",
+    x: 1268,
+    y: 490,
+    w: 64,
+    h: 620,
+    label: "중앙 레인",
+    color: "#53e2a8",
+    boost: 1.16,
+  },
+  {
+    id: "south-run",
+    x: 1280,
+    y: 1190,
+    w: 820,
+    h: 58,
+    label: "남측 레인",
+    color: "#d08cff",
+    boost: 1.18,
+  },
+];
 const fallbackObstacles = [
   { x: 320, y: 260, w: 210, h: 76 },
   { x: 760, y: 460, w: 170, h: 92 },
@@ -124,7 +156,12 @@ let playerId = "";
 let lastFrame = performance.now();
 let localArenaIds = { bullet: 1, pickup: 1 };
 let latestState = {
-  arena: { width: 2600, height: 1600, obstacles: fallbackObstacles },
+  arena: {
+    width: 2600,
+    height: 1600,
+    obstacles: fallbackObstacles,
+    speedLanes: arenaSpeedLaneSpecs,
+  },
   players: [],
   bullets: [],
   pickups: fallbackPickups,
@@ -204,7 +241,7 @@ function safeUrl(value) {
 }
 
 function currentAssetVersion() {
-  return new URLSearchParams(window.location.search).get("v") || "20260530am";
+  return new URLSearchParams(window.location.search).get("v") || "20260530au";
 }
 
 function nowSeconds() {
@@ -560,6 +597,7 @@ function startLocalArena() {
       width: localArenaConfig.width,
       height: localArenaConfig.height,
       obstacles: fallbackObstacles,
+      speedLanes: arenaSpeedLaneSpecs,
     },
     players: [
       createLocalArenaPlayer("local", name, "#53e2a8", 420, 420, false),
@@ -614,6 +652,7 @@ function createLocalArenaPlayer(id, name, color, x, y, bot) {
     hasted: false,
     rapid: false,
     dashing: false,
+    laneBoosted: false,
     respawnIn: 0,
     bot,
     targetX: x,
@@ -721,6 +760,7 @@ function respawnLocalArenaPlayer(player, now) {
   player.dashAngle = 0;
   player.dashLatch = false;
   player.dashing = false;
+  player.laneBoosted = false;
   addLocalArenaEffect({
     x: player.x,
     y: player.y,
@@ -768,6 +808,16 @@ function expireLocalArenaWeapon(player, now) {
   player.weapon = "blaster";
   player.weaponUntil = 0;
   player.weaponAmmo = 0;
+}
+
+function arenaSpeedLaneAt(x, y) {
+  return (latestState.arena?.speedLanes || arenaSpeedLaneSpecs).find(
+    (lane) =>
+      x >= lane.x &&
+      x <= lane.x + lane.w &&
+      y >= lane.y &&
+      y <= lane.y + lane.h,
+  );
 }
 
 function updateLocalArenaControlPoints(dt, now) {
@@ -837,7 +887,12 @@ function updateLocalArenaActor(player, input, dt, now) {
   const dx = Number(input.right) - Number(input.left);
   const dy = Number(input.down) - Number(input.up);
   const length = Math.hypot(dx, dy) || 1;
-  player.stamina = Math.min(100, (player.stamina ?? 100) + dt * 24);
+  const speedLane = arenaSpeedLaneAt(player.x, player.y);
+  player.laneBoosted = Boolean(speedLane);
+  player.stamina = Math.min(
+    100,
+    (player.stamina ?? 100) + dt * (speedLane ? 38 : 24),
+  );
   if (!input.dash) player.dashLatch = false;
   if (
     input.dash &&
@@ -873,7 +928,8 @@ function updateLocalArenaActor(player, input, dt, now) {
   const speed =
     localArenaConfig.playerSpeed *
     (now < player.hasteUntil ? 1.32 : 1) *
-    (dashing ? 2.65 : 1);
+    (dashing ? 2.65 : 1) *
+    (speedLane ? Number(speedLane.boost || 1.18) : 1);
   moveLocalArenaPlayer(player, moveX * speed * dt, moveY * speed * dt);
   player.angle = Math.atan2(input.aimY - player.y, input.aimX - player.x);
   if (input.fire) spawnLocalArenaBullet(player, now);
@@ -922,7 +978,12 @@ function updateLocalArenaBot(bot, dt, now) {
   const moveX = bot.targetX - bot.x;
   const moveY = bot.targetY - bot.y;
   const length = Math.hypot(moveX, moveY) || 1;
-  const speed = localArenaConfig.playerSpeed * 0.86;
+  const speedLane = arenaSpeedLaneAt(bot.x, bot.y);
+  bot.laneBoosted = Boolean(speedLane);
+  const speed =
+    localArenaConfig.playerSpeed *
+    0.86 *
+    (speedLane ? Number(speedLane.boost || 1.18) : 1);
   moveLocalArenaPlayer(
     bot,
     (moveX / length) * speed * dt,
@@ -1196,6 +1257,7 @@ function drawGrid() {
   }
 
   drawArenaScenery(arena);
+  drawArenaSpeedLanes(arena.speedLanes || arenaSpeedLaneSpecs);
   drawArenaControlPoints();
   drawArenaObstacles(arena.obstacles || []);
   drawArenaLightPools(arena);
@@ -1298,6 +1360,73 @@ function drawArenaScenery(arena) {
     }
     ctx.restore();
   }
+}
+
+function drawArenaSpeedLanes(lanes) {
+  lanes.forEach((lane) => {
+    const x = lane.x - camera.x;
+    const y = lane.y - camera.y;
+    if (
+      x + lane.w < -90 ||
+      y + lane.h < -90 ||
+      x > window.innerWidth + 90 ||
+      y > window.innerHeight + 90
+    )
+      return;
+    const color = lane.color || "#42d7ff";
+    const horizontal = lane.w >= lane.h;
+    const pulse = 0.5 + Math.sin(performance.now() / 260) * 0.5;
+    ctx.save();
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 18;
+    ctx.fillStyle = `${color}${lane.id === "center-cut" ? "22" : "1c"}`;
+    ctx.strokeStyle = `${color}${Math.round(120 + pulse * 88)
+      .toString(16)
+      .padStart(2, "0")}`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.roundRect?.(x, y, lane.w, lane.h, 14);
+    if (!ctx.roundRect) ctx.rect(x, y, lane.w, lane.h);
+    ctx.fill();
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = "rgba(245,251,255,.26)";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([16, 12]);
+    ctx.beginPath();
+    if (horizontal) {
+      ctx.moveTo(x + 24, y + lane.h / 2);
+      ctx.lineTo(x + lane.w - 24, y + lane.h / 2);
+    } else {
+      ctx.moveTo(x + lane.w / 2, y + 24);
+      ctx.lineTo(x + lane.w / 2, y + lane.h - 24);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = color;
+    const arrowCount = Math.max(
+      3,
+      Math.floor((horizontal ? lane.w : lane.h) / 170),
+    );
+    for (let index = 0; index < arrowCount; index += 1) {
+      const t = (index + 0.5) / arrowCount;
+      const ax = horizontal ? x + lane.w * t : x + lane.w / 2;
+      const ay = horizontal ? y + lane.h / 2 : y + lane.h * t;
+      ctx.beginPath();
+      if (horizontal) {
+        ctx.moveTo(ax + 14, ay);
+        ctx.lineTo(ax - 8, ay - 11);
+        ctx.lineTo(ax - 8, ay + 11);
+      } else {
+        ctx.moveTo(ax, ay + 14);
+        ctx.lineTo(ax - 11, ay - 8);
+        ctx.lineTo(ax + 11, ay - 8);
+      }
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+  });
 }
 
 function drawArenaLightPools(arena) {
@@ -1672,6 +1801,15 @@ function drawPlayer(player) {
     ctx.arc(0, 0, radius + 5, -0.8, 0.8);
     ctx.stroke();
   }
+  if (player.laneBoosted) {
+    ctx.strokeStyle = "rgba(66,215,255,.78)";
+    ctx.lineWidth = 4;
+    ctx.setLineDash([7, 6]);
+    ctx.beginPath();
+    ctx.arc(0, 0, radius + 13, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
   if (player.dashing) {
     ctx.strokeStyle = "rgba(66,215,255,.88)";
     ctx.lineWidth = 5;
@@ -1751,6 +1889,15 @@ function drawMinimap() {
       y + obstacle.y * mapScale,
       Math.max(2, obstacle.w * mapScale),
       Math.max(2, obstacle.h * mapScale),
+    );
+  });
+  (arena.speedLanes || arenaSpeedLaneSpecs).forEach((lane) => {
+    ctx.fillStyle = `${lane.color || "#42d7ff"}88`;
+    ctx.fillRect(
+      x + lane.x * mapScale,
+      y + lane.y * mapScale,
+      Math.max(2, lane.w * mapScale),
+      Math.max(2, lane.h * mapScale),
     );
   });
   (latestState.pickups || []).forEach((pickup) => {

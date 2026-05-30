@@ -2,13 +2,13 @@
   const params = new URLSearchParams(window.location.search);
   const gameKey = params.get("game") || "kart";
   const isSolo = ["solo", "local"].includes(params.get("mode") || "");
-  const assetVersion = params.get("v") || "20260530am";
+  const assetVersion = params.get("v") || "20260530au";
   const world = { width: 2600, height: 1600 };
   const gameTypes = {
     kart: {
       name: "카트 랠리",
-      goal: "체크포인트 3바퀴를 돌며 드리프트, 니트로, 드래프트로 추월하세요.",
-      action: "Space: 드리프트 · 앞차 뒤에서 드래프트 충전",
+      goal: "체크포인트 3바퀴를 돌며 드리프트, 니트로, 드래프트와 오일 트랩으로 추월하세요.",
+      action: "Space: 드리프트 · 앞차 뒤 드래프트 · 오일 트랩 회피",
       accent: "#42d7ff",
       track: [
         [320, 820],
@@ -23,8 +23,8 @@
     },
     bomb: {
       name: "폭탄 그리드",
-      goal: "블록을 부수고 킥 파워업으로 폭탄을 밀어 연쇄폭발을 만들어 보세요.",
-      action: "Space: 폭탄 설치 · 화력/폭탄수/속도/킥 파워업",
+      goal: "블록을 부수고 킥/원격 기폭 파워업으로 폭탄 연쇄를 만들어 보세요.",
+      action: "Space: 폭탄 설치/원격 기폭 · 화력/폭탄수/속도/킥 파워업",
       accent: "#ffba5a",
     },
     snake: {
@@ -187,11 +187,13 @@
       driftCharge: 0,
       drafting: false,
       draftCharge: 0,
+      oilSpin: 0,
       padCooldowns: {},
       shield: 0,
       bombPower: 0,
       bombLimit: 1,
       bombKick: 0,
+      bombRemote: 0,
       combo: 0,
       comboTimer: 0,
       magnet: 0,
@@ -275,13 +277,15 @@
     if (roll < 0.34) return { kind: "bombup", value: 1 };
     if (roll < 0.5) return { kind: "speed", value: 1 };
     if (roll < 0.62) return { kind: "kick", value: 1 };
+    if (roll < 0.74) return { kind: "remote", value: 1 };
     return { kind: "coin", value: Math.random() < 0.35 ? 2 : 1 };
   }
 
   function randomKartPickup() {
     const roll = Math.random();
     if (roll < 0.18) return { kind: "nitro", value: 1 };
-    if (roll < 0.5) return { kind: "boost", value: 1 };
+    if (roll < 0.38) return { kind: "oil", value: 1 };
+    if (roll < 0.62) return { kind: "boost", value: 1 };
     return { kind: "coin", value: Math.random() < 0.25 ? 2 : 1 };
   }
 
@@ -336,11 +340,13 @@
       driftCharge: 0,
       drafting: false,
       draftCharge: 0,
+      oilSpin: 0,
       padCooldowns: {},
       shield: 0,
       bombPower: 0,
       bombLimit: 1,
       bombKick: 0,
+      bombRemote: 0,
       combo: 0,
       comboTimer: 0,
       magnet: 0,
@@ -386,7 +392,9 @@
     player.driftCharge = 0;
     player.drafting = false;
     player.draftCharge = 0;
+    player.oilSpin = 0;
     player.padCooldowns = {};
+    player.bombRemote = 0;
     player.actionLatch = false;
     player.trail = [[player.x, player.y]];
   }
@@ -688,6 +696,7 @@
     state.effects = (state.effects || [])
       .map((effect) => ({ ...effect, ttl: effect.ttl - dt }))
       .filter((effect) => effect.ttl > 0);
+    if (game === "kart") updateLocalKartOilSlicks(dt);
     const players = state.players || [];
     players.forEach((player, index) => {
       if (!updateLocalRespawn(player, dt, index)) return;
@@ -710,6 +719,76 @@
 
   function addPartyEffect(effect) {
     state.effects = [...(state.effects || []), effect].slice(-48);
+  }
+
+  function dropLocalKartOil(player) {
+    if (game !== "kart") return;
+    const rearX = player.x - Math.cos(player.angle || 0) * 42;
+    const rearY = player.y - Math.sin(player.angle || 0) * 42;
+    state.hazards = [
+      ...(state.hazards || []),
+      {
+        id: `oil${Date.now()}${Math.random()}`,
+        kind: "oil",
+        ownerId: player.id,
+        x: clamp(rearX, 42, world.width - 42),
+        y: clamp(rearY, 42, world.height - 42),
+        radius: 38,
+        ttl: 11,
+        arm: 0.65,
+      },
+    ].slice(-14);
+    addPartyEffect({
+      x: rearX,
+      y: rearY,
+      kind: "oil",
+      color: "#1f2937",
+      ttl: 0.7,
+      text: "OIL",
+    });
+  }
+
+  function updateLocalKartOilSlicks(dt) {
+    state.hazards = (state.hazards || [])
+      .map((hazard) =>
+        hazard.kind === "oil"
+          ? {
+              ...hazard,
+              ttl: (hazard.ttl || 0) - dt,
+              arm: Math.max(0, (hazard.arm || 0) - dt),
+            }
+          : hazard,
+      )
+      .filter((hazard) => hazard.kind !== "oil" || (hazard.ttl || 0) > 0);
+  }
+
+  function applyLocalKartOilSlick(player) {
+    if (game !== "kart" || !player.alive || (player.oilSpin || 0) > 0) return;
+    const slick = (state.hazards || []).find(
+      (hazard) =>
+        hazard.kind === "oil" &&
+        (hazard.arm || 0) <= 0 &&
+        hazard.ownerId !== player.id &&
+        distance(player.x, player.y, hazard.x, hazard.y) <=
+          (hazard.radius || 38) + 12,
+    );
+    if (!slick) return;
+    player.oilSpin = 0.9;
+    player.drifting = false;
+    player.draftCharge = 0;
+    player.boost = Math.min(player.boost || 0, 0.22);
+    player.vx *= 0.48;
+    player.vy *= 0.48;
+    player.score = Math.max(0, (player.score || 0) - 2);
+    slick.ttl = Math.min(slick.ttl || 0.4, 0.45);
+    addPartyEffect({
+      x: player.x,
+      y: player.y,
+      kind: "oil",
+      color: "#111827",
+      ttl: 0.9,
+      text: "SLIP",
+    });
   }
 
   function kartBoostPads(track = config.track || []) {
@@ -781,11 +860,15 @@
       player.bombKick = Math.max(0, (player.bombKick || 0) - dt);
     if (game === "snake")
       player.biteCooldown = Math.max(0, (player.biteCooldown || 0) - dt);
+    if (game === "kart")
+      player.oilSpin = Math.max(0, (player.oilSpin || 0) - dt);
+    if (game === "coin" || game === "snake") {
+      player.frenzy = Math.max(0, (player.frenzy || 0) - dt);
+    }
     if (game === "coin") {
       player.comboTimer = Math.max(0, (player.comboTimer || 0) - dt);
       if (player.comboTimer <= 0) player.combo = 0;
       player.magnet = Math.max(0, (player.magnet || 0) - dt);
-      player.frenzy = Math.max(0, (player.frenzy || 0) - dt);
       player.bankCooldown = Math.max(0, (player.bankCooldown || 0) - dt);
     }
     if (game === "kart") updateLocalKart(player, dt);
@@ -996,6 +1079,30 @@
         text: "CHAIN",
       });
     });
+  }
+
+  function detonateLocalRemoteBomb(player) {
+    if (game !== "bomb" || (player.bombRemote || 0) <= 0) return false;
+    const target = (state.bombs || [])
+      .filter(
+        (bomb) =>
+          bomb.ownerId === player.id && bomb.ttl > 0 && bomb.blastTtl <= 0,
+      )
+      .sort((a, b) => a.id - b.id)[0];
+    if (!target) return false;
+    target.ttl = 0;
+    target.vx = 0;
+    target.vy = 0;
+    player.bombRemote = Math.max(0, (player.bombRemote || 0) - 1);
+    addPartyEffect({
+      x: target.x,
+      y: target.y,
+      kind: "remote",
+      color: player.color,
+      ttl: 0.55,
+      text: "REMOTE",
+    });
+    return true;
   }
 
   function destroyLocalBlocks(bomb) {
@@ -1249,11 +1356,15 @@
   }
 
   function updateLocalKart(player, dt) {
-    const turn = Number(input.right) - Number(input.left);
+    const oilSpin = player.oilSpin || 0;
+    const turn = oilSpin > 0 ? 0 : Number(input.right) - Number(input.left);
     if (turn) player.angle += turn * 3.2 * dt;
+    if (oilSpin > 0)
+      player.angle += (player.id === "local" ? 1 : -1) * 8.6 * dt;
     const currentSpeed = Math.hypot(player.vx || 0, player.vy || 0);
-    const throttle = Number(input.up) - Number(input.down) * 0.5;
-    const action = Boolean(input.action);
+    const throttle =
+      oilSpin > 0 ? 0 : Number(input.up) - Number(input.down) * 0.5;
+    const action = oilSpin > 0 ? false : Boolean(input.action);
     const canDrift =
       action &&
       Math.abs(turn) > 0 &&
@@ -1294,13 +1405,23 @@
     player.boosted = player.boost > 0;
     const track = state.config?.track || config.track;
     const onTrack = distanceToTrack(player.x, player.y, track) <= 62;
-    const grip = player.drifting ? (onTrack ? 0.82 : 0.48) : onTrack ? 1 : 0.58;
-    const boost = player.boosted ? 1.45 : 1;
+    const grip =
+      oilSpin > 0
+        ? 0.38
+        : player.drifting
+          ? onTrack
+            ? 0.82
+            : 0.48
+          : onTrack
+            ? 1
+            : 0.58;
+    const boost = player.boosted && oilSpin <= 0 ? 1.45 : 1;
     player.vx += Math.cos(player.angle) * 520 * throttle * boost * grip * dt;
     player.vy += Math.sin(player.angle) * 520 * throttle * boost * grip * dt;
     const speed = Math.hypot(player.vx, player.vy);
     const driftLimit = player.drifting ? 0.92 : 1;
-    const maxSpeed = 360 * boost * driftLimit * (onTrack ? 1 : 0.68);
+    const oilLimit = oilSpin > 0 ? 0.54 : 1;
+    const maxSpeed = 360 * boost * driftLimit * oilLimit * (onTrack ? 1 : 0.68);
     if (speed > maxSpeed) {
       player.vx = (player.vx / speed) * maxSpeed;
       player.vy = (player.vy / speed) * maxSpeed;
@@ -1310,6 +1431,7 @@
     player.vy *= drag;
     moveLocal(player, player.vx * dt, player.vy * dt, true);
     applyLocalKartBoostPad(player);
+    applyLocalKartOilSlick(player);
     updateLocalKartDraft(player, dt, onTrack);
     const target = track[player.checkpoint % track.length];
     if (distance(player.x, player.y, target[0], target[1]) < 72) {
@@ -1343,6 +1465,11 @@
 
   function updateLocalKartDraft(player, dt, onTrack) {
     if (game !== "kart" || !player.alive) return;
+    if ((player.oilSpin || 0) > 0) {
+      player.drafting = false;
+      player.draftCharge = 0;
+      return;
+    }
     const speed = Math.hypot(player.vx || 0, player.vy || 0);
     const forwardX = Math.cos(player.angle || 0);
     const forwardY = Math.sin(player.angle || 0);
@@ -1449,6 +1576,12 @@
           bomb.ownerId === player.id && bomb.ttl > 0 && bomb.blastTtl <= 0,
       ).length;
       if (activeBombs >= (player.bombLimit || 1)) {
+        if (detonateLocalRemoteBomb(player)) {
+          player.actionLatch = true;
+          player.cooldown = 0.18;
+          player.boosted = (player.boost || 0) > 0;
+          return;
+        }
         player.actionLatch = true;
         player.cooldown = 0.12;
         player.cooldown = Math.max(0, (player.cooldown || 0) - dt);
@@ -1509,7 +1642,8 @@
     player.cooldown = Math.max(0, (player.cooldown || 0) - dt);
     player.boosted = player.boost > 0;
     player.biting = (player.biteCooldown || 0) > 0;
-    const speed = 205 * (player.boosted ? 1.5 : 1);
+    const huntSpeed = (player.frenzy || 0) > 0 ? 1.08 : 1;
+    const speed = 205 * huntSpeed * (player.boosted ? 1.5 : 1);
     moveLocal(
       player,
       Math.cos(player.angle) * speed * dt,
@@ -1586,6 +1720,7 @@
     return [
       {
         id: "bank-a",
+        kind: "bank",
         x: world.width * 0.24 + Math.sin(t * 0.28) * 150,
         y: world.height * 0.38 + Math.cos(t * 0.33) * 120,
         radius: 62,
@@ -1593,6 +1728,7 @@
       },
       {
         id: "bank-b",
+        kind: "bank",
         x: world.width * 0.7 + Math.cos(t * 0.24) * 170,
         y: world.height * 0.32 + Math.sin(t * 0.31) * 125,
         radius: 58,
@@ -1600,10 +1736,19 @@
       },
       {
         id: "bank-c",
+        kind: "bank",
         x: world.width * 0.52 + Math.sin(t * 0.2) * 210,
         y: world.height * 0.73 + Math.cos(t * 0.27) * 105,
         radius: 64,
         active: phase % 3 !== 0,
+      },
+      {
+        id: "vault",
+        kind: "vault",
+        x: world.width * 0.5 + Math.sin(t * 0.18) * 330,
+        y: world.height * 0.48 + Math.cos(t * 0.22) * 240,
+        radius: 50,
+        active: phase % 4 === 0,
       },
     ];
   }
@@ -1625,21 +1770,25 @@
     );
     if (!bank) return;
     const combo = player.combo || 0;
-    if (combo < 3 && (player.frenzy || 0) <= 0) return;
-    const cashCombo = Math.max(3, combo);
+    const isVault = bank.kind === "vault";
+    const requiredCombo = isVault ? 6 : 3;
+    if (combo < requiredCombo && (player.frenzy || 0) <= 0) return;
+    const cashCombo = Math.max(requiredCombo, combo);
     const multiplier = (player.frenzy || 0) > 0 ? 2 : 1;
-    const bonus = Math.min(70, 8 + cashCombo * 3) * multiplier;
+    const bonus = isVault
+      ? Math.min(120, 20 + cashCombo * 5) * multiplier
+      : Math.min(70, 8 + cashCombo * 3) * multiplier;
     player.score += bonus;
     player.combo = 0;
     player.comboTimer = 0;
-    player.bankCooldown = 5.5;
+    player.bankCooldown = isVault ? 7.5 : 5.5;
     addPartyEffect({
       x: bank.x,
       y: bank.y,
       kind: "bank",
-      color: "#ffd166",
+      color: isVault ? "#d08cff" : "#ffd166",
       ttl: 0.9,
-      text: `BANK +${bonus}`,
+      text: `${isVault ? "금고" : "BANK"} +${bonus}`,
     });
   }
 
@@ -1687,6 +1836,9 @@
         player.score += 5;
         player.boosted = true;
         player.boost = Math.max(player.boost || 0, 2.6);
+      } else if (pickup.kind === "oil") {
+        player.score += 2;
+        dropLocalKartOil(player);
       } else if (pickup.kind === "shield") {
         player.score += 1;
         player.shield = Math.max(player.shield || 0, 5);
@@ -1701,7 +1853,14 @@
       } else if (pickup.kind === "feast") {
         player.score += pickup.value || 8;
         player.boosted = true;
-        player.boost = Math.max(player.boost || 0, 0.9);
+        player.boost = Math.max(
+          player.boost || 0,
+          game === "snake" ? 1.2 : 0.9,
+        );
+        if (game === "snake") {
+          player.frenzy = Math.max(player.frenzy || 0, 5.5);
+          player.cooldown = 0;
+        }
       } else if (pickup.kind === "flame") {
         player.score += 2;
         player.bombPower = Math.min(5, (player.bombPower || 0) + 1);
@@ -1715,8 +1874,18 @@
       } else if (pickup.kind === "kick") {
         player.score += 2;
         player.bombKick = Math.max(player.bombKick || 0, 12);
+      } else if (pickup.kind === "remote") {
+        player.score += 2;
+        player.bombRemote = Math.min(3, (player.bombRemote || 0) + 1);
       } else {
-        gained = coinMode ? coinPickupScore(player, pickup) : pickup.value || 1;
+        gained = coinMode
+          ? coinPickupScore(player, pickup)
+          : (pickup.value || 1) +
+            (game === "snake" &&
+            (player.frenzy || 0) > 0 &&
+            ["coin", "gem"].includes(pickup.kind)
+              ? 1
+              : 0);
         player.score += gained;
       }
       addPartyEffect({
@@ -1725,12 +1894,14 @@
         kind:
           pickup.kind === "boost" ||
           pickup.kind === "nitro" ||
+          pickup.kind === "oil" ||
           pickup.kind === "shield" ||
           pickup.kind === "gem" ||
           pickup.kind === "flame" ||
           pickup.kind === "bombup" ||
           pickup.kind === "speed" ||
           pickup.kind === "kick" ||
+          pickup.kind === "remote" ||
           pickup.kind === "magnet" ||
           pickup.kind === "frenzy" ||
           pickup.kind === "feast"
@@ -1739,44 +1910,54 @@
         color:
           pickup.kind === "shield"
             ? "#69dcff"
-            : pickup.kind === "flame"
-              ? "#ff5f6d"
-              : pickup.kind === "speed"
-                ? "#42d7ff"
-                : pickup.kind === "kick"
-                  ? "#8be66f"
-                  : pickup.kind === "magnet"
-                    ? "#42d7ff"
-                    : pickup.kind === "frenzy"
-                      ? "#ffd166"
-                      : pickup.kind === "feast"
-                        ? "#ffd166"
-                        : player.color,
+            : pickup.kind === "oil"
+              ? "#111827"
+              : pickup.kind === "flame"
+                ? "#ff5f6d"
+                : pickup.kind === "speed"
+                  ? "#42d7ff"
+                  : pickup.kind === "kick"
+                    ? "#8be66f"
+                    : pickup.kind === "remote"
+                      ? "#d08cff"
+                      : pickup.kind === "magnet"
+                        ? "#42d7ff"
+                        : pickup.kind === "frenzy"
+                          ? "#ffd166"
+                          : pickup.kind === "feast"
+                            ? "#ffd166"
+                            : player.color,
         ttl: 0.65,
         text:
           pickup.kind === "boost"
             ? "BOOST"
             : pickup.kind === "nitro"
               ? "NITRO"
-              : pickup.kind === "shield"
-                ? "SHIELD"
-                : pickup.kind === "flame"
-                  ? `화력 ${(player.bombPower || 0) + 1}`
-                  : pickup.kind === "bombup"
-                    ? `폭탄 ${player.bombLimit || 1}`
-                    : pickup.kind === "speed"
-                      ? "SPEED"
-                      : pickup.kind === "kick"
-                        ? "KICK"
-                        : pickup.kind === "magnet"
-                          ? "MAGNET"
-                          : pickup.kind === "frenzy"
-                            ? "FEVER"
-                            : pickup.kind === "feast"
-                              ? `+${pickup.value || 8}`
-                              : coinMode && (player.combo || 0) >= 4
-                                ? `+${gained} x${Math.min(7, player.combo || 1)}`
-                                : `+${gained || pickup.value || 1}`,
+              : pickup.kind === "oil"
+                ? "OIL"
+                : pickup.kind === "shield"
+                  ? "SHIELD"
+                  : pickup.kind === "flame"
+                    ? `화력 ${(player.bombPower || 0) + 1}`
+                    : pickup.kind === "bombup"
+                      ? `폭탄 ${player.bombLimit || 1}`
+                      : pickup.kind === "speed"
+                        ? "SPEED"
+                        : pickup.kind === "kick"
+                          ? "KICK"
+                          : pickup.kind === "remote"
+                            ? `원격 ${player.bombRemote || 0}`
+                            : pickup.kind === "magnet"
+                              ? "MAGNET"
+                              : pickup.kind === "frenzy"
+                                ? "FEVER"
+                                : pickup.kind === "feast"
+                                  ? game === "snake"
+                                    ? "사냥 모드"
+                                    : `+${pickup.value || 8}`
+                                  : coinMode && (player.combo || 0) >= 4
+                                    ? `+${gained} x${Math.min(7, player.combo || 1)}`
+                                    : `+${gained || pickup.value || 1}`,
       });
       return false;
     });
@@ -2145,6 +2326,8 @@
   function pickupColor(pickup) {
     if (pickup.kind === "shield") return "#69dcff";
     if (pickup.kind === "nitro") return "#ffba5a";
+    if (pickup.kind === "oil") return "#111827";
+    if (pickup.kind === "remote") return "#d08cff";
     if (
       pickup.kind === "boost" ||
       pickup.kind === "speed" ||
@@ -2165,11 +2348,12 @@
     const radius =
       pickup.kind === "boost" || pickup.kind === "speed"
         ? 13
-        : pickup.kind === "nitro"
+        : pickup.kind === "nitro" || pickup.kind === "oil"
           ? 14
           : pickup.kind === "flame" ||
               pickup.kind === "bombup" ||
               pickup.kind === "kick" ||
+              pickup.kind === "remote" ||
               pickup.kind === "magnet" ||
               pickup.kind === "frenzy" ||
               pickup.kind === "feast"
@@ -2180,10 +2364,12 @@
     ctx.shadowBlur =
       pickup.kind === "boost" ||
       pickup.kind === "nitro" ||
+      pickup.kind === "oil" ||
       pickup.kind === "shield" ||
       pickup.kind === "speed" ||
       pickup.kind === "flame" ||
       pickup.kind === "kick" ||
+      pickup.kind === "remote" ||
       pickup.kind === "magnet" ||
       pickup.kind === "frenzy" ||
       pickup.kind === "feast"
@@ -2256,6 +2442,21 @@
       ctx.lineTo(pickup.x + 1, pickup.y - 2);
       ctx.lineTo(pickup.x + 5, pickup.y - 10);
       ctx.stroke();
+    } else if (pickup.kind === "oil") {
+      const pulse = 0.5 + Math.sin(performance.now() / 180) * 0.5;
+      ctx.fillStyle = "#111827";
+      ctx.beginPath();
+      ctx.roundRect?.(pickup.x - 16, pickup.y - 15, 32, 30, 8);
+      if (!ctx.roundRect) ctx.rect(pickup.x - 16, pickup.y - 15, 32, 30);
+      ctx.fill();
+      ctx.strokeStyle = "#f8f871";
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.fillStyle = `rgba(245,251,255,${0.55 + pulse * 0.24})`;
+      ctx.font = "900 13px Malgun Gothic, system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("OIL", pickup.x, pickup.y + 1);
     } else if (pickup.kind === "frenzy") {
       ctx.beginPath();
       for (let point = 0; point < 10; point += 1) {
@@ -2343,6 +2544,25 @@
       ctx.lineTo(pickup.x - 9, pickup.y + 5);
       ctx.closePath();
       ctx.fill();
+    } else if (pickup.kind === "remote") {
+      const pulse = 0.5 + Math.sin(performance.now() / 220) * 0.5;
+      ctx.fillStyle = "#21162f";
+      ctx.beginPath();
+      ctx.roundRect?.(pickup.x - 15, pickup.y - 14, 30, 28, 8);
+      if (!ctx.roundRect) ctx.rect(pickup.x - 15, pickup.y - 14, 30, 28);
+      ctx.fill();
+      ctx.strokeStyle = `rgba(208,140,255,${0.72 + pulse * 0.22})`;
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.strokeStyle = "#d08cff";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(pickup.x, pickup.y + 1, 7, Math.PI * 0.18, Math.PI * 1.82);
+      ctx.stroke();
+      ctx.fillStyle = "#f5fbff";
+      ctx.beginPath();
+      ctx.arc(pickup.x, pickup.y + 1, 3.2, 0, Math.PI * 2);
+      ctx.fill();
     } else if (pickup.kind === "speed") {
       ctx.beginPath();
       ctx.moveTo(pickup.x - 13, pickup.y - 12);
@@ -2374,6 +2594,21 @@
       ctx.lineTo(pickup.x + 9, pickup.y);
       ctx.lineTo(pickup.x - 5, pickup.y + 8);
       ctx.fill();
+    } else if (pickup.kind === "oil") {
+      ctx.fillStyle = "#f8f871";
+      ctx.beginPath();
+      ctx.arc(pickup.x - 7, pickup.y - 5, 2.6, 0, Math.PI * 2);
+      ctx.arc(pickup.x + 6, pickup.y + 5, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (pickup.kind === "remote") {
+      ctx.strokeStyle = "rgba(245,251,255,.78)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(pickup.x - 9, pickup.y - 8);
+      ctx.lineTo(pickup.x - 4, pickup.y - 12);
+      ctx.moveTo(pickup.x + 9, pickup.y - 8);
+      ctx.lineTo(pickup.x + 4, pickup.y - 12);
+      ctx.stroke();
     } else if (pickup.kind === "shield") {
       ctx.strokeStyle = "rgba(5,12,22,.5)";
       ctx.lineWidth = 3;
@@ -2387,6 +2622,42 @@
   function drawHazard(hazard) {
     const pulse = 0.5 + Math.sin(performance.now() / 180) * 0.5;
     ctx.save();
+    if (hazard.kind === "oil") {
+      const alpha = clamp((hazard.ttl || 1) / 11, 0.18, 0.82);
+      ctx.shadowColor = "rgba(7,17,31,.72)";
+      ctx.shadowBlur = 14;
+      ctx.fillStyle = `rgba(7,17,31,${0.42 * alpha + 0.16})`;
+      ctx.strokeStyle = `rgba(248,248,113,${0.34 + pulse * 0.28})`;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.ellipse(
+        hazard.x,
+        hazard.y,
+        (hazard.radius || 38) * (1.05 + pulse * 0.08),
+        (hazard.radius || 38) * 0.58,
+        Math.sin(hazard.x * 0.01) * 0.8,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = `rgba(245,251,255,${0.14 + pulse * 0.1})`;
+      for (let index = 0; index < 4; index += 1) {
+        const angle = index * 1.8 + performance.now() / 600;
+        ctx.beginPath();
+        ctx.arc(
+          hazard.x + Math.cos(angle) * (hazard.radius || 38) * 0.42,
+          hazard.y + Math.sin(angle) * (hazard.radius || 38) * 0.22,
+          2.4,
+          0,
+          Math.PI * 2,
+        );
+        ctx.fill();
+      }
+      ctx.restore();
+      return;
+    }
     ctx.shadowColor = "rgba(255,95,109,.8)";
     ctx.shadowBlur = 22;
     ctx.fillStyle = `rgba(255,95,109,${0.18 + pulse * 0.08})`;
@@ -2418,27 +2689,57 @@
   function drawBank(bank) {
     if (game !== "coin") return;
     const pulse = 0.5 + Math.sin(performance.now() / 240) * 0.5;
+    const isVault = bank.kind === "vault";
     const alpha = bank.active ? 0.2 + pulse * 0.1 : 0.08;
     ctx.save();
     ctx.shadowColor = bank.active
-      ? "rgba(255,209,102,.8)"
+      ? isVault
+        ? "rgba(208,140,255,.82)"
+        : "rgba(255,209,102,.8)"
       : "rgba(105,220,255,.28)";
     ctx.shadowBlur = bank.active ? 24 : 8;
     ctx.fillStyle = bank.active
-      ? `rgba(255,209,102,${alpha})`
+      ? isVault
+        ? `rgba(208,140,255,${alpha})`
+        : `rgba(255,209,102,${alpha})`
       : "rgba(105,220,255,.08)";
-    ctx.strokeStyle = bank.active ? "#ffd166" : "rgba(245,251,255,.3)";
+    ctx.strokeStyle = bank.active
+      ? isVault
+        ? "#d08cff"
+        : "#ffd166"
+      : "rgba(245,251,255,.3)";
     ctx.lineWidth = bank.active ? 4 : 2;
     ctx.beginPath();
     ctx.arc(bank.x, bank.y, bank.radius, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
+    if (isVault) {
+      ctx.strokeStyle = bank.active
+        ? "rgba(245,251,255,.58)"
+        : "rgba(245,251,255,.2)";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.roundRect?.(bank.x - 22, bank.y - 18, 44, 36, 7);
+      if (!ctx.roundRect) ctx.rect(bank.x - 22, bank.y - 18, 44, 36);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(bank.x, bank.y, 7 + pulse * 3, 0, Math.PI * 2);
+      ctx.stroke();
+    }
     ctx.shadowBlur = 0;
-    ctx.fillStyle = bank.active ? "#ffd166" : "rgba(245,251,255,.45)";
+    ctx.fillStyle = bank.active
+      ? isVault
+        ? "#d08cff"
+        : "#ffd166"
+      : "rgba(245,251,255,.45)";
     ctx.font = "900 15px Malgun Gothic, system-ui, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(bank.active ? "BANK" : "휴식", bank.x, bank.y);
+    ctx.fillText(
+      bank.active ? (isVault ? "금고" : "BANK") : isVault ? "잠김" : "휴식",
+      bank.x,
+      bank.y + (isVault ? 32 : 0),
+    );
     ctx.strokeStyle = "rgba(245,251,255,.28)";
     ctx.lineWidth = 2;
     ctx.setLineDash([8, 8]);
@@ -2552,6 +2853,14 @@
       ctx.strokeStyle = "#f5fbff";
       ctx.lineWidth = 5;
       ctx.stroke();
+      if ((player.frenzy || 0) > 0) {
+        ctx.globalAlpha = 0.46;
+        ctx.strokeStyle = "#ffd166";
+        ctx.lineWidth = 24;
+        ctx.setLineDash([18, 16]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
     }
     ctx.restore();
   }
@@ -2608,6 +2917,16 @@
           ctx.stroke();
         }
       }
+      if ((player.oilSpin || 0) > 0) {
+        const spin = clamp(player.oilSpin || 0, 0, 0.9) / 0.9;
+        ctx.strokeStyle = `rgba(248,248,113,${0.35 + spin * 0.42})`;
+        ctx.lineWidth = 4;
+        ctx.setLineDash([8, 7]);
+        ctx.beginPath();
+        ctx.arc(0, 0, 39 + spin * 9, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
       const body = ctx.createLinearGradient(-28, -18, 28, 18);
       body.addColorStop(0, "#07111f");
       body.addColorStop(0.45, player.color);
@@ -2642,6 +2961,16 @@
         ctx.fill();
       }
     } else if (game === "snake") {
+      if ((player.frenzy || 0) > 0) {
+        const hunt = clamp(player.frenzy || 0, 0, 5.5) / 5.5;
+        ctx.strokeStyle = `rgba(255,209,102,${0.35 + hunt * 0.38})`;
+        ctx.lineWidth = 5;
+        ctx.setLineDash([10, 8]);
+        ctx.beginPath();
+        ctx.arc(0, 0, 41 + hunt * 10, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
       if (player.boosted) {
         ctx.strokeStyle = "rgba(248,248,113,.86)";
         ctx.lineWidth = 5;
@@ -2809,12 +3138,14 @@
         "lap",
         "checkpoint",
         "draft",
+        "oil",
         "respawn",
         "shield",
         "gem",
         "flame",
         "bombup",
         "speed",
+        "remote",
         "magnet",
         "frenzy",
         "feast",
@@ -2879,8 +3210,11 @@
       });
     }
     state.banks?.forEach((bank) => {
+      const isVault = bank.kind === "vault";
       ctx.strokeStyle = bank.active
-        ? "rgba(255,209,102,.9)"
+        ? isVault
+          ? "rgba(208,140,255,.92)"
+          : "rgba(255,209,102,.9)"
         : "rgba(245,251,255,.28)";
       ctx.lineWidth = 1;
       ctx.beginPath();
@@ -2894,7 +3228,10 @@
       ctx.stroke();
     });
     state.hazards?.forEach((hazard) => {
-      ctx.strokeStyle = "rgba(255,95,109,.8)";
+      ctx.strokeStyle =
+        hazard.kind === "oil" ? "rgba(248,248,113,.82)" : "rgba(255,95,109,.8)";
+      ctx.fillStyle =
+        hazard.kind === "oil" ? "rgba(7,17,31,.62)" : "rgba(255,95,109,.12)";
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.arc(
@@ -2904,6 +3241,7 @@
         0,
         Math.PI * 2,
       );
+      if (hazard.kind === "oil") ctx.fill();
       ctx.stroke();
     });
     state.blocks?.slice(0, 60).forEach((block) => {
@@ -2984,12 +3322,23 @@
         (player.draftCharge || 0) > 0
           ? ` · 드래프트 ${Math.round(clamp(player.draftCharge || 0, 0, 1.18) * 85)}%`
           : "";
-      return `${player.lap || 0}L · ${score}${draft}`;
+      const oil = (player.oilSpin || 0) > 0 ? " · 미끄러짐" : "";
+      return `${player.lap || 0}L · ${score}${draft}${oil}`;
     }
     if (game === "bomb") {
       const kick =
         (player.bombKick || 0) > 0 ? ` · 킥 ${Math.ceil(player.bombKick)}` : "";
-      return `${score} · 화력 ${(player.bombPower || 0) + 1} · 폭탄 ${player.bombLimit || 1}${kick}`;
+      const remote =
+        (player.bombRemote || 0) > 0 ? ` · 원격 ${player.bombRemote}` : "";
+      return `${score} · 화력 ${(player.bombPower || 0) + 1} · 폭탄 ${player.bombLimit || 1}${kick}${remote}`;
+    }
+    if (game === "snake") {
+      const badges = [];
+      if ((player.frenzy || 0) > 0)
+        badges.push(`사냥 ${Math.ceil(player.frenzy)}`);
+      if ((player.shield || 0) > 0) badges.push("실드");
+      if ((player.biteCooldown || 0) > 0 || player.biting) badges.push("절단");
+      return badges.length ? `${score} · ${badges.join(" · ")}` : `${score}`;
     }
     if (game === "coin") {
       const combo = player.combo || 0;

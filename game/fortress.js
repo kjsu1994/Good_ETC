@@ -11,7 +11,7 @@
       : requestedRole === "spectator"
         ? "spectator"
         : "client";
-  const assetVersion = params.get("v") || "20260530am";
+  const assetVersion = params.get("v") || "20260530au";
   const world = { width: 2600, height: 980 };
   const gravity = 300;
   const moveBudgetMax = 130;
@@ -1133,7 +1133,25 @@
     const projectile = (state.projectiles || [])[0] || state.projectile;
     if (projectile) return { x: projectile.x, y: projectile.y };
     if (state.explosion) return { x: state.explosion.x, y: state.explosion.y };
+    const aimTarget = aimCameraTarget();
+    if (aimTarget) return aimTarget;
     return currentPlayer() || { x: world.width / 2, y: world.height / 2 };
+  }
+
+  function aimCameraTarget() {
+    const player = currentPlayer();
+    if (!player || !state.ready || state.gameOver || state.turnDelayAt) {
+      return null;
+    }
+    const preview = simulateAimTrajectory(player, { maxSteps: 96, dt: 0.065 });
+    const impact = preview.impact;
+    if (!impact) return null;
+    const distance = Math.hypot(impact.x - player.x, impact.y - player.y);
+    if (distance < 520) return null;
+    return {
+      x: clamp(player.x * 0.48 + impact.x * 0.52, 0, world.width),
+      y: clamp(player.y * 0.54 + impact.y * 0.46 - 80, 130, world.height - 90),
+    };
   }
 
   function updateCamera() {
@@ -1220,6 +1238,8 @@
     drawCloud(1120, 110, 1);
     drawCloud(1580, 235, 0.86);
     drawCloud(1980, 148, 1.05);
+    drawFloatingIslands();
+    drawWindStreamers();
     drawWindIndicator();
   }
 
@@ -1241,7 +1261,10 @@
 
   function drawCloud(x, y, size) {
     const view = getView();
-    const base = toScreen(x, y);
+    const wind = Number(state.wind || 0);
+    const drift = ((performance.now() / 1000) * wind * 0.08) % world.width;
+    const worldX = (x + drift + world.width) % world.width || x;
+    const base = toScreen(worldX, y);
     ctx.fillStyle = "rgba(255, 255, 255, 0.78)";
     ctx.beginPath();
     ctx.arc(base.x, base.y, 24 * size * view.scale, 0, Math.PI * 2);
@@ -1267,6 +1290,123 @@
       132 * size * view.scale,
       Math.max(1, 3 * view.scale),
     );
+  }
+
+  function drawFloatingIslands() {
+    const view = getView();
+    const islands = [
+      { x: 420, y: 320, w: 118, h: 22, c: "#7aa567" },
+      { x: 1460, y: 292, w: 154, h: 28, c: "#6d9b68" },
+      { x: 2180, y: 350, w: 112, h: 20, c: "#81ad72" },
+    ];
+    islands.forEach((island, index) => {
+      const point = toScreen(
+        island.x,
+        island.y + Math.sin(performance.now() / 900 + index) * 4,
+      );
+      if (
+        point.x < -160 ||
+        point.x > window.innerWidth + 160 ||
+        point.y < -80 ||
+        point.y > window.innerHeight + 80
+      )
+        return;
+      ctx.save();
+      ctx.fillStyle = "rgba(18,52,36,.22)";
+      ctx.beginPath();
+      ctx.ellipse(
+        point.x,
+        point.y + island.h * view.scale,
+        island.w * 0.6 * view.scale,
+        island.h * 0.6 * view.scale,
+        0,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+      ctx.fillStyle = island.c;
+      ctx.beginPath();
+      ctx.ellipse(
+        point.x,
+        point.y,
+        island.w * 0.5 * view.scale,
+        island.h * view.scale,
+        0,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+      ctx.fillStyle = "rgba(78,64,44,.72)";
+      ctx.beginPath();
+      ctx.moveTo(
+        point.x - island.w * 0.28 * view.scale,
+        point.y + 8 * view.scale,
+      );
+      ctx.lineTo(point.x, point.y + (42 + index * 6) * view.scale);
+      ctx.lineTo(
+        point.x + island.w * 0.22 * view.scale,
+        point.y + 8 * view.scale,
+      );
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    });
+  }
+
+  function drawWindStreamers() {
+    const wind = Number(state.wind || 0);
+    if (!wind) return;
+    const view = getView();
+    const direction = wind > 0 ? 1 : -1;
+    const strength = clamp(Math.abs(wind) / 70, 0.16, 1);
+    const drift = (performance.now() / 18) * direction * strength;
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineWidth = Math.max(1, 2.2 * view.scale);
+    ctx.strokeStyle =
+      wind > 0
+        ? `rgba(255,207,92,${0.18 + strength * 0.24})`
+        : `rgba(105,220,255,${0.18 + strength * 0.24})`;
+    for (let index = 0; index < 18; index += 1) {
+      const baseX = 80 + ((index * 173 + drift) % world.width);
+      const worldX = baseX < 0 ? baseX + world.width : baseX;
+      const worldY = 92 + (index % 6) * 48;
+      const start = toScreen(
+        worldX,
+        worldY + Math.sin(index + performance.now() / 700) * 9,
+      );
+      if (
+        start.x < -180 ||
+        start.x > window.innerWidth + 180 ||
+        start.y < -70 ||
+        start.y > window.innerHeight + 90
+      )
+        continue;
+      const length = (58 + strength * 58) * view.scale;
+      ctx.beginPath();
+      ctx.moveTo(start.x, start.y);
+      ctx.bezierCurveTo(
+        start.x + direction * length * 0.32,
+        start.y - 8 * view.scale,
+        start.x + direction * length * 0.62,
+        start.y + 8 * view.scale,
+        start.x + direction * length,
+        start.y,
+      );
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(start.x + direction * length, start.y);
+      ctx.lineTo(
+        start.x + direction * (length - 10 * view.scale),
+        start.y - 5 * view.scale,
+      );
+      ctx.lineTo(
+        start.x + direction * (length - 10 * view.scale),
+        start.y + 5 * view.scale,
+      );
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   function drawWindIndicator() {
@@ -1387,6 +1527,46 @@
         18 * view.scale,
       );
     }
+    drawTerrainSurfaceDetails(view);
+  }
+
+  function drawTerrainSurfaceDetails(view) {
+    for (let x = 42; x < world.width; x += 34) {
+      const seed = Math.sin(x * 19.913) * 9384.23;
+      const value = seed - Math.floor(seed);
+      const ground = terrainAt(state.terrain, x);
+      const point = toScreen(x, ground);
+      if (
+        point.x < -30 ||
+        point.x > window.innerWidth + 30 ||
+        point.y < -30 ||
+        point.y > window.innerHeight + 80
+      )
+        continue;
+      if (value > 0.72) {
+        ctx.strokeStyle = "rgba(210,255,178,.55)";
+        ctx.lineWidth = Math.max(1, 1.6 * view.scale);
+        ctx.beginPath();
+        ctx.moveTo(point.x, point.y + 2 * view.scale);
+        ctx.lineTo(point.x - 5 * view.scale, point.y - 12 * view.scale);
+        ctx.moveTo(point.x + 2 * view.scale, point.y + 2 * view.scale);
+        ctx.lineTo(point.x + 6 * view.scale, point.y - 10 * view.scale);
+        ctx.stroke();
+      } else if (value < 0.16) {
+        ctx.fillStyle = "rgba(43,35,31,.42)";
+        ctx.beginPath();
+        ctx.ellipse(
+          point.x,
+          point.y + 7 * view.scale,
+          7 * view.scale,
+          3.2 * view.scale,
+          0,
+          0,
+          Math.PI * 2,
+        );
+        ctx.fill();
+      }
+    }
   }
 
   function drawImpactMarks() {
@@ -1479,36 +1659,256 @@
     });
   }
 
-  function drawAimGuide() {
-    const player = currentPlayer();
-    if (!player || !state.ready || hasProjectiles() || state.gameOver) return;
+  function simulateAimTrajectory(player, options = {}) {
+    if (!player || !state.terrain?.length) {
+      return { points: [], branches: [], impact: null };
+    }
+    const config = weaponConfig(player.weapon);
+    const dt = options.dt || 0.06;
+    const maxSteps = options.maxSteps || 90;
     const radians = (player.angle * Math.PI) / 180;
-    const speed =
-      (145 + player.power * 5.1) * weaponConfig(player.weapon).speed;
+    const speed = (145 + player.power * 5.1) * config.speed;
     let x = player.x + Math.cos(radians) * 31;
     let y = player.y - 21 - Math.sin(radians) * 31;
     let vx = Math.cos(radians) * speed;
     let vy = -Math.sin(radians) * speed;
-    const view = getView();
-    ctx.save();
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.44)";
-    ctx.lineWidth = Math.max(1, 2 * view.scale);
-    ctx.setLineDash([6 * view.scale, 9 * view.scale]);
-    ctx.beginPath();
-    for (let step = 0; step < 34; step += 1) {
-      const point = toScreen(x, y);
-      if (step === 0) ctx.moveTo(point.x, point.y);
-      else ctx.lineTo(point.x, point.y);
-      vx += state.wind * 0.22 * 0.075;
-      vy += gravity * 0.075;
-      x += vx * 0.075;
-      y += vy * 0.075;
-      if (x < 0 || x > world.width || y > world.height) break;
-      if (y >= terrainAt(state.terrain, x)) break;
+    const points = [];
+    const branches = [];
+    let impact = null;
+    let splitPreviewed = false;
+
+    for (let step = 0; step < maxSteps; step += 1) {
+      const age = step * dt;
+      points.push({ x, y, vx, vy, age });
+      if (config.splitAt && !splitPreviewed && age >= config.splitAt) {
+        branches.push(...simulateAimSplitBranches(x, y, vx, vy));
+        splitPreviewed = true;
+      }
+      vx += Number(state.wind || 0) * 0.22 * dt;
+      vy += gravity * dt;
+      x += vx * dt;
+      y += vy * dt;
+      if (x < 0 || x > world.width || y > world.height) {
+        impact = {
+          x: clamp(x, 0, world.width),
+          y: clamp(y, 0, world.height),
+          kind: "out",
+        };
+        break;
+      }
+      const ground = terrainAt(state.terrain, x);
+      if (y >= ground) {
+        impact = { x, y: ground, kind: "terrain" };
+        points.push({ x, y: ground, vx, vy, age: age + dt });
+        break;
+      }
     }
+
+    if (!impact && points.length) {
+      const last = points[points.length - 1];
+      impact = { x: last.x, y: last.y, kind: "air" };
+    }
+    return { points, branches, impact };
+  }
+
+  function simulateAimSplitBranches(x, y, vx, vy) {
+    const baseAngle = Math.atan2(vy, vx);
+    const speed = Math.hypot(vx, vy) * 0.86;
+    return [-0.24, 0, 0.24].map((offset) =>
+      simulateAimBranch(
+        x,
+        y,
+        Math.cos(baseAngle + offset) * speed,
+        Math.sin(baseAngle + offset) * speed,
+      ),
+    );
+  }
+
+  function simulateAimBranch(x, y, vx, vy) {
+    const dt = 0.055;
+    const points = [];
+    for (let step = 0; step < 28; step += 1) {
+      points.push({ x, y, vx, vy, age: step * dt });
+      vx += Number(state.wind || 0) * 0.22 * dt;
+      vy += gravity * dt;
+      x += vx * dt;
+      y += vy * dt;
+      if (x < 0 || x > world.width || y > world.height) break;
+      if (y >= terrainAt(state.terrain, x)) {
+        points.push({
+          x,
+          y: terrainAt(state.terrain, x),
+          vx,
+          vy,
+          age: step * dt,
+        });
+        break;
+      }
+    }
+    return { points };
+  }
+
+  function colorWithAlpha(color, alpha) {
+    const match = /^#?([0-9a-f]{6})$/i.exec(color || "");
+    if (!match) return color || `rgba(255,255,255,${alpha})`;
+    const value = match[1];
+    const red = parseInt(value.slice(0, 2), 16);
+    const green = parseInt(value.slice(2, 4), 16);
+    const blue = parseInt(value.slice(4, 6), 16);
+    return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+  }
+
+  function drawAimPath(points, color, scale, branch = false) {
+    if (!points.length) return;
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.strokeStyle = colorWithAlpha(color, branch ? 0.34 : 0.58);
+    ctx.lineWidth = Math.max(1.2, (branch ? 2 : 2.6) * scale);
+    ctx.setLineDash(branch ? [4 * scale, 8 * scale] : [8 * scale, 9 * scale]);
+    ctx.beginPath();
+    points.forEach((point, index) => {
+      const screen = toScreen(point.x, point.y);
+      if (index === 0) ctx.moveTo(screen.x, screen.y);
+      else ctx.lineTo(screen.x, screen.y);
+    });
     ctx.stroke();
     ctx.setLineDash([]);
+    points.forEach((point, index) => {
+      if (index % (branch ? 5 : 4) !== 0) return;
+      const screen = toScreen(point.x, point.y);
+      const alpha = branch
+        ? 0.28
+        : 0.42 + (index / Math.max(18, points.length)) * 0.26;
+      ctx.fillStyle = colorWithAlpha(color, alpha);
+      ctx.beginPath();
+      ctx.arc(
+        screen.x,
+        screen.y,
+        Math.max(2, (branch ? 2.2 : 3.4) * scale),
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+    });
     ctx.restore();
+  }
+
+  function drawAimWindTicks(points, scale) {
+    const wind = Number(state.wind || 0);
+    if (!wind || points.length < 8) return;
+    const direction = wind > 0 ? 1 : -1;
+    ctx.save();
+    ctx.strokeStyle =
+      wind > 0 ? "rgba(255,207,92,.66)" : "rgba(105,220,255,.66)";
+    ctx.fillStyle = ctx.strokeStyle;
+    ctx.lineWidth = Math.max(1, 1.5 * scale);
+    for (let index = 8; index < points.length; index += 12) {
+      const point = toScreen(points[index].x, points[index].y);
+      const width = (13 + Math.min(16, Math.abs(wind) * 0.16)) * scale;
+      ctx.beginPath();
+      ctx.moveTo(point.x - direction * width * 0.55, point.y - 10 * scale);
+      ctx.lineTo(point.x + direction * width * 0.4, point.y - 10 * scale);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(point.x + direction * width * 0.55, point.y - 10 * scale);
+      ctx.lineTo(point.x + direction * width * 0.24, point.y - 15 * scale);
+      ctx.lineTo(point.x + direction * width * 0.24, point.y - 5 * scale);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function aimLandingThreat(impact, player) {
+    if (!impact || !player) return null;
+    const radius =
+      weaponConfig(player.weapon).radius *
+      (player.activeItem === "power" ? 1.22 : 1);
+    const target = state.players.find(
+      (candidate, index) =>
+        index !== state.turn && candidate && candidate.health > 0,
+    );
+    if (!target) return null;
+    const distance = Math.hypot(target.x - impact.x, target.y - impact.y);
+    if (distance <= radius + 28) return "direct";
+    if (distance <= radius + 96) return "near";
+    return null;
+  }
+
+  function drawAimLandingMarker(preview, player, scale) {
+    const impact = preview.impact;
+    if (!impact) return;
+    const weapon = weaponConfig(player.weapon);
+    const point = toScreen(impact.x, impact.y);
+    const radius =
+      weapon.radius * (player.activeItem === "power" ? 1.22 : 1) * scale;
+    const threat = aimLandingThreat(impact, player);
+    const color =
+      threat === "direct"
+        ? "#ff5f6d"
+        : threat === "near"
+          ? "#ffd166"
+          : weapon.color;
+    ctx.save();
+    ctx.shadowColor = colorWithAlpha(color, 0.5);
+    ctx.shadowBlur = 18 * scale;
+    ctx.strokeStyle = colorWithAlpha(color, 0.7);
+    ctx.lineWidth = Math.max(1.5, 2.4 * scale);
+    ctx.setLineDash([9 * scale, 8 * scale]);
+    ctx.beginPath();
+    ctx.arc(
+      point.x,
+      point.y,
+      Math.max(20 * scale, radius * 0.56),
+      0,
+      Math.PI * 2,
+    );
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = "rgba(255,255,255,.72)";
+    ctx.lineWidth = Math.max(1, 1.4 * scale);
+    ctx.beginPath();
+    ctx.moveTo(point.x - 13 * scale, point.y);
+    ctx.lineTo(point.x + 13 * scale, point.y);
+    ctx.moveTo(point.x, point.y - 13 * scale);
+    ctx.lineTo(point.x, point.y + 13 * scale);
+    ctx.stroke();
+    ctx.fillStyle = "rgba(7,17,31,.72)";
+    ctx.beginPath();
+    drawRoundRect(
+      point.x - 45 * scale,
+      point.y - 45 * scale,
+      90 * scale,
+      22 * scale,
+      7 * scale,
+    );
+    ctx.fill();
+    ctx.fillStyle = "#f7fbff";
+    ctx.font = `800 ${Math.max(10, 12 * scale)}px system-ui, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(
+      threat === "direct" ? "직격권" : threat === "near" ? "근접" : "예상 착탄",
+      point.x,
+      point.y - 34 * scale,
+    );
+    ctx.restore();
+  }
+
+  function drawAimGuide() {
+    const player = currentPlayer();
+    if (!player || !state.ready || hasProjectiles() || state.gameOver) return;
+    const preview = simulateAimTrajectory(player);
+    if (!preview.points.length) return;
+    const view = getView();
+    const color = weaponConfig(player.weapon).color;
+    drawAimPath(preview.points, color, view.scale);
+    preview.branches.forEach((branch) =>
+      drawAimPath(branch.points, "#b987ff", view.scale, true),
+    );
+    drawAimWindTicks(preview.points, view.scale);
+    drawAimLandingMarker(preview, player, view.scale);
   }
 
   function drawPlayer(player, index) {
@@ -1879,6 +2279,8 @@
       ctx.stroke();
     });
 
+    drawFortressAimMinimap(x, y, mapScale);
+
     (state.supplyCrates || []).forEach((crate) => {
       const supply = supplyKinds[crate.kind] || supplyKinds.repair;
       ctx.fillStyle = supply.color;
@@ -1952,6 +2354,42 @@
     ctx.font = "700 11px system-ui, sans-serif";
     ctx.textAlign = "left";
     ctx.fillText("전술맵", x + 8, y + 15);
+    ctx.restore();
+  }
+
+  function drawFortressAimMinimap(x, y, mapScale) {
+    const player = currentPlayer();
+    if (!player || !state.ready || hasProjectiles() || state.gameOver) return;
+    const preview = simulateAimTrajectory(player, { maxSteps: 90, dt: 0.065 });
+    if (!preview.points.length) return;
+    const color = weaponConfig(player.weapon).color;
+    ctx.save();
+    ctx.strokeStyle = colorWithAlpha(color, 0.68);
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([3, 4]);
+    ctx.beginPath();
+    preview.points.forEach((point, index) => {
+      if (index % 2) return;
+      const pointX = x + point.x * mapScale;
+      const pointY = y + point.y * mapScale;
+      if (index === 0) ctx.moveTo(pointX, pointY);
+      else ctx.lineTo(pointX, pointY);
+    });
+    ctx.stroke();
+    ctx.setLineDash([]);
+    if (preview.impact) {
+      ctx.strokeStyle = colorWithAlpha(color, 0.86);
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.arc(
+        x + preview.impact.x * mapScale,
+        y + preview.impact.y * mapScale,
+        Math.max(3, weaponConfig(player.weapon).radius * mapScale * 0.5),
+        0,
+        Math.PI * 2,
+      );
+      ctx.stroke();
+    }
     ctx.restore();
   }
 

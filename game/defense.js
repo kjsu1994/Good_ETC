@@ -1,7 +1,7 @@
 (() => {
   const params = new URLSearchParams(window.location.search);
   const isSolo = ["solo", "local"].includes(params.get("mode") || "");
-  const assetVersion = params.get("v") || "20260530am";
+  const assetVersion = params.get("v") || "20260530au";
   const world = { width: 1536, height: 960, cell: 24, columns: 64, rows: 40 };
   let defenseMaps = {
     classic: {
@@ -179,7 +179,8 @@
         <p id="defenseMapHint">1웨이브 시작 전, 타워 배치 전에만 변경할 수 있습니다.</p>
       </div>
       <div class="defense-help hidden" id="defenseHelp">
-        <p>타워를 선택한 뒤 경로가 아닌 칸을 클릭해 배치합니다. 방장은 첫 웨이브를 시작하고, 이후에는 준비 시간이 끝나면 자동으로 다음 웨이브가 시작됩니다.</p>
+        <p>타워를 선택한 뒤 경로가 아닌 칸을 클릭해 배치합니다. 마우스를 올리면 사거리, 경로 커버 칸, 배치 가능 여부가 미리 표시됩니다.</p>
+        <p>타워를 선택하면 실제 사거리, 현재 목표, 재장전 진행, 증폭기가 영향을 주는 타워가 표시됩니다. 방장은 첫 웨이브를 시작하고, 이후에는 준비 시간이 끝나면 자동으로 다음 웨이브가 시작됩니다.</p>
         <p>자원은 개인별로 관리되며 자신의 타워만 업그레이드하거나 판매할 수 있습니다. 폭발 타워는 화상, 저격 타워는 취약 표식을 남기고, 증폭기는 주변 타워의 공격 효율을 높입니다.</p>
         <p>보스는 체력이 낮아지면 격노해 더 빠르게 이동하고 기지 피해가 커집니다. 화상, 표식, 보호막, 격노 링을 보고 우선순위를 조정하세요.</p>
         <p>전술 스킬은 자원을 사용합니다. Q 포격 지원은 전방 적 주변에 범위 피해를 주고, E 빙결장은 적 무리를 감속하며, F 긴급 수리는 기지를 회복합니다.</p>
@@ -826,6 +827,49 @@
     );
   }
 
+  function placementBlockReason(cellX, cellY) {
+    if (state.phase !== "build") return "건설 시간 아님";
+    if (cellX < 0 || cellX >= world.columns || cellY < 0 || cellY >= world.rows)
+      return "맵 밖";
+    if (pathCells.has(`${cellX},${cellY}`)) return "경로 위";
+    if (
+      state.towers.some(
+        (tower) => tower.cellX === cellX && tower.cellY === cellY,
+      )
+    ) {
+      return "타워 있음";
+    }
+    return "";
+  }
+
+  function towerRangeFor(tower, config = towerTypes[tower?.type]) {
+    if (Number.isFinite(Number(tower?.range))) return Number(tower.range);
+    return (
+      Number(config?.range || 0) +
+      Math.max(0, Number(tower?.level || 1) - 1) * 14
+    );
+  }
+
+  function colorWithAlpha(color, alpha) {
+    const match = /^#?([0-9a-f]{6})$/i.exec(color || "");
+    if (!match) return color || `rgba(255,255,255,${alpha})`;
+    const value = match[1];
+    return `rgba(${parseInt(value.slice(0, 2), 16)}, ${parseInt(value.slice(2, 4), 16)}, ${parseInt(value.slice(4, 6), 16)}, ${alpha})`;
+  }
+
+  function pathCoverageFor(center, range) {
+    let count = 0;
+    let closest = Infinity;
+    pathCells.forEach((key) => {
+      const [cellX, cellY] = key.split(",").map(Number);
+      const point = cellCenter(cellX, cellY);
+      const distance = Math.hypot(point.x - center.x, point.y - center.y);
+      closest = Math.min(closest, distance);
+      if (distance <= range + world.cell * 0.45) count += 1;
+    });
+    return { count, closest };
+  }
+
   function localWaveSpawnCount(wave) {
     return 7 + wave * 3 + ([5, 10, 15].includes(wave) ? 1 : 0);
   }
@@ -1419,9 +1463,26 @@
       selected.level >= 3;
     ui.sell.disabled =
       !selected || selected.ownerId !== clientId || state.phase !== "build";
-    ui.selection.textContent = selected
-      ? `${towerTypes[selected.type]?.name || "타워"} ${selected.level}단계 · ${selected.ownerName || "소유자"}${selected.boost && selected.boost > 1 ? ` · 증폭 x${selected.boost}` : ""}`
-      : `${towerTypes[selectedTowerType]?.name || "타워"} 선택됨 · 비용 ${towerTypes[selectedTowerType]?.cost || 0}`;
+    if (selected) {
+      const config = towerTypes[selected.type] || towerTypes.basic;
+      const range = towerRangeFor(selected, config);
+      const boostText =
+        selected.boost && selected.boost > 1
+          ? ` · 증폭 x${selected.boost}`
+          : "";
+      const cooldown =
+        selected.cooldownLeft && selected.cooldownLeft > 0
+          ? ` · 재장전 ${selected.cooldownLeft.toFixed(1)}s`
+          : "";
+      ui.selection.textContent = `${config.name || "타워"} ${selected.level}단계 · 사거리 ${Math.round(range)} · ${selected.ownerName || "소유자"}${boostText}${cooldown}`;
+    } else {
+      const config = towerTypes[selectedTowerType] || towerTypes.basic;
+      const hover =
+        hoverCell && canPlace(hoverCell.x, hoverCell.y)
+          ? ` · 경로 ${pathCoverageFor(cellCenter(hoverCell.x, hoverCell.y), config.range).count}칸`
+          : "";
+      ui.selection.textContent = `${config.name || "타워"} 선택됨 · 비용 ${config.cost || 0} · 사거리 ${Math.round(config.range || 0)}${hover}`;
+    }
     const mapLocked = state.wave > 0 || state.towers.length > 0 || !isHost();
     ui.mapSelect.disabled = Boolean(mapLocked);
     ui.mapHint.textContent = `${state.mapName || currentMap().name} · ${
@@ -1700,9 +1761,122 @@
     );
   }
 
+  function drawRangeRing(center, range, color, options = {}) {
+    ctx.save();
+    ctx.fillStyle = colorWithAlpha(color, options.fillAlpha ?? 0.07);
+    ctx.strokeStyle = colorWithAlpha(color, options.strokeAlpha ?? 0.62);
+    ctx.lineWidth = options.lineWidth || 3;
+    if (options.dashed) ctx.setLineDash([12, 10]);
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, range, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
+  function drawCoverageCells(center, range, color, alpha = 0.15) {
+    ctx.save();
+    ctx.fillStyle = colorWithAlpha(color, alpha);
+    pathCells.forEach((key) => {
+      const [cellX, cellY] = key.split(",").map(Number);
+      const point = cellCenter(cellX, cellY);
+      if (
+        Math.hypot(point.x - center.x, point.y - center.y) >
+        range + world.cell * 0.45
+      ) {
+        return;
+      }
+      ctx.fillRect(
+        cellX * world.cell + 4,
+        cellY * world.cell + 4,
+        world.cell - 8,
+        world.cell - 8,
+      );
+    });
+    ctx.restore();
+  }
+
+  function drawDefenseLabel(text, x, y, color = "#f5fbff") {
+    if (!text) return;
+    ctx.save();
+    ctx.font = "900 15px Malgun Gothic, system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const width = Math.min(230, Math.max(92, ctx.measureText(text).width + 24));
+    const labelX = Math.max(
+      width / 2 + 12,
+      Math.min(world.width - width / 2 - 12, x),
+    );
+    const labelY = Math.max(20, Math.min(world.height - 20, y));
+    ctx.fillStyle = "rgba(7,17,31,.84)";
+    ctx.strokeStyle = colorWithAlpha(color, 0.72);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    if (ctx.roundRect)
+      ctx.roundRect(labelX - width / 2, labelY - 14, width, 28, 8);
+    else ctx.rect(labelX - width / 2, labelY - 14, width, 28);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = color;
+    ctx.fillText(text, labelX, labelY + 1);
+    ctx.restore();
+  }
+
+  function drawTowerGhost(center, config, valid) {
+    ctx.save();
+    ctx.globalAlpha = valid ? 0.88 : 0.48;
+    ctx.fillStyle = "rgba(0,0,0,.28)";
+    ctx.beginPath();
+    ctx.ellipse(center.x, center.y + 12, 18, 7, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#101827";
+    ctx.fillRect(center.x - 13, center.y - 13, 26, 26);
+    ctx.fillStyle = valid ? config.color : "#ff5f6d";
+    if (config.boost) {
+      ctx.shadowColor = ctx.fillStyle;
+      ctx.shadowBlur = 12;
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, 11, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    } else {
+      ctx.fillRect(center.x - 9, center.y - 9, 18, 18);
+      ctx.strokeStyle = valid
+        ? colorWithAlpha(config.color, 0.86)
+        : "rgba(255,95,109,.9)";
+      ctx.lineWidth = 5;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(center.x, center.y);
+      ctx.lineTo(center.x + 24, center.y - 11);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   function drawPlacementPreview() {
     if (!hoverCell) return;
+    if (
+      hoverCell.x < 0 ||
+      hoverCell.x >= world.columns ||
+      hoverCell.y < 0 ||
+      hoverCell.y >= world.rows
+    ) {
+      return;
+    }
+    const config = towerTypes[selectedTowerType] || towerTypes.basic;
+    const center = cellCenter(hoverCell.x, hoverCell.y);
+    const coverage = pathCoverageFor(center, config.range);
     const valid = canPlace(hoverCell.x, hoverCell.y) && state.phase === "build";
+    const color = valid ? config.color : "#ff5f6d";
+    drawCoverageCells(center, config.range, color, valid ? 0.17 : 0.06);
+    drawRangeRing(center, config.range, color, {
+      dashed: true,
+      fillAlpha: valid ? 0.08 : 0.035,
+      strokeAlpha: valid ? 0.68 : 0.7,
+      lineWidth: valid ? 3 : 2.5,
+    });
     ctx.fillStyle = valid ? "rgba(98,230,255,.18)" : "rgba(255,95,109,.22)";
     ctx.fillRect(
       hoverCell.x * world.cell,
@@ -1710,20 +1884,45 @@
       world.cell,
       world.cell,
     );
+    ctx.strokeStyle = valid
+      ? colorWithAlpha(config.color, 0.9)
+      : "rgba(255,95,109,.95)";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(
+      hoverCell.x * world.cell + 2,
+      hoverCell.y * world.cell + 2,
+      world.cell - 4,
+      world.cell - 4,
+    );
+    drawTowerGhost(center, config, valid);
+    drawDefenseLabel(
+      valid
+        ? `사거리 ${Math.round(config.range)} · 경로 ${coverage.count}칸`
+        : placementBlockReason(hoverCell.x, hoverCell.y) || "배치 불가",
+      center.x,
+      center.y - config.range - 18,
+      valid ? config.color : "#ff8f9a",
+    );
   }
 
   function drawTower(tower) {
     const config = towerTypes[tower.type] || towerTypes.basic;
     const center = cellCenter(tower.cellX, tower.cellY);
     const selected = tower.id === selectedTowerId;
+    const range = towerRangeFor(tower, config);
     const target = findVisibleTowerTarget(tower, center, config);
     const aim = target
       ? Math.atan2(target.y - center.y, target.x - center.x)
       : -Math.PI / 2;
-    ctx.fillStyle = selected ? "rgba(255,255,255,.18)" : "rgba(0,0,0,.12)";
-    ctx.beginPath();
-    ctx.arc(center.x, center.y, tower.range || config.range, 0, Math.PI * 2);
-    if (selected) ctx.fill();
+    if (selected) {
+      drawCoverageCells(center, range, config.color, 0.18);
+      drawRangeRing(center, range, config.color, {
+        fillAlpha: 0.075,
+        strokeAlpha: 0.78,
+        lineWidth: 3,
+      });
+      drawSelectedTowerLinks(tower, center, range, config, target);
+    }
     ctx.fillStyle = "rgba(0,0,0,.32)";
     ctx.beginPath();
     ctx.ellipse(center.x, center.y + 13, 19, 8, 0, 0, Math.PI * 2);
@@ -1746,7 +1945,7 @@
       ctx.strokeStyle = `rgba(255,255,255,${0.18 + Math.sin(performance.now() / 240) * 0.06})`;
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(center.x, center.y, tower.range || config.range, 0, Math.PI * 2);
+      ctx.arc(center.x, center.y, range, 0, Math.PI * 2);
       ctx.stroke();
     } else {
       ctx.fillRect(center.x - 10, center.y - 10, 20, 20);
@@ -1784,6 +1983,76 @@
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(String(tower.level), center.x, center.y);
+    drawTowerCooldown(tower, center, config);
+  }
+
+  function drawSelectedTowerLinks(tower, center, range, config, target) {
+    ctx.save();
+    if (config.boost) {
+      state.towers.forEach((other) => {
+        if (other.id === tower.id) return;
+        const otherCenter = cellCenter(other.cellX, other.cellY);
+        if (
+          Math.hypot(otherCenter.x - center.x, otherCenter.y - center.y) > range
+        )
+          return;
+        ctx.strokeStyle = colorWithAlpha(config.color, 0.48);
+        ctx.lineWidth = 2;
+        ctx.setLineDash([7, 7]);
+        ctx.beginPath();
+        ctx.moveTo(center.x, center.y);
+        ctx.lineTo(otherCenter.x, otherCenter.y);
+        ctx.stroke();
+      });
+      const coverage = state.towers.filter((other) => {
+        if (other.id === tower.id) return false;
+        const otherCenter = cellCenter(other.cellX, other.cellY);
+        return (
+          Math.hypot(otherCenter.x - center.x, otherCenter.y - center.y) <=
+          range
+        );
+      }).length;
+      drawDefenseLabel(
+        `증폭 대상 ${coverage}`,
+        center.x,
+        center.y - range - 20,
+        config.color,
+      );
+    } else if (target) {
+      ctx.strokeStyle = colorWithAlpha(config.color, 0.62);
+      ctx.lineWidth = 3;
+      ctx.setLineDash([10, 8]);
+      ctx.beginPath();
+      ctx.moveTo(center.x, center.y);
+      ctx.lineTo(target.x, target.y);
+      ctx.stroke();
+      ctx.fillStyle = colorWithAlpha(config.color, 0.38);
+      ctx.beginPath();
+      ctx.arc(target.x, target.y, 18, 0, Math.PI * 2);
+      ctx.fill();
+      drawDefenseLabel("현재 목표", target.x, target.y - 34, config.color);
+    }
+    ctx.restore();
+  }
+
+  function drawTowerCooldown(tower, center, config) {
+    const cooldown = Number(tower.cooldownLeft || 0);
+    if (cooldown <= 0 || config.boost) return;
+    const baseCooldown = Number(config.cooldown || 1);
+    const ratio = Math.max(0, Math.min(1, cooldown / baseCooldown));
+    ctx.save();
+    ctx.strokeStyle = colorWithAlpha(config.color, 0.84);
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(
+      center.x,
+      center.y,
+      24,
+      -Math.PI / 2,
+      -Math.PI / 2 + Math.PI * 2 * (1 - ratio),
+    );
+    ctx.stroke();
+    ctx.restore();
   }
 
   function findVisibleTowerTarget(tower, center, config) {
@@ -2100,7 +2369,7 @@
     ui.towers.innerHTML = Object.entries(towerTypes)
       .map(
         ([key, tower]) =>
-          `<button type="button" data-tower="${escapeHtml(key)}" class="${selectedTowerType === key ? "active" : ""}"><span style="background:${tower.color}"></span><strong>${escapeHtml(tower.name)}</strong><small>${tower.cost} · ${escapeHtml(tower.desc || (tower.boost ? "주변 타워 강화" : "공격"))}</small></button>`,
+          `<button type="button" data-tower="${escapeHtml(key)}" class="${selectedTowerType === key ? "active" : ""}"><span style="background:${tower.color}"></span><strong>${escapeHtml(tower.name)}</strong><small>${tower.cost} · 사거리 ${tower.range} · ${escapeHtml(tower.desc || (tower.boost ? "주변 타워 강화" : "공격"))}</small></button>`,
       )
       .join("");
     ui.towers.querySelectorAll("[data-tower]").forEach((button) => {
@@ -2174,9 +2443,11 @@
   );
   canvas.addEventListener("pointermove", (event) => {
     hoverCell = cellFromEvent(event);
+    if (!selectedTowerId) renderHud();
   });
   canvas.addEventListener("pointerleave", () => {
     hoverCell = null;
+    if (!selectedTowerId) renderHud();
   });
   canvas.addEventListener("click", (event) => {
     const cell = cellFromEvent(event);
