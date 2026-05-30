@@ -21,8 +21,8 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 ROOT = Path(__file__).resolve().parent
-ARENA_WIDTH = 2600
-ARENA_HEIGHT = 1600
+ARENA_WIDTH = 5200
+ARENA_HEIGHT = 3200
 PLAYER_RADIUS = 18
 PLAYER_SPEED = 260
 BULLET_RADIUS = 5
@@ -31,7 +31,7 @@ BULLET_TTL = 1.6
 FIRE_COOLDOWN = 0.22
 RESPAWN_DELAY = 1.8
 TICK_RATE = 30
-ARENA_PICKUP_TARGET = 15
+ARENA_PICKUP_TARGET = 28
 ARENA_WEAPONS: dict[str, dict[str, Any]] = {
     "blaster": {
         "damage": 25,
@@ -81,54 +81,54 @@ ARENA_WEAPONS: dict[str, dict[str, Any]] = {
     },
 }
 ARENA_CONTROL_POINT_SPECS = [
-    {"id": "alpha", "x": 650, "y": 520, "radius": 118, "label": "A"},
-    {"id": "bravo", "x": 1300, "y": 800, "radius": 132, "label": "B"},
-    {"id": "charlie", "x": 1990, "y": 1080, "radius": 118, "label": "C"},
+    {"id": "alpha", "x": 1300, "y": 1040, "radius": 148, "label": "A"},
+    {"id": "bravo", "x": 2600, "y": 1600, "radius": 164, "label": "B"},
+    {"id": "charlie", "x": 3980, "y": 2160, "radius": 148, "label": "C"},
 ]
 ARENA_SPEED_LANES = [
     {
         "id": "north-run",
-        "x": 500,
-        "y": 345,
-        "w": 820,
-        "h": 56,
+        "x": 1000,
+        "y": 690,
+        "w": 1640,
+        "h": 64,
         "label": "북측 레인",
         "color": "#42d7ff",
         "boost": 1.18,
     },
     {
         "id": "center-cut",
-        "x": 1268,
-        "y": 490,
-        "w": 64,
-        "h": 620,
+        "x": 2536,
+        "y": 980,
+        "w": 72,
+        "h": 1240,
         "label": "중앙 레인",
         "color": "#53e2a8",
         "boost": 1.16,
     },
     {
         "id": "south-run",
-        "x": 1280,
-        "y": 1190,
-        "w": 820,
-        "h": 58,
+        "x": 2560,
+        "y": 2380,
+        "w": 1640,
+        "h": 66,
         "label": "남측 레인",
         "color": "#d08cff",
         "boost": 1.18,
     },
 ]
 ARENA_OBSTACLES = [
-    {"x": 320, "y": 260, "w": 210, "h": 76},
-    {"x": 760, "y": 460, "w": 170, "h": 92},
-    {"x": 1230, "y": 245, "w": 240, "h": 82},
-    {"x": 1740, "y": 420, "w": 210, "h": 96},
-    {"x": 2160, "y": 675, "w": 250, "h": 86},
-    {"x": 410, "y": 845, "w": 230, "h": 82},
-    {"x": 990, "y": 930, "w": 190, "h": 105},
-    {"x": 1540, "y": 1120, "w": 255, "h": 76},
-    {"x": 2020, "y": 1180, "w": 210, "h": 120},
-    {"x": 1830, "y": 250, "w": 118, "h": 220},
-    {"x": 680, "y": 1270, "w": 240, "h": 90},
+    {"x": 640, "y": 520, "w": 250, "h": 92},
+    {"x": 1520, "y": 920, "w": 204, "h": 110},
+    {"x": 2460, "y": 490, "w": 288, "h": 98},
+    {"x": 3480, "y": 840, "w": 252, "h": 114},
+    {"x": 4320, "y": 1350, "w": 300, "h": 104},
+    {"x": 820, "y": 1690, "w": 276, "h": 98},
+    {"x": 1980, "y": 1860, "w": 228, "h": 126},
+    {"x": 3080, "y": 2240, "w": 306, "h": 92},
+    {"x": 4040, "y": 2360, "w": 252, "h": 144},
+    {"x": 3660, "y": 500, "w": 142, "h": 264},
+    {"x": 1360, "y": 2540, "w": 288, "h": 108},
 ]
 COLORS = [
     "#53e2a8",
@@ -141,8 +141,8 @@ COLORS = [
     "#ff8fd4",
 ]
 
-FORTRESS_WIDTH = 2600
-FORTRESS_HEIGHT = 980
+FORTRESS_WIDTH = 5200
+FORTRESS_HEIGHT = 1080
 FORTRESS_GRAVITY = 300
 FORTRESS_TICK_RATE = 30
 FORTRESS_MOVE_BUDGET_MAX = 130
@@ -380,9 +380,12 @@ def build_defense_path_cells(points: list[tuple[int, int]]) -> set[tuple[int, in
 DEFENSE_PATH_CELLS = build_defense_path_cells(DEFENSE_PATH_POINTS)
 DEFENSE_PATH_PIXELS = [defense_cell_center(x, y) for x, y in DEFENSE_PATH_POINTS]
 
-PARTY_WIDTH = 2600
-PARTY_HEIGHT = 1600
+PARTY_WIDTH = 5200
+PARTY_HEIGHT = 3200
 PARTY_PLAYER_RADIUS = 18
+PARTY_SNAKE_TRAIL_POINT_GAP = 8
+PARTY_SNAKE_SELF_SAFE_POINTS = 6
+PARTY_SNAKE_SPAWN_SAFE_SECONDS = 1.0
 PARTY_GAME_TYPES = {"kart", "bomb", "snake", "coin"}
 PARTY_GAME_CONFIGS: dict[str, dict[str, Any]] = {
     "kart": {
@@ -392,14 +395,14 @@ PARTY_GAME_CONFIGS: dict[str, dict[str, Any]] = {
         "laps": 3,
         "speed": 360,
         "track": [
-            [320, 820],
-            [560, 380],
-            [1140, 220],
-            [1980, 360],
-            [2320, 830],
-            [1840, 1320],
-            [930, 1410],
-            [390, 1140],
+            [640, 1640],
+            [1120, 760],
+            [2280, 440],
+            [3960, 720],
+            [4640, 1660],
+            [3680, 2640],
+            [1860, 2820],
+            [780, 2280],
         ],
     },
     "bomb": {
@@ -483,6 +486,7 @@ class Client:
     score: int = 0
     alive: bool = True
     respawn_at: float = 0
+    respawn_invulnerable_until: float = 0
     last_fire: float = 0
     shield_until: float = 0
     haste_until: float = 0
@@ -665,6 +669,7 @@ class PartyClient:
     cooldown_until: float = 0.0
     boosted_until: float = 0.0
     shield_until: float = 0.0
+    snake_spawn_safe_until: float = 0.0
     snake_bite_until: float = 0.0
     drift_charge: float = 0.0
     drifting: bool = False
@@ -844,8 +849,8 @@ class FortressMatch:
 
     def reset(self) -> None:
         self.players = [
-            self.create_player("P1", "#53e2a8", 260, 45, 8, 82),
-            self.create_player("P2", "#ffbc54", 2340, 135, 98, 172),
+            self.create_player("P1", "#53e2a8", 420, 45, 8, 82),
+            self.create_player("P2", "#ffbc54", 4780, 135, 98, 172),
         ]
         self.build_terrain()
         self.place_players()
@@ -897,12 +902,13 @@ class FortressMatch:
         self.terrain = []
         for x in range(FORTRESS_WIDTH + 1):
             y = (
-                700
+                770
                 + math.sin(x / 135) * 62
                 + math.sin(x / 57) * 28
                 + math.sin(x / 310) * 48
+                + math.sin(x / 730) * 76
             )
-            self.terrain.append(self.clamp(round(y), 520, FORTRESS_HEIGHT - 85))
+            self.terrain.append(self.clamp(round(y), 560, FORTRESS_HEIGHT - 85))
         for _ in range(4):
             for x in range(1, len(self.terrain) - 1):
                 self.terrain[x] = round(
@@ -2249,6 +2255,7 @@ class PartyRoom:
             player.cooldown_until = 0
             player.boosted_until = 0
             player.shield_until = 0
+            player.snake_spawn_safe_until = 0
             player.snake_bite_until = 0
             player.drift_charge = 0
             player.drifting = False
@@ -2273,15 +2280,17 @@ class PartyRoom:
     def place_client(self, client: PartyClient) -> None:
         index = max(0, self.next_client_id - 1)
         if self.game_type == "kart":
-            client.x = 290 + (index % 4) * 46
-            client.y = 795 + (index // 4) * 48
+            client.x = 580 + (index % 4) * 46
+            client.y = 1590 + (index // 4) * 48
             client.angle = 0
         else:
             margin = 90
             for _ in range(80):
                 client.x = random.uniform(margin, PARTY_WIDTH - margin)
                 client.y = random.uniform(margin, PARTY_HEIGHT - margin)
-                if not self.client_hits_block(client.x, client.y):
+                if not self.client_hits_block(client.x, client.y) and (
+                    self.game_type != "snake" or self.snake_spawn_clear(client, client.x, client.y)
+                ):
                     break
             client.angle = random.uniform(-math.pi, math.pi)
         client.vx = 0
@@ -2289,6 +2298,9 @@ class PartyRoom:
         client.alive = True
         client.respawn_at = 0
         client.shield_until = 0
+        client.snake_spawn_safe_until = (
+            time.monotonic() + PARTY_SNAKE_SPAWN_SAFE_SECONDS if self.game_type == "snake" else 0
+        )
         client.snake_bite_until = 0
         client.drift_charge = 0
         client.drifting = False
@@ -2305,8 +2317,19 @@ class PartyRoom:
         client.action_latched = False
         client.trail = [(client.x, client.y)]
 
+    def snake_spawn_clear(self, client: PartyClient, x: float, y: float) -> bool:
+        for other in self.clients.values():
+            if other.id == client.id or not other.alive:
+                continue
+            if party_distance(x, y, other.x, other.y) < 160:
+                return False
+            for trail_x, trail_y in other.trail[-80:]:
+                if party_distance(x, y, trail_x, trail_y) < 90:
+                    return False
+        return True
+
     def seed_pickups(self) -> None:
-        target = {"kart": 9, "bomb": 12, "snake": 34, "coin": 30}[self.game_type]
+        target = {"kart": 18, "bomb": 24, "snake": 60, "coin": 54}[self.game_type]
         while len(self.pickups) < target:
             kind = "coin"
             value = 1
@@ -2379,9 +2402,9 @@ class PartyRoom:
     def seed_blocks(self) -> None:
         if self.game_type != "bomb" or self.blocks:
             return
-        for x in range(320, PARTY_WIDTH - 260, 160):
-            for y in range(280, PARTY_HEIGHT - 220, 160):
-                if (x // 160 + y // 160) % 5 == 0:
+        for x in range(320, PARTY_WIDTH - 260, 220):
+            for y in range(280, PARTY_HEIGHT - 220, 220):
+                if (x // 220 + y // 220) % 5 == 0:
                     continue
                 if any(
                     party_distance(x, y, spawn_x, spawn_y) < 260
@@ -2719,13 +2742,21 @@ class PartyRoom:
                     continue
                 self.knock_out(client, now, "벽에 닿았습니다.")
                 continue
-            client.trail.append((client.x, client.y))
+            self.append_snake_trail(client)
             limit = 22 + min(90, client.score * 2)
             client.trail = client.trail[-limit:]
+            if now < client.snake_spawn_safe_until:
+                continue
             for other in self.clients.values():
                 if not other.alive:
                     continue
-                trail = other.trail[:-8] if other.id == client.id else other.trail
+                if other.id != client.id and now < other.snake_spawn_safe_until:
+                    continue
+                trail = (
+                    other.trail[:-PARTY_SNAKE_SELF_SAFE_POINTS]
+                    if other.id == client.id
+                    else other.trail
+                )
                 hit_index = next(
                     (
                         index
@@ -2742,6 +2773,10 @@ class PartyRoom:
                     break
                 self.knock_out(client, now, "꼬리에 부딪혔습니다.")
                 break
+
+    def append_snake_trail(self, client: PartyClient) -> None:
+        if not client.trail or party_distance(client.x, client.y, *client.trail[-1]) >= PARTY_SNAKE_TRAIL_POINT_GAP:
+            client.trail.append((client.x, client.y))
 
     def guard_snake(self, client: PartyClient, now: float, label: str) -> bool:
         if self.game_type != "snake" or now >= client.shield_until:
@@ -4429,6 +4464,7 @@ class ArenaServer:
                         client.x, client.y = self.random_spawn()
                         client.health = 100
                         client.alive = True
+                        client.respawn_invulnerable_until = now + 0.5
                         client.shield_until = 0
                         client.haste_until = 0
                         client.rapid_until = 0
@@ -4736,8 +4772,11 @@ class ArenaServer:
         room.bullets = alive_bullets
 
     def find_bullet_hit(self, bullet: Bullet, players: list[Client]) -> Client | None:
+        now = time.monotonic()
         for player in players:
             if not player.alive or player.id == bullet.owner_id:
+                continue
+            if now < player.respawn_invulnerable_until:
                 continue
             if math.hypot(player.x - bullet.x, player.y - bullet.y) <= PLAYER_RADIUS + bullet.radius:
                 return player
@@ -4751,6 +4790,8 @@ class ArenaServer:
         for player in list(room.clients.values()):
             if not player.alive or player.id == bullet.owner_id:
                 continue
+            if time.monotonic() < player.respawn_invulnerable_until:
+                continue
             gap = math.hypot(player.x - bullet.x, player.y - bullet.y)
             if gap > bullet.splash + PLAYER_RADIUS:
                 continue
@@ -4762,6 +4803,8 @@ class ArenaServer:
         self, room: ArenaRoom, victim: Client, attacker_id: str, color: str, amount: int = 25
     ) -> None:
         now = time.monotonic()
+        if now < victim.respawn_invulnerable_until:
+            return
         damage = max(6, round(amount * 0.4)) if now < victim.shield_until else amount
         victim.health = max(0, victim.health - damage)
         self.add_arena_effect(
@@ -4810,6 +4853,8 @@ class ArenaServer:
                         "color": client.color,
                         "alive": client.alive,
                         "respawnIn": max(0, round(client.respawn_at - now, 2)),
+                        "invulnerable": client.alive
+                        and now < client.respawn_invulnerable_until,
                         "shielded": now < client.shield_until,
                         "hasted": now < client.haste_until,
                         "rapid": now < client.rapid_until,

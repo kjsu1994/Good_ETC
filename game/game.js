@@ -25,8 +25,8 @@ const keys = new Set();
 const pointer = { x: 0, y: 0, down: false };
 const camera = { x: 0, y: 0 };
 const localArenaConfig = {
-  width: 2600,
-  height: 1600,
+  width: 5200,
+  height: 3200,
   playerRadius: 18,
   playerSpeed: 260,
   bulletRadius: 5,
@@ -34,6 +34,7 @@ const localArenaConfig = {
   bulletTtl: 1.6,
   fireCooldown: 0.22,
   respawnDelay: 1.8,
+  pickupTarget: 28,
 };
 const arenaWeaponSpecs = {
   blaster: {
@@ -96,60 +97,60 @@ const arenaWeaponSpecs = {
   },
 };
 const arenaControlPointSpecs = [
-  { id: "alpha", x: 650, y: 520, radius: 118, label: "A" },
-  { id: "bravo", x: 1300, y: 800, radius: 132, label: "B" },
-  { id: "charlie", x: 1990, y: 1080, radius: 118, label: "C" },
+  { id: "alpha", x: 1300, y: 1040, radius: 148, label: "A" },
+  { id: "bravo", x: 2600, y: 1600, radius: 164, label: "B" },
+  { id: "charlie", x: 3980, y: 2160, radius: 148, label: "C" },
 ];
 const arenaSpeedLaneSpecs = [
   {
     id: "north-run",
-    x: 500,
-    y: 345,
-    w: 820,
-    h: 56,
+    x: 1000,
+    y: 690,
+    w: 1640,
+    h: 64,
     label: "북측 레인",
     color: "#42d7ff",
     boost: 1.18,
   },
   {
     id: "center-cut",
-    x: 1268,
-    y: 490,
-    w: 64,
-    h: 620,
+    x: 2536,
+    y: 980,
+    w: 72,
+    h: 1240,
     label: "중앙 레인",
     color: "#53e2a8",
     boost: 1.16,
   },
   {
     id: "south-run",
-    x: 1280,
-    y: 1190,
-    w: 820,
-    h: 58,
+    x: 2560,
+    y: 2380,
+    w: 1640,
+    h: 66,
     label: "남측 레인",
     color: "#d08cff",
     boost: 1.18,
   },
 ];
 const fallbackObstacles = [
-  { x: 320, y: 260, w: 210, h: 76 },
-  { x: 760, y: 460, w: 170, h: 92 },
-  { x: 1230, y: 245, w: 240, h: 82 },
-  { x: 1740, y: 420, w: 210, h: 96 },
-  { x: 2160, y: 675, w: 250, h: 86 },
-  { x: 410, y: 845, w: 230, h: 82 },
-  { x: 990, y: 930, w: 190, h: 105 },
-  { x: 1540, y: 1120, w: 255, h: 76 },
-  { x: 2020, y: 1180, w: 210, h: 120 },
-  { x: 1830, y: 250, w: 118, h: 220 },
-  { x: 680, y: 1270, w: 240, h: 90 },
+  { x: 640, y: 520, w: 250, h: 92 },
+  { x: 1520, y: 920, w: 204, h: 110 },
+  { x: 2460, y: 490, w: 288, h: 98 },
+  { x: 3480, y: 840, w: 252, h: 114 },
+  { x: 4320, y: 1350, w: 300, h: 104 },
+  { x: 820, y: 1690, w: 276, h: 98 },
+  { x: 1980, y: 1860, w: 228, h: 126 },
+  { x: 3080, y: 2240, w: 306, h: 92 },
+  { x: 4040, y: 2360, w: 252, h: 144 },
+  { x: 3660, y: 500, w: 142, h: 264 },
+  { x: 1360, y: 2540, w: 288, h: 108 },
 ];
 const fallbackPickups = [
-  { id: "preview-heal", x: 560, y: 385, kind: "heal" },
-  { id: "preview-shield", x: 1110, y: 560, kind: "shield" },
-  { id: "preview-haste", x: 1510, y: 850, kind: "haste" },
-  { id: "preview-rapid", x: 820, y: 1060, kind: "rapid" },
+  { id: "preview-heal", x: 1120, y: 770, kind: "heal" },
+  { id: "preview-shield", x: 2220, y: 1120, kind: "shield" },
+  { id: "preview-haste", x: 3020, y: 1700, kind: "haste" },
+  { id: "preview-rapid", x: 1640, y: 2120, kind: "rapid" },
 ];
 let socket = null;
 let playerId = "";
@@ -157,8 +158,8 @@ let lastFrame = performance.now();
 let localArenaIds = { bullet: 1, pickup: 1 };
 let latestState = {
   arena: {
-    width: 2600,
-    height: 1600,
+    width: 5200,
+    height: 3200,
     obstacles: fallbackObstacles,
     speedLanes: arenaSpeedLaneSpecs,
   },
@@ -241,7 +242,7 @@ function safeUrl(value) {
 }
 
 function currentAssetVersion() {
-  return new URLSearchParams(window.location.search).get("v") || "20260530au";
+  return new URLSearchParams(window.location.search).get("v") || "20260530ba";
 }
 
 function nowSeconds() {
@@ -636,6 +637,7 @@ function createLocalArenaPlayer(id, name, color, x, y, bot) {
     score: 0,
     alive: true,
     respawnAt: 0,
+    respawnInvulnerableUntil: 0,
     lastFire: 0,
     shieldUntil: 0,
     hasteUntil: 0,
@@ -649,6 +651,7 @@ function createLocalArenaPlayer(id, name, color, x, y, bot) {
     dashAngle: 0,
     dashLatch: false,
     shielded: false,
+    invulnerable: false,
     hasted: false,
     rapid: false,
     dashing: false,
@@ -748,6 +751,7 @@ function respawnLocalArenaPlayer(player, now) {
   player.alive = true;
   player.respawnAt = 0;
   player.respawnIn = 0;
+  player.respawnInvulnerableUntil = now + 0.5;
   player.shieldUntil = 0;
   player.hasteUntil = 0;
   player.rapidUntil = 0;
@@ -789,6 +793,8 @@ function updateLocalArena(dt, now) {
   latestState.players.forEach((item) => {
     expireLocalArenaWeapon(item, now);
     item.shielded = now < item.shieldUntil;
+    item.invulnerable =
+      item.alive && now < (item.respawnInvulnerableUntil || 0);
     item.hasted = now < item.hasteUntil;
     item.rapid = now < item.rapidUntil;
     item.dashing = now < (item.dashUntil || 0);
@@ -1106,6 +1112,7 @@ function updateLocalArenaBullets(dt, now) {
       (player) =>
         player.alive &&
         player.id !== bullet.ownerId &&
+        now >= (player.respawnInvulnerableUntil || 0) &&
         Math.hypot(player.x - bullet.x, player.y - bullet.y) <=
           localArenaConfig.playerRadius +
             (bullet.radius || localArenaConfig.bulletRadius),
@@ -1151,6 +1158,7 @@ function resolveLocalArenaBulletImpact(bullet, now) {
   });
   latestState.players.forEach((player) => {
     if (!player.alive || player.id === bullet.ownerId) return;
+    if (now < (player.respawnInvulnerableUntil || 0)) return;
     const gap = Math.hypot(player.x - bullet.x, player.y - bullet.y);
     if (gap > splash + localArenaConfig.playerRadius) return;
     const ratio = Math.max(0.25, 1 - gap / Math.max(1, splash));
@@ -1160,6 +1168,7 @@ function resolveLocalArenaBulletImpact(bullet, now) {
 }
 
 function damageLocalArenaPlayer(victim, attackerId, now, color, amount = 25) {
+  if (now < (victim.respawnInvulnerableUntil || 0)) return;
   const damage =
     now < victim.shieldUntil ? Math.max(6, Math.round(amount * 0.4)) : amount;
   victim.health = Math.max(0, victim.health - damage);
@@ -1213,7 +1222,7 @@ function collectLocalArenaPickups(player, now) {
 }
 
 function ensureLocalArenaPickups() {
-  while ((latestState.pickups || []).length < 12) {
+  while ((latestState.pickups || []).length < localArenaConfig.pickupTarget) {
     latestState.pickups.push(createLocalArenaPickup());
   }
 }
@@ -1223,7 +1232,7 @@ function clamp(value, min, max) {
 }
 
 function drawGrid() {
-  const arena = latestState.arena || { width: 2600, height: 1600 };
+  const arena = latestState.arena || { width: 5200, height: 3200 };
   const bg = ctx.createLinearGradient(
     0,
     0,
@@ -1834,6 +1843,16 @@ function drawPlayer(player) {
     ctx.arc(0, 0, radius + 10, 0, Math.PI * 2);
     ctx.stroke();
   }
+  if (player.invulnerable) {
+    const pulse = 0.5 + Math.sin(performance.now() / 80) * 0.5;
+    ctx.strokeStyle = `rgba(245,251,255,${0.58 + pulse * 0.3})`;
+    ctx.lineWidth = 4;
+    ctx.setLineDash([8, 6]);
+    ctx.beginPath();
+    ctx.arc(0, 0, radius + 16 + pulse * 3, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
   ctx.restore();
 
   ctx.fillStyle = "rgba(0, 0, 0, 0.54)";
@@ -1865,7 +1884,7 @@ function drawPlayer(player) {
 }
 
 function drawMinimap() {
-  const arena = latestState.arena || { width: 2600, height: 1600 };
+  const arena = latestState.arena || { width: 5200, height: 3200 };
   const mapScale = Math.min(210 / arena.width, 132 / arena.height);
   const width = arena.width * mapScale;
   const height = arena.height * mapScale;

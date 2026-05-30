@@ -262,6 +262,11 @@
       color: #fff;
       border-color: transparent;
     }
+    .c29 button:not(.active) {
+      background: rgba(0, 0, 0, 0.05);
+      color: var(--t);
+      border-color: var(--b);
+    }
     .game-tabs {
       margin-bottom: 12px;
     }
@@ -1977,6 +1982,13 @@
       </div>
       <div class="c2a">
         <div class="cn">
+          <span>날씨 지역</span
+          ><span id="weatherRegionLabel" class="c2l"></span>
+        </div>
+        <select id="weatherRegionSelect" class="c26"></select>
+      </div>
+      <div class="c2a">
+        <div class="cn">
           <span>메모 보기</span><span id="xj" class="c2l"></span>
         </div>
         <div class="c29">
@@ -2341,7 +2353,7 @@
       <div class="c29 game-tabs" role="tablist" aria-label="게임 선택">
         <button
           type="button"
-          class="active"
+          class="ck active"
           id="gameTabArena"
           data-game-tab="arena"
         >
@@ -2430,6 +2442,11 @@
             대시는 로컬 훈련장과 멀티 서버에서 같은 판정을 사용하며, 스태미나는
             캐릭터 체력 아래 파란 막대로 표시됩니다.
           </div>
+          <div>
+            리스폰 직후에는 0.5초 동안 흰 점선 보호 링이 표시되고 피해를 받지
+            않습니다. 부활 위치 주변에 탄환이 남아 있어도 즉시 다시 죽는 상황을
+            줄입니다.
+          </div>
         </div>
       </div>
       <div class="game-pane" id="gameFortressPane" data-game-pane="fortress">
@@ -2443,7 +2460,7 @@
           <div>
             <code>←/→</code>는 이동, <code>↑/↓</code>는 포각, <code>A/D</code>는
             파워, <code>Space</code>는 발사입니다. 이동 게이지는 턴마다
-            <code>100</code>으로 회복되고 좌/우 이동마다 <code>10</code>씩
+            <code>130</code>으로 회복되고 좌/우 이동마다 <code>10</code>씩
             줄어듭니다.
           </div>
           <div>
@@ -2452,9 +2469,9 @@
             안의 상대에게 피해를 줍니다.
           </div>
           <div>
-            조준 중에는 바람을 반영한 예상 궤적과 착탄 지점이 표시됩니다.
-            분열탄은 갈라지는 가지 궤적까지 보이며, 착탄 지점이 상대와 가까우면
-            <code>직격권</code> 또는 <code>근접</code> 표식으로 알려줍니다.
+            전장은 더 넓어져 시작 시 상대가 한 화면에 다 보이지 않습니다. 조준
+            중에는 초반 탄도만 짧게 표시되고, 착탄 지점이나 직격권 표식은 숨겨져
+            있습니다. 발사 후에는 실제 포탄을 따라 화면이 이동합니다.
           </div>
           <div>
             바람이 강할수록 하늘의 바람 리본이 뚜렷하게 흐르고, 지형 표면에는
@@ -2493,6 +2510,11 @@
             보고 타워 배치와 업그레이드를 조정하세요.
           </div>
           <div>
+            맵별로 바닥 장식과 분위기가 다르게 표시되고, 웨이브 중 적이 몰린
+            경로는 붉은 열기로 강조됩니다. 기지 가까이 접근한 적이나 낮은 기지
+            체력은 경고 링과 라벨로 표시됩니다.
+          </div>
+          <div>
             자원을 써서 전술 스킬을 사용할 수 있습니다. 포격 지원은 전방 적
             무리에 큰 피해를 주고, 빙결장은 적 무리를 감속하며, 긴급 수리는 기지
             체력을 회복합니다.
@@ -2521,10 +2543,13 @@
             카트 랠리는 체크포인트 3바퀴 완주, 드리프트 미니부스터, 부스터 패드,
             니트로 픽업, 앞차 뒤 드래프트 추월, 오일 트랩 회피를 사용합니다.
             폭탄 그리드는 블록 파괴, 화력/폭탄수/속도/킥/원격 기폭 파워업, 이동
-            폭탄, 연쇄폭발 회피, 스네이크 배틀은 먹이와 꼬리 충돌 관리에
-            실드/보너스 먹이/사냥 모드와 질주 꼬리 절단을 더했고, 코인 러시는
-            위험 구역을 피해 콤보, 자석, 피버 보너스를 모은 뒤 은행/금고 존에서
-            점수를 현금화하는 방식입니다.
+            폭탄, 연쇄폭발 회피를 사용하며 폭발 범위는 위험 타일과 균열 블록으로
+            미리 표시됩니다. 스네이크 배틀은 먹이와 꼬리 충돌 관리에 실드/보너스
+            먹이/사냥 모드와 질주 꼬리 절단을 더했고, 코인 러시는 위험 구역을
+            피해 콤보, 자석, 피버 보너스를 모은 뒤 은행/금고 존에서 점수를
+            현금화하는 방식입니다. 콤보 중에는 수집 후보와 현금화 경로가 점선
+            화살표로 표시되고, 자석 코인은 연결선으로 끌려오는 방향을
+            보여줍니다.
           </div>
           <div>
             <code>혼자하기</code>는 서버 연결 없이 실행되고, 멀티가 안 되면 게임
@@ -3194,8 +3219,7 @@
       a = e.addEventListener.bind(e),
       s = localStorage,
       r = JSON.parse,
-      c = JSON.stringify,
-      l = "Sejong";
+      c = JSON.stringify;
 
     // Shared storage keys and DOM ID aliases. Keep values stable for user data.
     const STORAGE_KEYS = Object.freeze({
@@ -3238,6 +3262,58 @@
       structuredInput: "x2i",
       structuredSearch: "x9",
     });
+    const WEATHER_REGIONS = Object.freeze([
+      { label: "서울", query: "Seoul,KR" },
+      { label: "부산", query: "Busan,KR" },
+      { label: "대구", query: "Daegu,KR" },
+      { label: "인천", query: "Incheon,KR" },
+      { label: "광주", query: "Gwangju,KR" },
+      { label: "대전", query: "Daejeon,KR" },
+      { label: "울산", query: "Ulsan,KR" },
+      { label: "세종", query: "Sejong,KR" },
+      { label: "경기도(수원)", query: "Suwon,KR" },
+      { label: "강원도(춘천)", query: "Chuncheon,KR" },
+      { label: "충청북도(청주)", query: "Cheongju,KR" },
+      { label: "충청남도(천안)", query: "Cheonan,KR" },
+      { label: "전라북도(전주)", query: "Jeonju,KR" },
+      { label: "전라남도(목포)", query: "Mokpo,KR" },
+      { label: "경상북도(안동)", query: "Andong,KR" },
+      { label: "경상남도(창원)", query: "Changwon,KR" },
+      { label: "제주", query: "Jeju City,KR" },
+    ]);
+    function weatherRegionByQuery(e) {
+      return (
+        WEATHER_REGIONS.find((t) => t.query === e) ||
+        WEATHER_REGIONS.find((e) => e.query === "Sejong,KR") ||
+        WEATHER_REGIONS[0]
+      );
+    }
+    function savedWeatherRegion() {
+      try {
+        return weatherRegionByQuery(
+          r(s.getItem(STORAGE_KEYS.uiPrefs) || "{}").weatherRegion,
+        ).query;
+      } catch (e) {
+        return weatherRegionByQuery().query;
+      }
+    }
+    async function syncWeather(e) {
+      const n = weatherRegionByQuery(e);
+      try {
+        const e = await fetch(
+            `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(n.query)}&appid=9a641936a27c609e7cd2d4fa00e16c6f&units=metric&lang=kr`,
+          ),
+          i = await e.json();
+        if (!e.ok || !i.weather?.length || !i.main) throw new Error("weather");
+        ((t("x1o").innerHTML =
+          `<img src="https://openweathermap.org/img/wn/${i.weather[0].icon}@2x.png">`),
+          (t("xl").innerText =
+            `${n.label}: ${i.weather[0].description} (${Math.round(i.main.temp)}°C)`));
+      } catch (e) {
+        ((t("x1o").innerHTML = ""),
+          (t("xl").innerText = `${n.label}: 날씨 연동 실패`));
+      }
+    }
 
     // Clock and weather.
     function d() {
@@ -3245,23 +3321,7 @@
       t("clock").innerText =
         `${e.getMonth() + 1}월 ${e.getDate()}일 (${["일", "월", "화", "수", "목", "금", "토"][e.getDay()]}) ${String(e.getHours()).padStart(2, "0")}:${String(e.getMinutes()).padStart(2, "0")}:${String(e.getSeconds()).padStart(2, "0")}`;
     }
-    (setInterval(d, 1e3),
-      d(),
-      (async function () {
-        try {
-          const e = await fetch(
-              `https://api.openweathermap.org/data/2.5/weather?q=${l}&appid=9a641936a27c609e7cd2d4fa00e16c6f&units=metric&lang=kr`,
-            ),
-            n = await e.json();
-          n.weather &&
-            ((t("x1o").innerHTML =
-              `<img src="https://openweathermap.org/img/wn/${n.weather[0].icon}@2x.png">`),
-            (t("xl").innerText =
-              `${l}: ${n.weather[0].description} (${Math.round(n.main.temp)}°C)`));
-        } catch (e) {
-          t("xl").innerText = "날씨 연동 실패";
-        }
-      })());
+    (setInterval(d, 1e3), d(), syncWeather(savedWeatherRegion()));
 
     // UI settings, section visibility, and backup/import.
     const u = STORAGE_KEYS.uiPrefs,
@@ -3284,6 +3344,7 @@
         surface: 50,
         width: window.matchMedia("(min-width: 1500px)").matches ? 1280 : 1120,
         stickyHeader: !1,
+        weatherRegion: "Sejong,KR",
         memoMode: "default",
       };
     }
@@ -3309,10 +3370,18 @@
     function k(e, t) {
       document.documentElement.style.setProperty(e, t);
     }
+    function renderWeatherRegionOptions() {
+      const e = t("weatherRegionSelect");
+      e &&
+        !e.options.length &&
+        WEATHER_REGIONS.forEach((t) => e.add(new Option(t.label, t.query)));
+    }
     function L() {
+      const e = weatherRegionByQuery(b.weatherRegion);
       (n("[data-ui-theme]").forEach((e) =>
         e.classList.toggle("active", e.dataset.uiTheme === b.theme),
       ),
+        renderWeatherRegionOptions(),
         n("[data-ui-accent]").forEach((e) =>
           e.classList.toggle(
             "active",
@@ -3327,11 +3396,13 @@
         (t("xk").value = b.surface),
         (t("xa").value = b.width),
         (t("x10").checked = !!b.stickyHeader),
+        (t("weatherRegionSelect").value = e.query),
         (t("x20").innerText = Math.round(100 * b.fontScale) + "%"),
         (t("xy").innerText = Math.round(100 * b.density) + "%"),
         (t("x11").innerText = b.surface + "%"),
         (t("x1n").innerText = b.width + "px"),
         (t("x1a").innerText = b.stickyHeader ? "ON" : "OFF"),
+        (t("weatherRegionLabel").innerText = e.label),
         (t("xj").innerText =
           "focus" === b.memoMode
             ? "집중"
@@ -3351,6 +3422,7 @@
         (b.surface = Math.round(w(b.surface, 0, 100))),
         (b.width = Math.round(w(b.width, 960, 1440))),
         (b.stickyHeader = !!b.stickyHeader),
+        (b.weatherRegion = weatherRegionByQuery(b.weatherRegion).query),
         (b.memoMode = ["default", "wide", "focus"].includes(b.memoMode)
           ? b.memoMode
           : "default"),
@@ -3414,6 +3486,7 @@
         surface: b.surface,
         width: b.width,
         stickyHeader: b.stickyHeader,
+        weatherRegion: b.weatherRegion,
         memoMode: b.memoMode,
       };
     }
@@ -3469,7 +3542,8 @@
                   },
                 };
               })()[e];
-              t && ((b = { ...v(), ...t }), _());
+              t &&
+                ((b = { ...v(), ...t, weatherRegion: b.weatherRegion }), _());
             })(e.dataset.uiPreset)),
       ),
       n("[data-ui-memo-mode]").forEach(
@@ -3496,6 +3570,11 @@
       (t("x10").onchange = (e) => {
         ((b.stickyHeader = e.target.checked), _());
       }),
+      (t("weatherRegionSelect").onchange = (e) => {
+        ((b.weatherRegion = weatherRegionByQuery(e.target.value).query),
+          _(),
+          syncWeather(b.weatherRegion));
+      }),
       (t("x3").onclick = function () {
         (s.setItem(f, c(S())), L());
       }),
@@ -3503,7 +3582,7 @@
         const e = s.getItem(f);
         if (e)
           try {
-            ((b = { ...v(), ...r(e) }), _());
+            ((b = { ...v(), ...r(e) }), _(), syncWeather(b.weatherRegion));
           } catch (e) {
             alert("내 프리셋을 불러올 수 없습니다.");
           }
@@ -3513,7 +3592,8 @@
         ((b = v()),
           s.removeItem(u),
           s.setItem(STORAGE_KEYS.legacyTheme, b.theme),
-          $());
+          $(),
+          syncWeather(b.weatherRegion));
       }),
       a("pointerdown", (e) => {
         p.contains(e.target) || T();
@@ -3640,7 +3720,8 @@
                     ? s.setItem(f, c(e.items.ui.customPreset))
                     : s.removeItem(f)),
                 (b = y()),
-                $()),
+                $(),
+                syncWeather(b.weatherRegion)),
                 t.includes("sections") &&
                   e.items.sections &&
                   (s.setItem(
@@ -4364,7 +4445,7 @@
         e.textContent = "Connection info unavailable: " + n.message;
       }
     }
-    const GAME_ASSET_VERSION = "20260530au";
+    const GAME_ASSET_VERSION = "20260530ba";
     const PARTY_GAME_LABELS = {
       kart: "카트 랠리",
       bomb: "폭탄 그리드",
@@ -4634,6 +4715,7 @@
         ? e
         : "arena";
       (n("[data-game-tab]").forEach((t) => {
+        t.classList.add("ck");
         t.classList.toggle("active", t.dataset.gameTab === gameActiveTab);
       }),
         n("[data-game-pane]").forEach((t) => {

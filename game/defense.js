@@ -1,7 +1,7 @@
 (() => {
   const params = new URLSearchParams(window.location.search);
   const isSolo = ["solo", "local"].includes(params.get("mode") || "");
-  const assetVersion = params.get("v") || "20260530au";
+  const assetVersion = params.get("v") || "20260530ba";
   const world = { width: 1536, height: 960, cell: 24, columns: 64, rows: 40 };
   let defenseMaps = {
     classic: {
@@ -1557,15 +1557,16 @@
   }
 
   function drawBoard() {
+    const theme = defenseMapTheme(state.mapId);
     const backdrop = ctx.createLinearGradient(
       0,
       0,
       window.innerWidth,
       window.innerHeight,
     );
-    backdrop.addColorStop(0, "#101827");
-    backdrop.addColorStop(0.55, "#142139");
-    backdrop.addColorStop(1, "#21172e");
+    backdrop.addColorStop(0, theme.backdrop[0]);
+    backdrop.addColorStop(0.55, theme.backdrop[1]);
+    backdrop.addColorStop(1, theme.backdrop[2]);
     ctx.fillStyle = backdrop;
     ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
     const topLeft = toScreen(0, 0);
@@ -1573,13 +1574,14 @@
     ctx.translate(topLeft.x, topLeft.y);
     ctx.scale(camera.scale, camera.scale);
     const ground = ctx.createLinearGradient(0, 0, world.width, world.height);
-    ground.addColorStop(0, "#21344b");
-    ground.addColorStop(1, "#1b273d");
+    ground.addColorStop(0, theme.ground[0]);
+    ground.addColorStop(1, theme.ground[1]);
     ctx.fillStyle = ground;
     ctx.fillRect(0, 0, world.width, world.height);
     drawMapDecor();
     drawGrid();
     drawPath();
+    drawPathThreatOverlay();
     drawSpawnPortal();
     drawPlacementPreview();
     state.towers.forEach(drawTower);
@@ -1589,6 +1591,36 @@
     drawPing();
     drawBase();
     ctx.restore();
+  }
+
+  function defenseMapTheme(mapId) {
+    const themes = {
+      classic: {
+        backdrop: ["#101827", "#142139", "#21172e"],
+        ground: ["#21344b", "#1b273d"],
+        panel: "rgba(98,230,255,.10)",
+        trim: "rgba(245,251,255,.16)",
+        accent: "#62e6ff",
+        dust: "rgba(178,203,255,.07)",
+      },
+      harbor: {
+        backdrop: ["#0b1726", "#0f2936", "#111d32"],
+        ground: ["#18394a", "#19283b"],
+        panel: "rgba(77,185,220,.12)",
+        trim: "rgba(205,239,255,.18)",
+        accent: "#5ed3ff",
+        dust: "rgba(93,211,255,.08)",
+      },
+      lava: {
+        backdrop: ["#1f1118", "#2a1829", "#35191c"],
+        ground: ["#2b2636", "#231d2b"],
+        panel: "rgba(255,117,73,.13)",
+        trim: "rgba(255,194,115,.18)",
+        accent: "#ff8b52",
+        dust: "rgba(255,126,76,.08)",
+      },
+    };
+    return themes[mapId] || themes.classic;
   }
 
   function drawGrid() {
@@ -1609,6 +1641,9 @@
   }
 
   function drawMapDecor() {
+    const mapId = state.mapId || "classic";
+    const theme = defenseMapTheme(mapId);
+    drawMapEnvironment(mapId, theme);
     for (let index = 0; index < 96; index += 1) {
       const x = 30 + ((index * 151) % (world.width - 60));
       const y = 30 + ((index * 97) % (world.height - 60));
@@ -1621,9 +1656,9 @@
       }
       const type = index % 5;
       if (type === 0) {
-        ctx.fillStyle = "rgba(98,230,255,.10)";
+        ctx.fillStyle = theme.panel;
         ctx.fillRect(x - 16, y - 11, 32, 22);
-        ctx.strokeStyle = "rgba(245,251,255,.16)";
+        ctx.strokeStyle = theme.trim;
         ctx.strokeRect(x - 16, y - 11, 32, 22);
         ctx.fillStyle = "rgba(6,12,22,.32)";
         ctx.fillRect(x - 8, y - 5, 16, 10);
@@ -1653,6 +1688,105 @@
     }
   }
 
+  function drawMapEnvironment(mapId, theme) {
+    ctx.save();
+    if (mapId === "harbor") {
+      drawHarborWater(theme);
+    } else if (mapId === "lava") {
+      drawLavaCracks(theme);
+    } else {
+      drawClassicTechFloor(theme);
+    }
+    ctx.restore();
+  }
+
+  function drawClassicTechFloor(theme) {
+    ctx.strokeStyle = theme.dust;
+    ctx.lineWidth = 2;
+    for (let index = 0; index < 34; index += 1) {
+      const x = 42 + ((index * 197) % (world.width - 120));
+      const y = 54 + ((index * 131) % (world.height - 120));
+      if (
+        pathCells.has(
+          `${Math.floor(x / world.cell)},${Math.floor(y / world.cell)}`,
+        )
+      )
+        continue;
+      const width = 54 + (index % 4) * 18;
+      const height = 28 + (index % 3) * 10;
+      ctx.strokeRect(x, y, width, height);
+      ctx.fillStyle =
+        index % 3 === 0 ? "rgba(98,230,255,.035)" : "rgba(255,255,255,.025)";
+      ctx.fillRect(x + 3, y + 3, width - 6, height - 6);
+      if (index % 2 === 0) {
+        ctx.beginPath();
+        ctx.moveTo(x + 10, y + height / 2);
+        ctx.lineTo(x + width - 10, y + height / 2);
+        ctx.stroke();
+      }
+    }
+  }
+
+  function drawHarborWater(theme) {
+    const time = performance.now() / 1000;
+    ctx.fillStyle = "rgba(30,124,162,.16)";
+    ctx.fillRect(0, 0, world.width, 96);
+    ctx.fillRect(0, world.height - 118, world.width, 118);
+    ctx.strokeStyle = "rgba(122,229,255,.20)";
+    ctx.lineWidth = 3;
+    for (let y of [42, 76, world.height - 86, world.height - 42]) {
+      ctx.beginPath();
+      for (let x = 0; x <= world.width; x += 34) {
+        const waveY = y + Math.sin(x / 54 + time * 1.6) * 5;
+        if (x === 0) ctx.moveTo(x, waveY);
+        else ctx.lineTo(x, waveY);
+      }
+      ctx.stroke();
+    }
+    for (let index = 0; index < 22; index += 1) {
+      const x = 60 + ((index * 173) % (world.width - 120));
+      const y = index % 2 ? world.height - 82 : 42;
+      if (
+        pathCells.has(
+          `${Math.floor(x / world.cell)},${Math.floor(y / world.cell)}`,
+        )
+      )
+        continue;
+      ctx.fillStyle = "rgba(116,76,42,.45)";
+      ctx.fillRect(x - 20, y - 8, 40, 16);
+      ctx.strokeStyle = theme.trim;
+      ctx.strokeRect(x - 20, y - 8, 40, 16);
+    }
+  }
+
+  function drawLavaCracks(theme) {
+    const pulse = 0.55 + Math.sin(performance.now() / 360) * 0.25;
+    for (let index = 0; index < 44; index += 1) {
+      const x = 38 + ((index * 181) % (world.width - 76));
+      const y = 42 + ((index * 113) % (world.height - 84));
+      if (
+        pathCells.has(
+          `${Math.floor(x / world.cell)},${Math.floor(y / world.cell)}`,
+        )
+      )
+        continue;
+      ctx.strokeStyle = `rgba(255,112,68,${0.13 + pulse * 0.12})`;
+      ctx.lineWidth = index % 3 === 0 ? 4 : 2;
+      ctx.beginPath();
+      ctx.moveTo(x - 22, y - 4);
+      ctx.lineTo(x - 7, y + 7);
+      ctx.lineTo(x + 8, y - 5);
+      ctx.lineTo(x + 24, y + 8);
+      ctx.stroke();
+      if (index % 4 === 0) {
+        ctx.fillStyle = "rgba(255,184,86,.08)";
+        ctx.beginPath();
+        ctx.arc(x, y, 28, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+
   function drawPath() {
     ctx.strokeStyle = "rgba(50,31,16,.62)";
     ctx.lineWidth = world.cell * 1.12;
@@ -1670,6 +1804,87 @@
     ctx.lineWidth = 3;
     ctx.stroke();
     drawPathArrows();
+  }
+
+  function drawPathThreatOverlay() {
+    const enemies = state.enemies || [];
+    if (!pathPixels.length || (!enemies.length && state.phase !== "wave"))
+      return;
+    const pulse = 0.5 + Math.sin(performance.now() / 190) * 0.5;
+    const spawned = Math.max(
+      0,
+      Number(state.spawnTotal || 0) - Number(state.spawnRemaining || 0),
+    );
+    const pressure = Math.min(
+      1,
+      (enemies.length * 0.8 + spawned * 0.2) /
+        Math.max(8, Number(state.spawnTotal || 14)),
+    );
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    for (let index = 0; index < pathPixels.length - 1; index += 1) {
+      const a = pathPixels[index];
+      const b = pathPixels[index + 1];
+      const segmentLoad = enemies.filter(
+        (enemy) =>
+          Math.max(0, Math.floor(Number(enemy.segment || 0))) === index,
+      ).length;
+      const baseProximity = index / Math.max(1, pathPixels.length - 2);
+      const alpha = Math.min(
+        0.52,
+        0.035 + pressure * 0.11 + segmentLoad * 0.12 + baseProximity * 0.08,
+      );
+      if (alpha <= 0.05) continue;
+      ctx.strokeStyle = `rgba(255,95,109,${alpha + pulse * 0.05})`;
+      ctx.lineWidth = world.cell * (0.42 + pressure * 0.16);
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+    }
+    enemies.forEach((enemy) => {
+      const danger = Math.min(
+        1,
+        Math.max(0, Number(enemy.segment || 0)) /
+          Math.max(1, pathPixels.length - 2),
+      );
+      const radius = 20 + danger * 20 + pulse * 8;
+      ctx.fillStyle = `rgba(255,95,109,${0.055 + danger * 0.08})`;
+      ctx.beginPath();
+      ctx.arc(enemy.x, enemy.y, radius, 0, Math.PI * 2);
+      ctx.fill();
+      if (danger > 0.72) {
+        ctx.strokeStyle = `rgba(255,209,102,${0.45 + pulse * 0.3})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(enemy.x, enemy.y, radius * 0.62, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    });
+    const leading = enemies.reduce(
+      (best, enemy) =>
+        Number(enemy.segment || 0) > Number(best?.segment || -1) ? enemy : best,
+      null,
+    );
+    const healthRatio =
+      Number(state.baseHealth || 0) /
+      Math.max(1, Number(state.baseHealthMax || 1));
+    const breachRisk =
+      leading &&
+      Number(leading.segment || 0) >= Math.max(1, pathPixels.length - 3);
+    if (breachRisk || healthRatio <= 0.35) {
+      const end = pathPixels[pathPixels.length - 1];
+      ctx.strokeStyle = `rgba(255,95,109,${0.42 + pulse * 0.34})`;
+      ctx.lineWidth = 5;
+      ctx.setLineDash([14, 10]);
+      ctx.beginPath();
+      ctx.arc(end.x, end.y - 12, 58 + pulse * 10, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      drawDefenseLabel("기지 위험", end.x, end.y - 86, "#ff8f9a");
+    }
+    ctx.restore();
   }
 
   function drawPathArrows() {

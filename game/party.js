@@ -2,8 +2,11 @@
   const params = new URLSearchParams(window.location.search);
   const gameKey = params.get("game") || "kart";
   const isSolo = ["solo", "local"].includes(params.get("mode") || "");
-  const assetVersion = params.get("v") || "20260530au";
-  const world = { width: 2600, height: 1600 };
+  const assetVersion = params.get("v") || "20260530ba";
+  const world = { width: 5200, height: 3200 };
+  const SNAKE_TRAIL_POINT_GAP = 8;
+  const SNAKE_SELF_SAFE_POINTS = 6;
+  const SNAKE_SPAWN_SAFE_SECONDS = 1;
   const gameTypes = {
     kart: {
       name: "카트 랠리",
@@ -11,14 +14,14 @@
       action: "Space: 드리프트 · 앞차 뒤 드래프트 · 오일 트랩 회피",
       accent: "#42d7ff",
       track: [
-        [320, 820],
-        [560, 380],
-        [1140, 220],
-        [1980, 360],
-        [2320, 830],
-        [1840, 1320],
-        [930, 1410],
-        [390, 1140],
+        [640, 1640],
+        [1120, 760],
+        [2280, 440],
+        [3960, 720],
+        [4640, 1660],
+        [3680, 2640],
+        [1860, 2820],
+        [780, 2280],
       ],
     },
     bomb: {
@@ -190,6 +193,7 @@
       oilSpin: 0,
       padCooldowns: {},
       shield: 0,
+      spawnSafe: 0,
       bombPower: 0,
       bombLimit: 1,
       bombKick: 0,
@@ -234,7 +238,7 @@
 
   function seedLocalPickups() {
     const count =
-      game === "snake" ? 34 : game === "coin" ? 30 : game === "bomb" ? 12 : 9;
+      game === "snake" ? 60 : game === "coin" ? 54 : game === "bomb" ? 24 : 18;
     return Array.from({ length: count }, createLocalPickup);
   }
 
@@ -307,9 +311,9 @@
       [420, world.height - 420],
       [world.width - 420, world.height - 420],
     ];
-    for (let x = 320; x < world.width - 260; x += 160) {
-      for (let y = 280; y < world.height - 220; y += 160) {
-        if ((Math.floor(x / 160) + Math.floor(y / 160)) % 5 === 0) continue;
+    for (let x = 320; x < world.width - 260; x += 220) {
+      for (let y = 280; y < world.height - 220; y += 220) {
+        if ((Math.floor(x / 220) + Math.floor(y / 220)) % 5 === 0) continue;
         if (safeSpots.some(([sx, sy]) => distance(x, y, sx, sy) < 260))
           continue;
         blocks.push({ id: localIds.block++, x, y, size: 46 });
@@ -343,6 +347,7 @@
       oilSpin: 0,
       padCooldowns: {},
       shield: 0,
+      spawnSafe: 0,
       bombPower: 0,
       bombLimit: 1,
       bombKick: 0,
@@ -363,8 +368,8 @@
 
   function placeLocalPlayer(player, slot = 0) {
     if (game === "kart") {
-      player.x = 290 + (slot % 4) * 46;
-      player.y = 795 + Math.floor(slot / 4) * 48;
+      player.x = 580 + (slot % 4) * 46;
+      player.y = 1590 + Math.floor(slot / 4) * 48;
       player.angle = 0;
     } else {
       const spots = [
@@ -383,6 +388,7 @@
     player.alive = true;
     player.respawn = 0;
     player.shield = 0;
+    player.spawnSafe = game === "snake" ? SNAKE_SPAWN_SAFE_SECONDS : 0;
     player.combo = 0;
     player.comboTimer = 0;
     player.magnet = 0;
@@ -711,7 +717,7 @@
     if (game === "coin") updateLocalCoinBanksForAll();
     if (
       state.pickups.length <
-      (game === "snake" ? 30 : game === "coin" ? 24 : game === "bomb" ? 10 : 7)
+      (game === "snake" ? 52 : game === "coin" ? 46 : game === "bomb" ? 20 : 15)
     )
       state.pickups.push(...seedLocalPickups().slice(0, 2));
     return true;
@@ -860,6 +866,8 @@
       player.bombKick = Math.max(0, (player.bombKick || 0) - dt);
     if (game === "snake")
       player.biteCooldown = Math.max(0, (player.biteCooldown || 0) - dt);
+    if (game === "snake")
+      player.spawnSafe = Math.max(0, (player.spawnSafe || 0) - dt);
     if (game === "kart")
       player.oilSpin = Math.max(0, (player.oilSpin || 0) - dt);
     if (game === "coin" || game === "snake") {
@@ -1228,10 +1236,14 @@
   }
 
   function checkLocalSnakeCollision(player) {
+    if ((player.spawnSafe || 0) > 0) return;
     for (const other of state.players) {
       if (!other.alive) continue;
+      if (other.id !== player.id && (other.spawnSafe || 0) > 0) continue;
       const trail =
-        other.id === player.id ? other.trail.slice(0, -10) : other.trail;
+        other.id === player.id
+          ? other.trail.slice(0, -SNAKE_SELF_SAFE_POINTS)
+          : other.trail;
       const hitIndex = trail?.findIndex(
         ([x, y]) => distance(player.x, player.y, x, y) < 13,
       );
@@ -1303,6 +1315,16 @@
       text: "TAIL CUT",
     });
     return true;
+  }
+
+  function appendLocalSnakeTrail(player) {
+    const trail = player.trail || (player.trail = []);
+    const last = trail[trail.length - 1];
+    if (
+      !last ||
+      distance(player.x, player.y, last[0], last[1]) >= SNAKE_TRAIL_POINT_GAP
+    )
+      trail.push([player.x, player.y]);
   }
 
   function guardLocalSnake(player, label) {
@@ -1659,11 +1681,12 @@
       if (guardLocalSnake(player, "벽")) return;
       knockLocal(player, "벽에 닿았습니다.");
     }
-    player.trail.push([player.x, player.y]);
+    appendLocalSnakeTrail(player);
     player.trail = player.trail.slice(-(22 + Math.min(90, player.score * 2)));
     if (
+      (player.spawnSafe || 0) <= 0 &&
       player.trail
-        .slice(0, -8)
+        .slice(0, -SNAKE_SELF_SAFE_POINTS)
         .some(([x, y]) => distance(player.x, player.y, x, y) < 13)
     ) {
       if (guardLocalSnake(player, "꼬리")) return;
@@ -2051,6 +2074,8 @@
     ctx.translate(camera.offsetX, camera.offsetY);
     ctx.scale(camera.scale, camera.scale);
     drawArena();
+    if (game === "bomb") drawBombDangerZones();
+    if (game === "coin") drawCoinRushGuides();
     state.banks?.forEach(drawBank);
     state.pickups.forEach(drawPickup);
     state.hazards?.forEach(drawHazard);
@@ -2102,6 +2127,221 @@
     ctx.strokeRect(5, 5, world.width - 10, world.height - 10);
     if (game !== "kart") return;
     drawKartTrack();
+  }
+
+  function drawCoinRushGuides() {
+    const me =
+      state.players?.find((player) => player.id === clientId) ||
+      state.players?.[0];
+    drawCoinHazardTelegraphs(me);
+    drawCoinMagnetLinks();
+    drawCoinComboTargets(me);
+    drawCoinCashoutGuide(me);
+  }
+
+  function drawCoinHazardTelegraphs(player) {
+    const hazards = (state.hazards || []).filter(
+      (hazard) => hazard.kind !== "oil",
+    );
+    if (!hazards.length) return;
+    const pulse = 0.5 + Math.sin(performance.now() / 190) * 0.5;
+    ctx.save();
+    hazards.forEach((hazard, index) => {
+      const radius = Number(hazard.radius || 64);
+      const gap = player
+        ? distance(player.x, player.y, hazard.x, hazard.y) - radius
+        : Infinity;
+      const near = gap < 190;
+      const outer = radius + 68 + pulse * 14;
+      ctx.fillStyle = near
+        ? `rgba(255,95,109,${0.08 + pulse * 0.06})`
+        : "rgba(255,95,109,.035)";
+      ctx.beginPath();
+      ctx.arc(hazard.x, hazard.y, outer, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = near
+        ? `rgba(255,95,109,${0.5 + pulse * 0.32})`
+        : "rgba(255,95,109,.24)";
+      ctx.lineWidth = near ? 4 : 2;
+      ctx.setLineDash([16, 12]);
+      ctx.lineDashOffset = -performance.now() / (42 + index * 8);
+      ctx.beginPath();
+      ctx.arc(hazard.x, hazard.y, outer, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.strokeStyle = `rgba(245,251,255,${near ? 0.34 : 0.18})`;
+      ctx.lineWidth = 2;
+      for (let ray = 0; ray < 10; ray += 1) {
+        const angle =
+          ray * (Math.PI / 5) + performance.now() / 850 + index * 0.4;
+        ctx.beginPath();
+        ctx.moveTo(
+          hazard.x + Math.cos(angle) * (radius + 8),
+          hazard.y + Math.sin(angle) * (radius + 8),
+        );
+        ctx.lineTo(
+          hazard.x + Math.cos(angle) * (outer - 8),
+          hazard.y + Math.sin(angle) * (outer - 8),
+        );
+        ctx.stroke();
+      }
+      if (near)
+        drawWorldLabel("위험", hazard.x, hazard.y - outer - 20, "#ff8f9a");
+    });
+    ctx.restore();
+  }
+
+  function drawCoinMagnetLinks() {
+    const magnetPlayers = (state.players || []).filter(
+      (player) => player.alive && Number(player.magnet || 0) > 0,
+    );
+    if (!magnetPlayers.length) return;
+    const pulse = 0.5 + Math.sin(performance.now() / 150) * 0.5;
+    ctx.save();
+    ctx.lineCap = "round";
+    magnetPlayers.forEach((player) => {
+      (state.pickups || []).forEach((pickup) => {
+        if (!["coin", "gem"].includes(pickup.kind)) return;
+        const gap = distance(player.x, player.y, pickup.x, pickup.y);
+        if (gap > 280) return;
+        const alpha = clamp(1 - gap / 280, 0.08, 0.82);
+        ctx.strokeStyle = `rgba(66,215,255,${0.18 + alpha * 0.42 + pulse * 0.08})`;
+        ctx.lineWidth = 2 + alpha * 4;
+        ctx.beginPath();
+        ctx.moveTo(pickup.x, pickup.y);
+        const midX =
+          (pickup.x + player.x) / 2 + Math.sin(performance.now() / 220) * 12;
+        const midY =
+          (pickup.y + player.y) / 2 + Math.cos(performance.now() / 220) * 12;
+        ctx.quadraticCurveTo(midX, midY, player.x, player.y);
+        ctx.stroke();
+      });
+    });
+    ctx.restore();
+  }
+
+  function drawCoinComboTargets(player) {
+    if (!player?.alive || !Number(player.combo || 0)) return;
+    const targets = (state.pickups || [])
+      .filter((pickup) => ["coin", "gem"].includes(pickup.kind))
+      .map((pickup) => ({
+        pickup,
+        gap: distance(player.x, player.y, pickup.x, pickup.y),
+      }))
+      .filter((item) => item.gap < 430)
+      .sort((a, b) => a.gap - b.gap)
+      .slice(0, 8);
+    if (!targets.length) return;
+    const combo = clamp(Number(player.combo || 0), 1, 12);
+    const pulse = 0.5 + Math.sin(performance.now() / 170) * 0.5;
+    ctx.save();
+    targets.forEach(({ pickup, gap }, index) => {
+      const color = pickup.kind === "gem" ? "#ffd166" : "#f8f871";
+      const alpha = clamp(1 - gap / 460, 0.18, 0.76);
+      ctx.strokeStyle = colorWithAlpha(color, alpha * (0.45 + combo * 0.035));
+      ctx.lineWidth = index < 3 ? 4 : 2;
+      ctx.setLineDash(index < 3 ? [10, 10] : [5, 12]);
+      ctx.lineDashOffset = -performance.now() / (38 + index * 4);
+      ctx.beginPath();
+      ctx.arc(
+        pickup.x,
+        pickup.y,
+        24 + pulse * 5 + Math.min(10, combo),
+        0,
+        Math.PI * 2,
+      );
+      ctx.stroke();
+      if (index < 3) {
+        drawCoinRouteLine(
+          player.x,
+          player.y,
+          pickup.x,
+          pickup.y,
+          color,
+          0.16 + alpha * 0.24,
+        );
+      }
+    });
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
+  function drawCoinCashoutGuide(player) {
+    if (!player?.alive) return;
+    const banks = (state.banks || []).filter((bank) => bank.active);
+    if (!banks.length) return;
+    const combo = Number(player.combo || 0);
+    const frenzy = Number(player.frenzy || 0) > 0;
+    const ranked = banks
+      .map((bank) => {
+        const required = bank.kind === "vault" ? 6 : 3;
+        const canCash = frenzy || combo >= required;
+        const gap = distance(player.x, player.y, bank.x, bank.y);
+        const priority =
+          (canCash ? 0 : required - combo) * 1000 +
+          (bank.kind === "vault" && canCash ? -250 : 0) +
+          gap;
+        return { bank, required, canCash, gap, priority };
+      })
+      .sort((a, b) => a.priority - b.priority);
+    const target = ranked[0];
+    if (!target) return;
+    const color = target.bank.kind === "vault" ? "#d08cff" : "#ffd166";
+    const strong = target.canCash || combo >= Math.max(1, target.required - 1);
+    drawCoinRouteLine(
+      player.x,
+      player.y,
+      target.bank.x,
+      target.bank.y,
+      color,
+      strong ? 0.44 : 0.18,
+      strong,
+    );
+    const label = target.canCash
+      ? target.bank.kind === "vault"
+        ? "금고 가능"
+        : "현금화 가능"
+      : `${target.required}콤보 목표`;
+    drawWorldLabel(
+      label,
+      target.bank.x,
+      target.bank.y - target.bank.radius - 30,
+      color,
+    );
+  }
+
+  function drawCoinRouteLine(ax, ay, bx, by, color, alpha, withArrow = true) {
+    ctx.save();
+    ctx.strokeStyle = colorWithAlpha(color, alpha);
+    ctx.lineWidth = withArrow ? 5 : 3;
+    ctx.lineCap = "round";
+    ctx.setLineDash(withArrow ? [18, 14] : [6, 14]);
+    ctx.lineDashOffset = -performance.now() / 42;
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(bx, by);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    if (withArrow) {
+      const angle = Math.atan2(by - ay, bx - ax);
+      for (let step = 0.35; step <= 0.85; step += 0.25) {
+        const x = ax + (bx - ax) * step;
+        const y = ay + (by - ay) * step;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(angle);
+        ctx.fillStyle = colorWithAlpha(color, alpha + 0.18);
+        ctx.beginPath();
+        ctx.moveTo(15, 0);
+        ctx.lineTo(-7, -8);
+        ctx.lineTo(-3, 0);
+        ctx.lineTo(-7, 8);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+    ctx.restore();
   }
 
   function drawWorldAtmosphere() {
@@ -2752,6 +2992,7 @@
 
   function drawBlock(block) {
     const size = block.size || 46;
+    const threat = bombThreatLevelAt(block.x, block.y);
     ctx.save();
     ctx.shadowColor = "rgba(0,0,0,.46)";
     ctx.shadowBlur = 12;
@@ -2765,11 +3006,14 @@
     );
     gradient.addColorStop(0, "#7a5a3b");
     gradient.addColorStop(0.48, "#5d3d2b");
-    gradient.addColorStop(1, "#2d2230");
+    gradient.addColorStop(1, threat > 0 ? "#3d2331" : "#2d2230");
     ctx.fillStyle = gradient;
     ctx.fillRect(block.x - size / 2, block.y - size / 2, size, size);
     ctx.shadowBlur = 0;
-    ctx.strokeStyle = "rgba(255,220,150,.32)";
+    ctx.strokeStyle =
+      threat > 0
+        ? `rgba(255,95,109,${0.35 + threat * 0.42})`
+        : "rgba(255,220,150,.32)";
     ctx.lineWidth = 3;
     ctx.strokeRect(
       block.x - size / 2 + 3,
@@ -2785,26 +3029,147 @@
     ctx.moveTo(block.x, block.y - size / 2 + 8);
     ctx.lineTo(block.x, block.y + size / 2 - 8);
     ctx.stroke();
+    if (threat > 0) {
+      ctx.strokeStyle = `rgba(255,186,90,${0.2 + threat * 0.5})`;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(block.x - size / 2 + 10, block.y - 8);
+      ctx.lineTo(block.x - 4, block.y - 2);
+      ctx.lineTo(block.x - 14, block.y + 14);
+      ctx.moveTo(block.x + 4, block.y - size / 2 + 9);
+      ctx.lineTo(block.x + 12, block.y - 2);
+      ctx.lineTo(block.x + 3, block.y + size / 2 - 10);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function bombThreatLevelAt(x, y) {
+    if (game !== "bomb") return 0;
+    return (state.bombs || []).reduce((level, bomb) => {
+      if (!inBombBlast(x, y, bomb.x, bomb.y, bomb.radius || 96)) return level;
+      if (bomb.blastTtl > 0 || bomb.ttl <= 0) return Math.max(level, 1);
+      return Math.max(
+        level,
+        clamp((1.7 - Number(bomb.ttl || 0)) / 1.7, 0.18, 1),
+      );
+    }, 0);
+  }
+
+  function drawBombDangerZones() {
+    const activeBombs = (state.bombs || []).filter(
+      (bomb) => bomb.ttl > 0 && bomb.blastTtl <= 0,
+    );
+    if (!activeBombs.length) return;
+    const pulse = 0.5 + Math.sin(performance.now() / 130) * 0.5;
+    ctx.save();
+    activeBombs.forEach((bomb) => {
+      const radius = bomb.radius || 96;
+      const danger = clamp((1.9 - Number(bomb.ttl || 0)) / 1.9, 0.14, 1);
+      const alpha = 0.035 + danger * 0.18 + pulse * danger * 0.06;
+      const gradient = ctx.createRadialGradient(
+        bomb.x,
+        bomb.y,
+        8,
+        bomb.x,
+        bomb.y,
+        66,
+      );
+      gradient.addColorStop(0, `rgba(255,186,90,${0.18 + danger * 0.24})`);
+      gradient.addColorStop(1, "rgba(255,95,109,0)");
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(bomb.x, bomb.y, 66, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = `rgba(255,95,109,${alpha})`;
+      ctx.fillRect(bomb.x - radius, bomb.y - 18, radius * 2, 36);
+      ctx.fillRect(bomb.x - 18, bomb.y - radius, 36, radius * 2);
+      ctx.strokeStyle = `rgba(255,186,90,${0.14 + danger * 0.42})`;
+      ctx.lineWidth = 3;
+      ctx.setLineDash([18, 14]);
+      ctx.lineDashOffset = -performance.now() / 48;
+      ctx.beginPath();
+      ctx.moveTo(bomb.x - radius, bomb.y);
+      ctx.lineTo(bomb.x + radius, bomb.y);
+      ctx.moveTo(bomb.x, bomb.y - radius);
+      ctx.lineTo(bomb.x, bomb.y + radius);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      const tile = 40;
+      for (let offset = -radius; offset <= radius; offset += tile) {
+        drawBombWarningTile(bomb.x + offset, bomb.y, danger, pulse);
+        if (offset !== 0)
+          drawBombWarningTile(bomb.x, bomb.y + offset, danger, pulse);
+      }
+      if (danger > 0.72) {
+        drawDangerLabel("위험", bomb.x, bomb.y - 52, "#ff8f9a");
+      }
+    });
+    ctx.restore();
+  }
+
+  function drawBombWarningTile(x, y, danger, pulse) {
+    if (x < 20 || x > world.width - 20 || y < 20 || y > world.height - 20)
+      return;
+    const size = 32 + pulse * 4;
+    ctx.strokeStyle = `rgba(255,95,109,${0.18 + danger * 0.5})`;
+    ctx.lineWidth = danger > 0.72 ? 3 : 2;
+    ctx.strokeRect(x - size / 2, y - size / 2, size, size);
+    if (danger <= 0.45) return;
+    ctx.fillStyle = `rgba(255,186,90,${0.06 + danger * 0.08})`;
+    ctx.fillRect(x - size / 2 + 4, y - size / 2 + 4, size - 8, size - 8);
+  }
+
+  function drawDangerLabel(text, x, y, color) {
+    ctx.save();
+    ctx.font = "900 14px Malgun Gothic, system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const width = Math.max(54, ctx.measureText(text).width + 22);
+    ctx.fillStyle = "rgba(7,17,31,.78)";
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x - width / 2, y - 14, width, 28, 8);
+    else ctx.rect(x - width / 2, y - 14, width, 28);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = color;
+    ctx.fillText(text, x, y + 1);
+    ctx.restore();
+  }
+
+  function drawWorldLabel(text, x, y, color = "#f5fbff") {
+    if (!text) return;
+    ctx.save();
+    ctx.font = "900 14px Malgun Gothic, system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const width = Math.min(160, Math.max(62, ctx.measureText(text).width + 22));
+    const labelX = clamp(x, width / 2 + 12, world.width - width / 2 - 12);
+    const labelY = clamp(y, 22, world.height - 22);
+    ctx.fillStyle = "rgba(7,17,31,.8)";
+    ctx.strokeStyle = colorWithAlpha(color, 0.74);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    if (ctx.roundRect)
+      ctx.roundRect(labelX - width / 2, labelY - 14, width, 28, 8);
+    else ctx.rect(labelX - width / 2, labelY - 14, width, 28);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = color;
+    ctx.fillText(text, labelX, labelY + 1);
     ctx.restore();
   }
 
   function drawBomb(bomb) {
     if (bomb.blastTtl > 0) {
-      const alpha = Math.max(0.18, Math.min(0.48, bomb.blastTtl / 0.35));
-      ctx.save();
-      ctx.shadowColor = "rgba(255,186,90,.9)";
-      ctx.shadowBlur = 24;
-      ctx.fillStyle = `rgba(255,186,90,${alpha})`;
-      ctx.fillRect(bomb.x - bomb.radius, bomb.y - 24, bomb.radius * 2, 48);
-      ctx.fillRect(bomb.x - 24, bomb.y - bomb.radius, 48, bomb.radius * 2);
-      ctx.fillStyle = `rgba(255,95,109,${alpha + 0.12})`;
-      ctx.beginPath();
-      ctx.arc(bomb.x, bomb.y, 38, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
+      drawBombExplosion(bomb);
       return;
     }
     ctx.save();
+    const danger = clamp((1.9 - Number(bomb.ttl || 0)) / 1.9, 0, 1);
+    const pulse = 0.5 + Math.sin(performance.now() / 95) * 0.5;
     const moveSpeed = Math.hypot(bomb.vx || 0, bomb.vy || 0);
     if (moveSpeed > 24) {
       ctx.strokeStyle = "rgba(139,230,111,.62)";
@@ -2816,6 +3181,13 @@
         bomb.x - ((bomb.vx || 0) / moveSpeed) * 30,
         bomb.y - ((bomb.vy || 0) / moveSpeed) * 30,
       );
+      ctx.stroke();
+    }
+    if (danger > 0) {
+      ctx.strokeStyle = `rgba(255,95,109,${0.18 + danger * 0.62})`;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(bomb.x, bomb.y, 26 + danger * 16 + pulse * 4, 0, Math.PI * 2);
       ctx.stroke();
     }
     ctx.shadowColor = "rgba(0,0,0,.65)";
@@ -2832,6 +3204,63 @@
     ctx.stroke();
     ctx.fillStyle = "#ffba5a";
     ctx.fillRect(bomb.x - 8, bomb.y - 25, 16 * Math.max(0, bomb.ttl / 1.9), 4);
+    if (danger > 0.55) {
+      ctx.fillStyle = `rgba(255,95,109,${0.36 + pulse * 0.34})`;
+      ctx.beginPath();
+      ctx.arc(bomb.x + 9, bomb.y - 11, 4 + pulse * 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawBombExplosion(bomb) {
+    const radius = bomb.radius || 96;
+    const alpha = Math.max(0.18, Math.min(0.52, bomb.blastTtl / 0.35));
+    const pulse = 0.5 + Math.sin(performance.now() / 60) * 0.5;
+    ctx.save();
+    ctx.shadowColor = "rgba(255,186,90,.95)";
+    ctx.shadowBlur = 26;
+    const flame = ctx.createLinearGradient(
+      bomb.x - radius,
+      bomb.y,
+      bomb.x + radius,
+      bomb.y,
+    );
+    flame.addColorStop(0, `rgba(255,95,109,${alpha * 0.55})`);
+    flame.addColorStop(0.5, `rgba(255,234,150,${alpha + 0.12})`);
+    flame.addColorStop(1, `rgba(255,95,109,${alpha * 0.55})`);
+    ctx.fillStyle = flame;
+    ctx.fillRect(bomb.x - radius, bomb.y - 24, radius * 2, 48);
+    ctx.fillRect(bomb.x - 24, bomb.y - radius, 48, radius * 2);
+    ctx.fillStyle = `rgba(255,95,109,${alpha + 0.12})`;
+    ctx.beginPath();
+    ctx.arc(bomb.x, bomb.y, 38 + pulse * 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = `rgba(245,251,255,${0.24 + alpha * 0.52})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(bomb.x, bomb.y, 58 + pulse * 12, 0, Math.PI * 2);
+    ctx.stroke();
+    for (const [dx, dy, angle] of [
+      [radius, 0, 0],
+      [-radius, 0, Math.PI],
+      [0, radius, Math.PI / 2],
+      [0, -radius, -Math.PI / 2],
+    ]) {
+      ctx.save();
+      ctx.translate(bomb.x + dx, bomb.y + dy);
+      ctx.rotate(angle);
+      ctx.fillStyle = `rgba(255,234,150,${alpha})`;
+      ctx.beginPath();
+      ctx.moveTo(22, 0);
+      ctx.lineTo(-8, -16);
+      ctx.lineTo(-2, 0);
+      ctx.lineTo(-8, 16);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
     ctx.restore();
   }
 
@@ -3449,6 +3878,13 @@
 
   function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
+  }
+
+  function colorWithAlpha(color, alpha) {
+    const match = /^#?([0-9a-f]{6})$/i.exec(color || "");
+    if (!match) return color || `rgba(255,255,255,${alpha})`;
+    const value = match[1];
+    return `rgba(${parseInt(value.slice(0, 2), 16)}, ${parseInt(value.slice(2, 4), 16)}, ${parseInt(value.slice(4, 6), 16)}, ${alpha})`;
   }
 
   function escapeHtml(value) {

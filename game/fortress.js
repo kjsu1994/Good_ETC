@@ -11,8 +11,8 @@
       : requestedRole === "spectator"
         ? "spectator"
         : "client";
-  const assetVersion = params.get("v") || "20260530au";
-  const world = { width: 2600, height: 980 };
+  const assetVersion = params.get("v") || "20260530ba";
+  const world = { width: 5200, height: 1080 };
   const gravity = 300;
   const moveBudgetMax = 130;
   const moveCost = 10;
@@ -287,8 +287,8 @@
 
   function createInitialState() {
     const players = [
-      createPlayer("P1", "#53e2a8", 260, 45, 8, 82),
-      createPlayer("P2", "#ffbc54", 2340, 135, 98, 172),
+      createPlayer("P1", "#53e2a8", 420, 45, 8, 82),
+      createPlayer("P2", "#ffbc54", 4780, 135, 98, 172),
     ];
     const terrain = buildTerrain();
     placePlayers(players, terrain);
@@ -345,11 +345,12 @@
     const terrain = [];
     for (let x = 0; x <= world.width; x += 1) {
       const y =
-        700 +
+        770 +
         Math.sin(x / 135) * 62 +
         Math.sin(x / 57) * 28 +
-        Math.sin(x / 310) * 48;
-      terrain.push(clamp(Math.round(y), 520, world.height - 85));
+        Math.sin(x / 310) * 48 +
+        Math.sin(x / 730) * 76;
+      terrain.push(clamp(Math.round(y), 560, world.height - 85));
     }
     for (let pass = 0; pass < 4; pass += 1) {
       for (let x = 1; x < terrain.length - 1; x += 1) {
@@ -1131,33 +1132,32 @@
 
   function viewTarget() {
     const projectile = (state.projectiles || [])[0] || state.projectile;
-    if (projectile) return { x: projectile.x, y: projectile.y };
+    if (projectile) {
+      return {
+        x: clamp(
+          projectile.x + Number(projectile.vx || 0) * 0.18,
+          0,
+          world.width,
+        ),
+        y: clamp(
+          projectile.y + Number(projectile.vy || 0) * 0.1,
+          80,
+          world.height,
+        ),
+      };
+    }
     if (state.explosion) return { x: state.explosion.x, y: state.explosion.y };
-    const aimTarget = aimCameraTarget();
-    if (aimTarget) return aimTarget;
     return currentPlayer() || { x: world.width / 2, y: world.height / 2 };
   }
 
   function aimCameraTarget() {
-    const player = currentPlayer();
-    if (!player || !state.ready || state.gameOver || state.turnDelayAt) {
-      return null;
-    }
-    const preview = simulateAimTrajectory(player, { maxSteps: 96, dt: 0.065 });
-    const impact = preview.impact;
-    if (!impact) return null;
-    const distance = Math.hypot(impact.x - player.x, impact.y - player.y);
-    if (distance < 520) return null;
-    return {
-      x: clamp(player.x * 0.48 + impact.x * 0.52, 0, world.width),
-      y: clamp(player.y * 0.54 + impact.y * 0.46 - 80, 130, world.height - 90),
-    };
+    return null;
   }
 
   function updateCamera() {
     const target = viewTarget();
     camera.scale =
-      window.innerWidth <= 560 ? 0.58 : window.innerWidth <= 900 ? 0.72 : 0.9;
+      window.innerWidth <= 560 ? 0.58 : window.innerWidth <= 900 ? 0.7 : 0.86;
     const viewWidth = window.innerWidth / camera.scale;
     const viewHeight = window.innerHeight / camera.scale;
     const panelReserve =
@@ -1183,8 +1183,9 @@
       0,
       maxY,
     );
-    camera.x += (targetX - camera.x) * 0.13;
-    camera.y += (targetY - camera.y) * 0.13;
+    const followRate = hasProjectiles() ? 0.27 : 0.13;
+    camera.x += (targetX - camera.x) * followRate;
+    camera.y += (targetY - camera.y) * followRate;
   }
 
   function toScreen(x, y) {
@@ -1666,6 +1667,7 @@
     const config = weaponConfig(player.weapon);
     const dt = options.dt || 0.06;
     const maxSteps = options.maxSteps || 90;
+    const includeSplit = options.includeSplit !== false;
     const radians = (player.angle * Math.PI) / 180;
     const speed = (145 + player.power * 5.1) * config.speed;
     let x = player.x + Math.cos(radians) * 31;
@@ -1680,7 +1682,12 @@
     for (let step = 0; step < maxSteps; step += 1) {
       const age = step * dt;
       points.push({ x, y, vx, vy, age });
-      if (config.splitAt && !splitPreviewed && age >= config.splitAt) {
+      if (
+        includeSplit &&
+        config.splitAt &&
+        !splitPreviewed &&
+        age >= config.splitAt
+      ) {
         branches.push(...simulateAimSplitBranches(x, y, vx, vy));
         splitPreviewed = true;
       }
@@ -1899,16 +1906,16 @@
   function drawAimGuide() {
     const player = currentPlayer();
     if (!player || !state.ready || hasProjectiles() || state.gameOver) return;
-    const preview = simulateAimTrajectory(player);
+    const preview = simulateAimTrajectory(player, {
+      maxSteps: 20,
+      dt: 0.055,
+      includeSplit: false,
+    });
     if (!preview.points.length) return;
     const view = getView();
     const color = weaponConfig(player.weapon).color;
     drawAimPath(preview.points, color, view.scale);
-    preview.branches.forEach((branch) =>
-      drawAimPath(branch.points, "#b987ff", view.scale, true),
-    );
     drawAimWindTicks(preview.points, view.scale);
-    drawAimLandingMarker(preview, player, view.scale);
   }
 
   function drawPlayer(player, index) {
@@ -2360,7 +2367,11 @@
   function drawFortressAimMinimap(x, y, mapScale) {
     const player = currentPlayer();
     if (!player || !state.ready || hasProjectiles() || state.gameOver) return;
-    const preview = simulateAimTrajectory(player, { maxSteps: 90, dt: 0.065 });
+    const preview = simulateAimTrajectory(player, {
+      maxSteps: 12,
+      dt: 0.055,
+      includeSplit: false,
+    });
     if (!preview.points.length) return;
     const color = weaponConfig(player.weapon).color;
     ctx.save();
@@ -2377,19 +2388,6 @@
     });
     ctx.stroke();
     ctx.setLineDash([]);
-    if (preview.impact) {
-      ctx.strokeStyle = colorWithAlpha(color, 0.86);
-      ctx.lineWidth = 1.4;
-      ctx.beginPath();
-      ctx.arc(
-        x + preview.impact.x * mapScale,
-        y + preview.impact.y * mapScale,
-        Math.max(3, weaponConfig(player.weapon).radius * mapScale * 0.5),
-        0,
-        Math.PI * 2,
-      );
-      ctx.stroke();
-    }
     ctx.restore();
   }
 
