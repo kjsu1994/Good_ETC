@@ -2201,6 +2201,10 @@
           <option value="arena">LAN 아레나</option>
           <option value="fortress">포트리스</option>
           <option value="defense">웨이브 디펜스</option>
+          <option value="kart">카트 랠리</option>
+          <option value="bomb">폭탄 그리드</option>
+          <option value="snake">스네이크 배틀</option>
+          <option value="coin">코인 러시</option>
         </select>
         <input id="lanGameInviteUrl" type="hidden" />
         <input id="lanGameDirectUrl" type="hidden" />
@@ -2359,6 +2363,23 @@
         >
           웨이브 디펜스
         </button>
+        <button type="button" class="ck" id="gameTabKart" data-game-tab="kart">
+          카트 랠리
+        </button>
+        <button type="button" class="ck" id="gameTabBomb" data-game-tab="bomb">
+          폭탄 그리드
+        </button>
+        <button
+          type="button"
+          class="ck"
+          id="gameTabSnake"
+          data-game-tab="snake"
+        >
+          스네이크 배틀
+        </button>
+        <button type="button" class="ck" id="gameTabCoin" data-game-tab="coin">
+          코인 러시
+        </button>
       </div>
       <div class="game-pane active" id="gameArenaPane" data-game-pane="arena">
         <div class="c1e feature-help" id="gameHelp">
@@ -2435,6 +2456,25 @@
             <code>혼자하기</code>는 서버 연결 없이 현재 브라우저 또는 EXE 안에서
             실행됩니다. 멀티 연결이 안 되면 호스트 IP, 포트, Windows 방화벽 허용
             상태를 확인하세요.
+          </div>
+        </div>
+      </div>
+      <div class="game-pane" id="gamePartyPane" data-game-pane="party">
+        <div class="c1e feature-help" id="partyHelp">
+          <div>
+            <strong>신규 파티 게임</strong>은 카트 랠리, 폭탄 그리드, 스네이크
+            배틀, 코인 러시 4종입니다. 모두 같은 <code>/party</code> WebSocket을
+            사용하고, 통합 입장 센터 방 코드로 참가자를 분리합니다.
+          </div>
+          <div>
+            카트 랠리는 체크포인트 3바퀴 완주, 폭탄 그리드는 폭탄 설치와 회피,
+            스네이크 배틀은 먹이와 꼬리 충돌 관리, 코인 러시는 움직이는 위험
+            구역을 피해 점수를 모으는 방식입니다.
+          </div>
+          <div>
+            <code>혼자하기</code>는 서버 연결 없이 실행되고, 멀티가 안 되면 게임
+            화면의 <code>i</code> 접속 정보에서 서버 주소, 초대 링크, localhost
+            경고를 확인하세요.
           </div>
         </div>
       </div>
@@ -4181,7 +4221,10 @@
             ? "포트리스 호스트/입장하기는 WebSocket 멀티 모드, 포트리스 혼자하기는 로컬 모드입니다."
             : "defense" === gameActiveTab
               ? "웨이브 디펜스 호스트/입장하기는 WebSocket 멀티 모드, 디펜스 혼자하기는 서버 없는 로컬 모드입니다."
-              : "bat 내용을 관리자 권한으로 실행하면 지정 IP/포트의 인바운드가 허용됩니다.";
+              : PARTY_GAME_TYPES.includes(gameActiveTab)
+                ? PARTY_GAME_LABELS[gameActiveTab] +
+                  " 호스트/입장하기는 WebSocket 멀티 모드, 혼자하기는 서버 없는 로컬 모드입니다."
+                : "bat 내용을 관리자 권한으로 실행하면 지정 IP/포트의 인바운드가 허용됩니다.";
         ((t("gameFirewallCommand").value = gameFirewallScript()),
           (t("gameStatus").innerText = e));
         gameSyncConnectionInfo();
@@ -4231,6 +4274,10 @@
         e.searchParams.set("game", "defense");
         e.searchParams.set("mode", "multi");
         e.searchParams.set("auto", "1");
+      } else if (PARTY_GAME_TYPES.includes(gameActiveTab)) {
+        e.searchParams.set("game", gameActiveTab);
+        e.searchParams.set("mode", "multi");
+        e.searchParams.set("auto", "1");
       } else {
         e.searchParams.set("auto", "1");
       }
@@ -4262,7 +4309,14 @@
         e.textContent = "Connection info unavailable: " + n.message;
       }
     }
-    const GAME_ASSET_VERSION = "20260530c";
+    const GAME_ASSET_VERSION = "20260530f";
+    const PARTY_GAME_LABELS = {
+      kart: "카트 랠리",
+      bomb: "폭탄 그리드",
+      snake: "스네이크 배틀",
+      coin: "코인 러시",
+    };
+    const PARTY_GAME_TYPES = Object.keys(PARTY_GAME_LABELS);
     let gameActiveTab = "arena";
     function gameIsLauncherShell() {
       return "exe" === gameLauncherParams().launcher || !!window.pywebview;
@@ -4408,6 +4462,29 @@
         e.searchParams.set("mode", "solo"));
       return gameApplyClientParams(e, !1);
     }
+    function gamePartyClientUrl(game, host = !1) {
+      const e = new URL("game/index.html", window.location.href);
+      (e.searchParams.set("game", game), e.searchParams.set("mode", "multi"));
+      return gameApplyClientParams(e, host);
+    }
+    function gamePartyServerUrl(game, host = !1) {
+      const n = gameLauncherParams(),
+        i =
+          n.gameUrl ||
+          "http://" +
+            gameHostValue() +
+            ":" +
+            gamePortValue() +
+            "/game/index.html",
+        e = new URL(i);
+      (e.searchParams.set("game", game), e.searchParams.set("mode", "multi"));
+      return gameApplyClientParams(e, host);
+    }
+    function gamePartySoloUrl(game) {
+      const e = new URL("game/index.html", window.location.href);
+      (e.searchParams.set("game", game), e.searchParams.set("mode", "solo"));
+      return gameApplyClientParams(e, !1);
+    }
     function gameSelectedHostUrl() {
       if ("fortress" === gameActiveTab) {
         return "exe" === gameLauncherParams().launcher
@@ -4418,6 +4495,11 @@
         return "exe" === gameLauncherParams().launcher
           ? gameDefenseServerUrl(!0)
           : gameDefenseClientUrl(!0);
+      }
+      if (PARTY_GAME_TYPES.includes(gameActiveTab)) {
+        return "exe" === gameLauncherParams().launcher
+          ? gamePartyServerUrl(gameActiveTab, !0)
+          : gamePartyClientUrl(gameActiveTab, !0);
       }
       return "exe" === gameLauncherParams().launcher
         ? gameServerClientUrl(!0)
@@ -4433,6 +4515,11 @@
         return "exe" === gameLauncherParams().launcher
           ? gameDefenseServerUrl()
           : gameDefenseClientUrl();
+      }
+      if (PARTY_GAME_TYPES.includes(gameActiveTab)) {
+        return "exe" === gameLauncherParams().launcher
+          ? gamePartyServerUrl(gameActiveTab)
+          : gamePartyClientUrl(gameActiveTab);
       }
       return "exe" === gameLauncherParams().launcher
         ? gameServerClientUrl()
@@ -4459,20 +4546,39 @@
           '<i class="fas fa-user"></i> 디펜스 혼자하기';
         return;
       }
+      if (PARTY_GAME_TYPES.includes(gameActiveTab)) {
+        const e = PARTY_GAME_LABELS[gameActiveTab];
+        t("gameOpenServer").innerHTML =
+          '<i class="fas fa-play"></i> ' + e + " 호스트";
+        t("gameOpenLocal").innerHTML =
+          '<i class="fas fa-folder-open"></i> ' + e + " 입장하기";
+        t("gameOpenSolo").style.display = "";
+        t("gameOpenSolo").innerHTML =
+          '<i class="fas fa-user"></i> ' + e + " 혼자하기";
+        return;
+      }
       ((t("gameOpenServer").innerHTML = '<i class="fas fa-play"></i> 호스트'),
         (t("gameOpenLocal").innerHTML =
           '<i class="fas fa-folder-open"></i> 입장하기'),
         (t("gameOpenSolo").style.display = "none"));
     }
     function gameSetActiveTab(e) {
-      gameActiveTab = ["arena", "fortress", "defense"].includes(e)
+      gameActiveTab = [
+        "arena",
+        "fortress",
+        "defense",
+        ...PARTY_GAME_TYPES,
+      ].includes(e)
         ? e
         : "arena";
       (n("[data-game-tab]").forEach((t) => {
         t.classList.toggle("active", t.dataset.gameTab === gameActiveTab);
       }),
         n("[data-game-pane]").forEach((t) => {
-          const n = t.dataset.gamePane === gameActiveTab;
+          const n =
+            t.dataset.gamePane === gameActiveTab ||
+            (t.dataset.gamePane === "party" &&
+              PARTY_GAME_TYPES.includes(gameActiveTab));
           (t.classList.toggle("active", n),
             n ||
               t
@@ -4486,7 +4592,9 @@
             ? "fortressHelp"
             : "defense" === gameActiveTab
               ? "defenseHelp"
-              : "gameHelp");
+              : PARTY_GAME_TYPES.includes(gameActiveTab)
+                ? "partyHelp"
+                : "gameHelp");
       (gameSyncGameButtons(), gameSyncFirewallCommand());
     }
     function gameLauncherParams() {
@@ -4542,7 +4650,9 @@
             gameOpenUrl(
               "defense" === gameActiveTab
                 ? gameDefenseSoloUrl()
-                : gameFortressSoloUrl(),
+                : PARTY_GAME_TYPES.includes(gameActiveTab)
+                  ? gamePartySoloUrl(gameActiveTab)
+                  : gameFortressSoloUrl(),
             );
           } catch (e) {
             t("gameStatus").innerText = e.message;
@@ -4813,7 +4923,7 @@
         ? "포트리스"
         : "defense" === e
           ? "웨이브 디펜스"
-          : "LAN 아레나";
+          : PARTY_GAME_LABELS[e] || "LAN 아레나";
     }
     function lanSetGameStatus(e) {
       const n = t("lanGameStatus");
@@ -4876,6 +4986,11 @@
         a.searchParams.set("role", role);
       } else if ("defense" === n.feature) {
         a.searchParams.set("game", "defense");
+        a.searchParams.set("mode", "multi");
+        a.searchParams.delete("role");
+        a.searchParams.set("auto", "1");
+      } else if (PARTY_GAME_TYPES.includes(n.feature)) {
+        a.searchParams.set("game", n.feature);
         a.searchParams.set("mode", "multi");
         a.searchParams.delete("role");
         a.searchParams.set("auto", "1");
@@ -5118,7 +5233,9 @@
         const e = new URLSearchParams(window.location.search).get("room"),
           i = e && lanState.rooms.find((t) => t.id === e.toUpperCase());
         i &&
-          ["arena", "fortress", "defense"].includes(i.feature) &&
+          ["arena", "fortress", "defense", ...PARTY_GAME_TYPES].includes(
+            i.feature,
+          ) &&
           lanSetSelectedGameRoom(i);
         return;
       }
@@ -5141,7 +5258,11 @@
           );
           return;
         }
-        if (["arena", "fortress", "defense"].includes(n.room.feature)) {
+        if (
+          ["arena", "fortress", "defense", ...PARTY_GAME_TYPES].includes(
+            n.room.feature,
+          )
+        ) {
           lanSetSelectedGameRoom(n.room);
           lanSetGameStatus(
             "게임 방 준비됨: <code>" +
@@ -5206,7 +5327,9 @@
     function lanRenderRooms() {
       const e = t("lanRoomList");
       const gameRooms = lanState.rooms.filter((e) =>
-        ["arena", "fortress", "defense"].includes(e.feature),
+        ["arena", "fortress", "defense", ...PARTY_GAME_TYPES].includes(
+          e.feature,
+        ),
       );
       e.innerHTML = "";
       if (!gameRooms.length) {

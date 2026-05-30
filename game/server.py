@@ -249,6 +249,56 @@ def build_defense_path_cells(points: list[tuple[int, int]]) -> set[tuple[int, in
 DEFENSE_PATH_CELLS = build_defense_path_cells(DEFENSE_PATH_POINTS)
 DEFENSE_PATH_PIXELS = [defense_cell_center(x, y) for x, y in DEFENSE_PATH_POINTS]
 
+PARTY_WIDTH = 1200
+PARTY_HEIGHT = 760
+PARTY_PLAYER_RADIUS = 18
+PARTY_GAME_TYPES = {"kart", "bomb", "snake", "coin"}
+PARTY_GAME_CONFIGS: dict[str, dict[str, Any]] = {
+    "kart": {
+        "name": "카트 랠리",
+        "goal": "3바퀴를 가장 먼저 완주하세요.",
+        "duration": 240,
+        "laps": 3,
+        "speed": 360,
+        "track": [
+            [150, 380],
+            [310, 160],
+            [620, 120],
+            [960, 190],
+            [1040, 430],
+            [830, 620],
+            [470, 650],
+            [220, 540],
+        ],
+    },
+    "bomb": {
+        "name": "폭탄 그리드",
+        "goal": "폭탄을 설치해 상대를 맞히고 오래 살아남으세요.",
+        "duration": 180,
+        "speed": 245,
+    },
+    "snake": {
+        "name": "스네이크 배틀",
+        "goal": "먹이를 모아 길어지고 벽과 꼬리를 피하세요.",
+        "duration": 180,
+        "speed": 205,
+    },
+    "coin": {
+        "name": "코인 러시",
+        "goal": "위험 구역을 피해 코인을 가장 많이 모으세요.",
+        "duration": 150,
+        "speed": 270,
+    },
+}
+
+
+def party_clamp(value: float, minimum: float, maximum: float) -> float:
+    return max(minimum, min(maximum, value))
+
+
+def party_distance(ax: float, ay: float, bx: float, by: float) -> float:
+    return math.hypot(ax - bx, ay - by)
+
 
 @dataclass
 class Client:
@@ -352,6 +402,53 @@ class DefenseShot:
     target_y: float
     color: str
     ttl: float = 0.18
+
+
+@dataclass
+class PartyClient:
+    id: str
+    writer: asyncio.StreamWriter
+    room_id: str
+    game_type: str
+    name: str = "Player"
+    color: str = "#53e2a8"
+    x: float = 0.0
+    y: float = 0.0
+    vx: float = 0.0
+    vy: float = 0.0
+    angle: float = 0.0
+    score: int = 0
+    lap: int = 0
+    checkpoint: int = 0
+    alive: bool = True
+    input: dict[str, Any] = field(default_factory=dict)
+    trail: list[tuple[float, float]] = field(default_factory=list)
+    respawn_at: float = 0.0
+    cooldown_until: float = 0.0
+    boosted_until: float = 0.0
+    action_latched: bool = False
+    connected_at: float = field(default_factory=time.time)
+    write_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+
+
+@dataclass
+class PartyPickup:
+    id: int
+    x: float
+    y: float
+    kind: str = "coin"
+    value: int = 1
+
+
+@dataclass
+class PartyBomb:
+    id: int
+    owner_id: str
+    x: float
+    y: float
+    ttl: float = 1.9
+    blast_ttl: float = 0.0
+    radius: float = 96.0
 
 
 @dataclass
@@ -1452,6 +1549,461 @@ class DefenseRoom:
         }
 
 
+class PartyRoom:
+    def __init__(self, room_id: str, game_type: str = "kart") -> None:
+        self.room_id = room_id
+        self.game_type = game_type if game_type in PARTY_GAME_TYPES else "kart"
+        self.config = PARTY_GAME_CONFIGS[self.game_type]
+        self.clients: dict[str, PartyClient] = {}
+        self.host_id = ""
+        self.next_client_id = 1
+        self.next_pickup_id = 1
+        self.next_bomb_id = 1
+        self.pickups: list[PartyPickup] = []
+        self.bombs: list[PartyBomb] = []
+        self.started_at = time.time()
+        self.ends_at = self.started_at + float(self.config["duration"])
+        self.finished = False
+        self.winner_id = ""
+        self.winner_name = ""
+        self.status = f"{self.config['name']} 방이 열렸습니다."
+        self.seed_pickups()
+
+    def create_client(self, writer: asyncio.StreamWriter) -> PartyClient:
+        client = PartyClient(
+            id=f"g{self.next_client_id}",
+            writer=writer,
+            room_id=self.room_id,
+            game_type=self.game_type,
+            color=COLORS[(self.next_client_id - 1) % len(COLORS)],
+        )
+        self.next_client_id += 1
+        self.place_client(client)
+        return client
+
+    def add_client(self, client: PartyClient) -> None:
+        self.clients[client.id] = client
+        self.ensure_host()
+        self.status = f"{client.name}님이 참가했습니다."
+
+    def remove_client(self, client: PartyClient) -> None:
+        self.clients.pop(client.id, None)
+        if client.id == self.host_id:
+            self.host_id = ""
+        self.ensure_host()
+
+    def ensure_host(self) -> None:
+        if self.host_id in self.clients:
+            return
+        oldest = sorted(self.clients.values(), key=lambda client: client.connected_at)
+        self.host_id = oldest[0].id if oldest else ""
+
+    def summary(self) -> dict[str, Any]:
+        return {
+            "gameCount": len(self.clients),
+            "playerCount": len(self.clients),
+            "spectatorCount": 0,
+            "ready": bool(self.clients),
+        }
+
+    def restart(self, client: PartyClient) -> str:
+        if client.id != self.host_id:
+            return "방장만 라운드를 다시 시작할 수 있습니다."
+        self.pickups.clear()
+        self.bombs.clear()
+        self.started_at = time.time()
+        self.ends_at = self.started_at + float(self.config["duration"])
+        self.finished = False
+        self.winner_id = ""
+        self.winner_name = ""
+        self.seed_pickups()
+        for player in self.clients.values():
+            player.score = 0
+            player.lap = 0
+            player.checkpoint = 0
+            player.trail.clear()
+            player.alive = True
+            player.vx = 0
+            player.vy = 0
+            self.place_client(player)
+        self.status = "라운드를 다시 시작했습니다."
+        return ""
+
+    def place_client(self, client: PartyClient) -> None:
+        index = max(0, self.next_client_id - 1)
+        if self.game_type == "kart":
+            client.x = 135 + (index % 4) * 38
+            client.y = 365 + (index // 4) * 42
+            client.angle = 0
+        else:
+            margin = 90
+            client.x = random.uniform(margin, PARTY_WIDTH - margin)
+            client.y = random.uniform(margin, PARTY_HEIGHT - margin)
+            client.angle = random.uniform(-math.pi, math.pi)
+        client.vx = 0
+        client.vy = 0
+        client.alive = True
+        client.respawn_at = 0
+        client.trail = [(client.x, client.y)]
+
+    def seed_pickups(self) -> None:
+        target = {"kart": 6, "bomb": 8, "snake": 28, "coin": 22}[self.game_type]
+        while len(self.pickups) < target:
+            self.pickups.append(
+                PartyPickup(
+                    id=self.next_pickup_id,
+                    x=random.uniform(80, PARTY_WIDTH - 80),
+                    y=random.uniform(80, PARTY_HEIGHT - 80),
+                    kind="boost" if self.game_type == "kart" and random.random() < 0.35 else "coin",
+                    value=3 if self.game_type == "coin" and random.random() < 0.2 else 1,
+                )
+            )
+            self.next_pickup_id += 1
+
+    def handle_message(self, client: PartyClient, raw: str) -> str:
+        try:
+            message = json.loads(raw)
+        except json.JSONDecodeError:
+            return ""
+        kind = str(message.get("type") or "")
+        if kind == "party_join":
+            client.name = str(message.get("name") or "Player").strip()[:18] or "Player"
+            return ""
+        if kind == "party_input":
+            client.input = {
+                "up": bool(message.get("up")),
+                "down": bool(message.get("down")),
+                "left": bool(message.get("left")),
+                "right": bool(message.get("right")),
+                "action": bool(message.get("action")),
+            }
+            return ""
+        if kind == "party_restart":
+            return self.restart(client)
+        return ""
+
+    def update(self, dt: float, now: float) -> None:
+        if self.finished:
+            return
+        if now >= self.ends_at:
+            self.finish_round("시간 종료")
+            return
+        self.seed_pickups()
+        if self.game_type == "kart":
+            self.update_kart(dt, now)
+        elif self.game_type == "bomb":
+            self.update_walkers(dt, now)
+            self.update_bombs(dt, now)
+        elif self.game_type == "snake":
+            self.update_snakes(dt, now)
+        else:
+            self.update_walkers(dt, now)
+            self.update_coin_hazards(now)
+        self.collect_pickups(now)
+
+    def update_kart(self, dt: float, now: float) -> None:
+        checkpoints = self.config["track"]
+        for client in self.clients.values():
+            controls = client.input
+            if controls.get("left"):
+                client.angle -= 3.2 * dt
+            if controls.get("right"):
+                client.angle += 3.2 * dt
+            throttle = float(controls.get("up", False)) - 0.5 * float(controls.get("down", False))
+            boost = 1.45 if now < client.boosted_until else 1.0
+            if controls.get("action") and now >= client.cooldown_until:
+                client.boosted_until = now + 1.2
+                client.cooldown_until = now + 4.0
+                boost = 1.45
+            accel = 520 * throttle * boost
+            client.vx += math.cos(client.angle) * accel * dt
+            client.vy += math.sin(client.angle) * accel * dt
+            speed = math.hypot(client.vx, client.vy)
+            max_speed = float(self.config["speed"]) * boost
+            if speed > max_speed:
+                client.vx = client.vx / speed * max_speed
+                client.vy = client.vy / speed * max_speed
+            client.vx *= 0.988
+            client.vy *= 0.988
+            self.move_client(client, client.vx * dt, client.vy * dt)
+            target = checkpoints[client.checkpoint % len(checkpoints)]
+            if party_distance(client.x, client.y, float(target[0]), float(target[1])) < 72:
+                client.checkpoint += 1
+                client.score += 8
+                if client.checkpoint >= len(checkpoints):
+                    client.checkpoint = 0
+                    client.lap += 1
+                    client.score += 100
+                    self.status = f"{client.name}님이 {client.lap}바퀴를 완료했습니다."
+                    if client.lap >= int(self.config["laps"]):
+                        self.finish_round(f"{client.name}님 완주")
+                        return
+
+    def update_walkers(self, dt: float, now: float) -> None:
+        speed = float(self.config["speed"])
+        for client in self.clients.values():
+            if not self.ensure_alive(client, now):
+                continue
+            controls = client.input
+            dx = float(controls.get("right", False)) - float(controls.get("left", False))
+            dy = float(controls.get("down", False)) - float(controls.get("up", False))
+            length = math.hypot(dx, dy)
+            if length:
+                dx /= length
+                dy /= length
+                client.angle = math.atan2(dy, dx)
+            self.move_client(client, dx * speed * dt, dy * speed * dt)
+            if self.game_type == "bomb":
+                self.maybe_drop_bomb(client, now)
+
+    def update_snakes(self, dt: float, now: float) -> None:
+        speed = float(self.config["speed"])
+        for client in self.clients.values():
+            if not self.ensure_alive(client, now):
+                continue
+            controls = client.input
+            dx = float(controls.get("right", False)) - float(controls.get("left", False))
+            dy = float(controls.get("down", False)) - float(controls.get("up", False))
+            if dx or dy:
+                client.angle = math.atan2(dy, dx)
+            self.move_client(
+                client,
+                math.cos(client.angle) * speed * dt,
+                math.sin(client.angle) * speed * dt,
+                bounce=False,
+            )
+            if (
+                client.x <= PARTY_PLAYER_RADIUS
+                or client.x >= PARTY_WIDTH - PARTY_PLAYER_RADIUS
+                or client.y <= PARTY_PLAYER_RADIUS
+                or client.y >= PARTY_HEIGHT - PARTY_PLAYER_RADIUS
+            ):
+                self.knock_out(client, now, "벽에 닿았습니다.")
+                continue
+            client.trail.append((client.x, client.y))
+            limit = 22 + min(90, client.score * 2)
+            client.trail = client.trail[-limit:]
+            for other in self.clients.values():
+                if not other.alive:
+                    continue
+                trail = other.trail[:-8] if other.id == client.id else other.trail
+                if any(party_distance(client.x, client.y, x, y) < 13 for x, y in trail):
+                    self.knock_out(client, now, "꼬리에 부딪혔습니다.")
+                    break
+
+    def update_bombs(self, dt: float, now: float) -> None:
+        alive: list[PartyBomb] = []
+        for bomb in self.bombs:
+            if bomb.blast_ttl > 0:
+                bomb.blast_ttl -= dt
+                if bomb.blast_ttl > 0:
+                    alive.append(bomb)
+                continue
+            bomb.ttl -= dt
+            if bomb.ttl > 0:
+                alive.append(bomb)
+                continue
+            bomb.blast_ttl = 0.35
+            alive.append(bomb)
+            owner = self.clients.get(bomb.owner_id)
+            for client in self.clients.values():
+                if not client.alive:
+                    continue
+                if party_distance(client.x, client.y, bomb.x, bomb.y) <= bomb.radius:
+                    self.knock_out(client, now, "폭발에 맞았습니다.")
+                    if owner and owner.id != client.id:
+                        owner.score += 5
+        self.bombs = alive
+
+    def update_coin_hazards(self, now: float) -> None:
+        for hazard in self.hazards(now):
+            for client in self.clients.values():
+                if client.alive and party_distance(client.x, client.y, hazard["x"], hazard["y"]) < hazard["radius"] + 8:
+                    self.knock_out(client, now, "위험 구역에 닿았습니다.")
+
+    def collect_pickups(self, now: float) -> None:
+        remaining: list[PartyPickup] = []
+        for pickup in self.pickups:
+            collector = next(
+                (
+                    client
+                    for client in self.clients.values()
+                    if client.alive and party_distance(client.x, client.y, pickup.x, pickup.y) < 28
+                ),
+                None,
+            )
+            if not collector:
+                remaining.append(pickup)
+                continue
+            if pickup.kind == "boost":
+                collector.boosted_until = max(collector.boosted_until, now + 1.6)
+                collector.score += 3
+            else:
+                collector.score += pickup.value
+        self.pickups = remaining
+
+    def maybe_drop_bomb(self, client: PartyClient, now: float) -> None:
+        action = bool(client.input.get("action"))
+        if not action:
+            client.action_latched = False
+            return
+        if client.action_latched or now < client.cooldown_until:
+            return
+        client.action_latched = True
+        client.cooldown_until = now + 1.0
+        self.bombs.append(
+            PartyBomb(
+                id=self.next_bomb_id,
+                owner_id=client.id,
+                x=round(client.x / 40) * 40,
+                y=round(client.y / 40) * 40,
+            )
+        )
+        self.next_bomb_id += 1
+
+    def move_client(self, client: PartyClient, dx: float, dy: float, bounce: bool = True) -> None:
+        client.x += dx
+        client.y += dy
+        if bounce:
+            if client.x < PARTY_PLAYER_RADIUS or client.x > PARTY_WIDTH - PARTY_PLAYER_RADIUS:
+                client.vx *= -0.35
+            if client.y < PARTY_PLAYER_RADIUS or client.y > PARTY_HEIGHT - PARTY_PLAYER_RADIUS:
+                client.vy *= -0.35
+        client.x = party_clamp(client.x, PARTY_PLAYER_RADIUS, PARTY_WIDTH - PARTY_PLAYER_RADIUS)
+        client.y = party_clamp(client.y, PARTY_PLAYER_RADIUS, PARTY_HEIGHT - PARTY_PLAYER_RADIUS)
+
+    def knock_out(self, client: PartyClient, now: float, reason: str) -> None:
+        client.alive = False
+        client.respawn_at = now + 1.7
+        client.trail.clear()
+        client.score = max(0, client.score - 2)
+        self.status = f"{client.name}님이 {reason}"
+
+    def ensure_alive(self, client: PartyClient, now: float) -> bool:
+        if client.alive:
+            return True
+        if now < client.respawn_at:
+            return False
+        self.place_client(client)
+        return True
+
+    def finish_round(self, reason: str) -> None:
+        leader = self.leader()
+        self.finished = True
+        self.winner_id = leader.id if leader else ""
+        self.winner_name = leader.name if leader else ""
+        if leader:
+            self.status = f"{reason}. {leader.name}님 승리. 방장이 라운드를 다시 시작할 수 있습니다."
+        else:
+            self.status = f"{reason}. 라운드를 다시 시작하세요."
+
+    def leader(self) -> PartyClient | None:
+        if not self.clients:
+            return None
+        if self.game_type == "kart":
+            return max(
+                self.clients.values(),
+                key=lambda client: (client.lap, client.checkpoint, client.score),
+            )
+        return max(self.clients.values(), key=lambda client: client.score)
+
+    def hazards(self, now: float) -> list[dict[str, float]]:
+        if self.game_type != "coin":
+            return []
+        phase = now - self.started_at
+        return [
+            {
+                "x": 320 + math.sin(phase * 0.72) * 190,
+                "y": 260 + math.cos(phase * 0.5) * 120,
+                "radius": 54,
+            },
+            {
+                "x": 850 + math.cos(phase * 0.55) * 210,
+                "y": 500 + math.sin(phase * 0.68) * 130,
+                "radius": 64,
+            },
+        ]
+
+    def state(self) -> dict[str, Any]:
+        now = time.time()
+        return {
+            "type": "party_state",
+            "roomId": self.room_id,
+            "game": self.game_type,
+            "config": self.config,
+            "width": PARTY_WIDTH,
+            "height": PARTY_HEIGHT,
+            "hostId": self.host_id,
+            "status": self.status,
+            "startedAt": round(self.started_at, 3),
+            "finished": self.finished,
+            "winnerId": self.winner_id,
+            "winnerName": self.winner_name,
+            "remaining": 0 if self.finished else max(0, math.ceil(self.ends_at - now)),
+            "scores": [
+                {
+                    "id": client.id,
+                    "name": client.name,
+                    "score": client.score,
+                    "lap": client.lap,
+                    "checkpoint": client.checkpoint,
+                }
+                for client in sorted(
+                    self.clients.values(),
+                    key=lambda item: (item.lap, item.checkpoint, item.score)
+                    if self.game_type == "kart"
+                    else (item.score, 0, 0),
+                    reverse=True,
+                )
+            ],
+            "players": [
+                {
+                    "id": client.id,
+                    "name": client.name,
+                    "color": client.color,
+                    "x": round(client.x, 2),
+                    "y": round(client.y, 2),
+                    "vx": round(client.vx, 2),
+                    "vy": round(client.vy, 2),
+                    "angle": round(client.angle, 4),
+                    "score": client.score,
+                    "lap": client.lap,
+                    "checkpoint": client.checkpoint,
+                    "alive": client.alive,
+                    "isHost": client.id == self.host_id,
+                    "boosted": now < client.boosted_until,
+                    "cooldown": max(0, round(client.cooldown_until - now, 1)),
+                    "trail": [[round(x, 1), round(y, 1)] for x, y in client.trail[-120:]],
+                }
+                for client in self.clients.values()
+            ],
+            "pickups": [
+                {
+                    "id": pickup.id,
+                    "x": round(pickup.x, 1),
+                    "y": round(pickup.y, 1),
+                    "kind": pickup.kind,
+                    "value": pickup.value,
+                }
+                for pickup in self.pickups
+            ],
+            "bombs": [
+                {
+                    "id": bomb.id,
+                    "ownerId": bomb.owner_id,
+                    "x": round(bomb.x, 1),
+                    "y": round(bomb.y, 1),
+                    "ttl": round(max(0, bomb.ttl), 2),
+                    "blastTtl": round(max(0, bomb.blast_ttl), 2),
+                    "radius": bomb.radius,
+                }
+                for bomb in self.bombs
+            ],
+            "hazards": self.hazards(now),
+            "serverTime": round(now, 3),
+        }
+
+
 class ArenaServer:
     def __init__(
         self, game_root: Path | str = ROOT, home_path: Path | str | None = None
@@ -1461,6 +2013,7 @@ class ArenaServer:
         self.arena_rooms: dict[str, ArenaRoom] = {}
         self.fortress_rooms: dict[str, FortressMatch] = {}
         self.defense_rooms: dict[str, DefenseRoom] = {}
+        self.party_rooms: dict[str, PartyRoom] = {}
         self.hub_clients: dict[str, HubClient] = {}
         self.hub_rooms: dict[str, HubRoom] = {}
         self.next_hub_client_id = 1
@@ -1489,15 +2042,24 @@ class ArenaServer:
             self.defense_rooms[room_id] = DefenseRoom(room_id=room_id)
         return self.defense_rooms[room_id]
 
+    def ensure_party_room(self, room_id: str, game_type: str = "kart") -> PartyRoom:
+        room_id = self.clean_room_id(room_id)
+        game_type = game_type if game_type in PARTY_GAME_TYPES else "kart"
+        if room_id not in self.party_rooms:
+            self.party_rooms[room_id] = PartyRoom(room_id=room_id, game_type=game_type)
+        return self.party_rooms[room_id]
+
     def room_has_activity(self, room_id: str) -> bool:
         arena_room = self.arena_rooms.get(room_id)
         fortress_room = self.fortress_rooms.get(room_id)
         defense_room = self.defense_rooms.get(room_id)
+        party_room = self.party_rooms.get(room_id)
         return (
             any(client.room_id == room_id for client in self.hub_clients.values())
             or bool(arena_room and arena_room.clients)
             or bool(fortress_room and fortress_room.clients)
             or bool(defense_room and defense_room.clients)
+            or bool(party_room and party_room.clients)
         )
 
     async def cleanup_hub_room_if_empty(self, room_id: str) -> None:
@@ -1533,6 +2095,8 @@ class ArenaServer:
                 await self.handle_fortress_websocket(reader, writer, headers, parsed.query)
             elif parsed.path == "/defense":
                 await self.handle_defense_websocket(reader, writer, headers, parsed.query)
+            elif parsed.path == "/party":
+                await self.handle_party_websocket(reader, writer, headers, parsed.query)
             elif parsed.path == "/hub":
                 await self.handle_hub_websocket(reader, writer, headers)
             else:
@@ -1842,6 +2406,74 @@ class ArenaServer:
                 client.write_lock,
             )
 
+    async def handle_party_websocket(
+        self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+        headers: dict[str, str],
+        query: str,
+    ) -> None:
+        key = headers.get("sec-websocket-key")
+        if not key:
+            writer.close()
+            await writer.wait_closed()
+            return
+
+        accept = base64.b64encode(hashlib.sha1((key + GUID).encode()).digest()).decode()
+        writer.write(
+            (
+                "HTTP/1.1 101 Switching Protocols\r\n"
+                "Upgrade: websocket\r\n"
+                "Connection: Upgrade\r\n"
+                f"Sec-WebSocket-Accept: {accept}\r\n\r\n"
+            ).encode("ascii")
+        )
+        await writer.drain()
+
+        values = parse_qs(query)
+        room_id = self.clean_room_id(values.get("room", ["MAIN"])[0])
+        game_type = str(values.get("game", ["kart"])[0]).strip().lower()
+        room = self.ensure_party_room(room_id, game_type)
+        client = room.create_client(writer)
+        room.add_client(client)
+        await self.send_json(
+            writer,
+            {
+                "type": "party_welcome",
+                "id": client.id,
+                "roomId": room_id,
+                "game": room.game_type,
+                "isHost": client.id == room.host_id,
+            },
+            client.write_lock,
+        )
+        await self.broadcast_hub_room_list()
+
+        try:
+            while self.running:
+                message = await self.read_ws_message(reader)
+                if message is None:
+                    break
+                error = room.handle_message(client, message)
+                if error:
+                    await self.send_json(
+                        client.writer,
+                        {"type": "party_error", "message": error},
+                        client.write_lock,
+                    )
+        except (asyncio.IncompleteReadError, ConnectionError, OSError, UnicodeDecodeError):
+            pass
+        finally:
+            room.remove_client(client)
+            if not room.clients:
+                self.party_rooms.pop(room_id, None)
+            await self.cleanup_hub_room_if_empty(room_id)
+            writer.close()
+            try:
+                await writer.wait_closed()
+            except OSError:
+                pass
+
     async def handle_hub_websocket(
         self,
         reader: asyncio.StreamReader,
@@ -1964,11 +2596,11 @@ class ArenaServer:
         self, client: HubClient, message: dict[str, Any]
     ) -> None:
         feature = str(message.get("feature") or "drop").strip().lower()[:24]
-        if feature not in {"drop", "arena", "fortress", "defense"}:
+        if feature not in {"drop", "arena", "fortress", "defense", *PARTY_GAME_TYPES}:
             feature = "drop"
         pin = (
             ""
-            if feature in {"arena", "fortress", "defense"}
+            if feature in {"arena", "fortress", "defense", *PARTY_GAME_TYPES}
             else str(message.get("pin") or "").strip()[:24]
         )
         room = HubRoom(
@@ -2104,6 +2736,12 @@ class ArenaServer:
             if defense_room
             else {"gameCount": 0, "playerCount": 0, "spectatorCount": 0, "ready": False}
         )
+        party_room = self.party_rooms.get(room.id)
+        party_summary = (
+            party_room.summary()
+            if party_room
+            else {"gameCount": 0, "playerCount": 0, "spectatorCount": 0, "ready": False}
+        )
         game_count = arena_count
         player_count = arena_count
         spectator_count = 0
@@ -2118,6 +2756,11 @@ class ArenaServer:
             player_count = defense_summary["playerCount"]
             spectator_count = 0
             ready = defense_summary["ready"]
+        elif room.feature in PARTY_GAME_TYPES:
+            game_count = party_summary["gameCount"]
+            player_count = party_summary["playerCount"]
+            spectator_count = 0
+            ready = party_summary["ready"]
         return {
             "id": room.id,
             "name": room.name,
@@ -2335,9 +2978,12 @@ class ArenaServer:
                 match.update(dt, now)
             for room in list(self.defense_rooms.values()):
                 room.update(dt)
+            for room in list(self.party_rooms.values()):
+                room.update(dt, now)
             await self.broadcast_state()
             await self.broadcast_fortress_state()
             await self.broadcast_defense_state()
+            await self.broadcast_party_state()
             await asyncio.sleep(1 / TICK_RATE)
 
     def update_players(self, dt: float, now: float) -> None:
@@ -2522,6 +3168,29 @@ class ArenaServer:
                     room.remove_client(client)
             if not room.clients:
                 self.defense_rooms.pop(room_id, None)
+                await self.cleanup_hub_room_if_empty(room_id)
+
+    async def broadcast_party_state(self) -> None:
+        for room_id, room in list(self.party_rooms.items()):
+            if not room.clients:
+                continue
+            state = room.state()
+            stale: list[str] = []
+            for client in list(room.clients.values()):
+                try:
+                    await self.send_json(
+                        client.writer,
+                        {**state, "clientId": client.id, "isHost": client.id == room.host_id},
+                        client.write_lock,
+                    )
+                except (ConnectionError, OSError):
+                    stale.append(client.id)
+            for client_id in stale:
+                client = room.clients.get(client_id)
+                if client:
+                    room.remove_client(client)
+            if not room.clients:
+                self.party_rooms.pop(room_id, None)
                 await self.cleanup_hub_room_if_empty(room_id)
 
 
