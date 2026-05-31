@@ -2136,6 +2136,9 @@ class DefenseRoom:
                     "ownerName": self.clients[tower.owner_id].name
                     if tower.owner_id in self.clients
                     else "퇴장",
+                    "ownerColor": self.clients[tower.owner_id].color
+                    if tower.owner_id in self.clients
+                    else "#f5fbff",
                     "type": tower.tower_type,
                     "cellX": tower.cell_x,
                     "cellY": tower.cell_y,
@@ -2143,6 +2146,7 @@ class DefenseRoom:
                     "range": int(DEFENSE_TOWERS[tower.tower_type]["range"])
                     + (tower.level - 1) * 14,
                     "boost": round(self.tower_boost_multiplier(tower), 2),
+                    "cooldownLeft": round(max(0.0, tower.cooldown_left), 2),
                 }
                 for tower in self.towers.values()
             ],

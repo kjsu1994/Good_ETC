@@ -1,6 +1,6 @@
 (() => {
   const params = new URLSearchParams(window.location.search);
-  const assetVersion = params.get("v") || "20260531rpg63";
+  const assetVersion = params.get("v") || "20260531wd01";
   const SAVE_KEY = "good_etc_rpg_save_v1";
   const PANEL_PREF_KEY = "good_etc_rpg_panels_v1";
   const SAVE_API = "/api/rpg/save";

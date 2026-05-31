@@ -1,10 +1,11 @@
 (() => {
   const params = new URLSearchParams(window.location.search);
   const isSolo = ["solo", "local"].includes(params.get("mode") || "");
-  const assetVersion = params.get("v") || "20260530bd";
+  const assetVersion = params.get("v") || "20260531wd01";
   const world = { width: 1536, height: 960, cell: 24, columns: 64, rows: 40 };
   const speedOptions = [1, 2, 3];
   const speedStorageKey = "defense_game_speed";
+  const toolbarStorageKey = "defense_toolbar_collapsed";
   let defenseMaps = {
     classic: {
       name: "기본 우회로",
@@ -190,6 +191,8 @@
         <p>타워를 선택한 뒤 경로가 아닌 칸을 클릭해 배치합니다. 마우스를 올리면 사거리, 경로 커버 칸, 배치 가능 여부가 미리 표시됩니다.</p>
         <p>타워를 선택하면 실제 사거리, 현재 목표, 재장전 진행, 증폭기가 영향을 주는 타워가 표시됩니다. 방장은 첫 웨이브를 시작하고, 이후에는 준비 시간이 끝나면 자동으로 다음 웨이브가 시작됩니다.</p>
         <p>자원은 개인별로 관리되며 자신의 타워만 업그레이드하거나 판매할 수 있습니다. 폭발 타워는 화상, 저격 타워는 취약 표식을 남기고, 증폭기는 주변 타워의 공격 효율을 높입니다.</p>
+        <p>멀티에서는 타워 주변 색상 링과 이름표로 소유자를 구분합니다. 내 타워는 노란 나 표식으로 표시되고, 다른 참가자의 타워는 참가자 이름 머리글자로 표시됩니다.</p>
+        <p>하단 타워/전술 패널은 패널 접기로 줄일 수 있습니다. 화면이 낮거나 좁으면 버튼 설명을 압축하고 전장을 패널 위쪽에 맞춰 배치합니다.</p>
         <p>보스는 체력이 낮아지면 격노해 더 빠르게 이동하고 기지 피해가 커집니다. 화상, 표식, 보호막, 격노 링을 보고 우선순위를 조정하세요.</p>
         <p>전술 스킬은 자원을 사용합니다. Q 포격 지원은 전방 적 주변에 범위 피해를 주고, E 빙결장은 적 무리를 감속하며, F 긴급 수리는 기지를 회복합니다.</p>
         <p>맵은 1웨이브 시작 전, 타워 배치 전에만 변경할 수 있습니다. 멀티는 같은 방 참가자와 동기화되고, 혼자하기는 서버 없이 현재 브라우저 또는 EXE 안에서 실행됩니다.</p>
@@ -208,15 +211,22 @@
       <p id="defenseWavePreview" class="defense-wave-preview">다음 웨이브 정보 없음</p>
       <ol id="defensePlayers" class="defense-players"></ol>
     </section>
-    <section class="hud defense-toolbar" aria-label="타워 조작">
-      <div class="defense-towers" id="defenseTowerButtons"></div>
-      <div class="defense-actions">
-        <button id="defenseStartWave" type="button">웨이브 시작</button>
-        <button id="defenseUpgrade" type="button">업그레이드</button>
-        <button id="defenseSell" type="button">판매</button>
+    <section class="hud defense-toolbar" id="defenseToolbar" aria-label="타워 조작">
+      <div class="defense-toolbar-head">
+        <strong>타워/전술</strong>
+        <span id="defenseToolbarSummary">타워를 선택하세요.</span>
+        <button id="defenseToolbarToggle" class="defense-toolbar-toggle" type="button" aria-controls="defenseToolbarBody" aria-expanded="true">패널 접기</button>
       </div>
-      <div class="defense-skills" id="defenseSkillButtons" aria-label="전술 스킬"></div>
-      <p id="defenseSelection">타워를 선택하세요.</p>
+      <div class="defense-toolbar-body" id="defenseToolbarBody">
+        <div class="defense-towers" id="defenseTowerButtons"></div>
+        <div class="defense-actions">
+          <button id="defenseStartWave" type="button">웨이브 시작</button>
+          <button id="defenseUpgrade" type="button">업그레이드</button>
+          <button id="defenseSell" type="button">판매</button>
+        </div>
+        <div class="defense-skills" id="defenseSkillButtons" aria-label="전술 스킬"></div>
+        <p id="defenseSelection">타워를 선택하세요.</p>
+      </div>
     </section>
     <section class="hud net-info collapsed" id="netInfoPanel" aria-label="접속 정보">
       <button id="netInfoToggle" class="net-info-toggle" type="button" aria-label="접속 정보 열기" aria-expanded="false" title="접속 정보">i</button>
@@ -260,6 +270,10 @@
     autoStart: document.getElementById("defenseAutoStart"),
     wavePreview: document.getElementById("defenseWavePreview"),
     players: document.getElementById("defensePlayers"),
+    toolbar: document.getElementById("defenseToolbar"),
+    toolbarBody: document.getElementById("defenseToolbarBody"),
+    toolbarToggle: document.getElementById("defenseToolbarToggle"),
+    toolbarSummary: document.getElementById("defenseToolbarSummary"),
     towers: document.getElementById("defenseTowerButtons"),
     startWave: document.getElementById("defenseStartWave"),
     upgrade: document.getElementById("defenseUpgrade"),
@@ -292,6 +306,8 @@
   let camera = { scale: 1, offsetX: 0, offsetY: 0 };
   let localIds = { tower: 1, enemy: 1, shot: 1 };
   let gameSpeed = normalizeGameSpeed(localStorage.getItem(speedStorageKey));
+  let toolbarCollapsed = localStorage.getItem(toolbarStorageKey) === "1";
+  let resizeQueued = false;
 
   let state = createInitialState();
 
@@ -598,6 +614,25 @@
     setCenter(text, { duration: 1600 });
   }
 
+  function queueResize() {
+    if (resizeQueued) return;
+    resizeQueued = true;
+    requestAnimationFrame(() => {
+      resizeQueued = false;
+      resize();
+    });
+  }
+
+  function applyToolbarState() {
+    ui.toolbar.classList.toggle("is-collapsed", toolbarCollapsed);
+    ui.toolbarToggle.textContent = toolbarCollapsed
+      ? "패널 펼치기"
+      : "패널 접기";
+    ui.toolbarToggle.setAttribute("aria-expanded", String(!toolbarCollapsed));
+    localStorage.setItem(toolbarStorageKey, toolbarCollapsed ? "1" : "0");
+    queueResize();
+  }
+
   function isCenterToast(text) {
     return (
       String(text || "").includes("웨이브 사이 건설 시간에만") ||
@@ -898,6 +933,45 @@
     return `rgba(${parseInt(value.slice(0, 2), 16)}, ${parseInt(value.slice(2, 4), 16)}, ${parseInt(value.slice(4, 6), 16)}, ${alpha})`;
   }
 
+  function ownerForTower(tower) {
+    return (
+      state.players.find((player) => player.id === tower.ownerId) ||
+      (tower.ownerId === "local" ? selfPlayer() : null)
+    );
+  }
+
+  function towerOwnerColor(tower) {
+    return tower.ownerColor || ownerForTower(tower)?.color || "#f5fbff";
+  }
+
+  function towerOwnerName(tower) {
+    return tower.ownerName || ownerForTower(tower)?.name || "알 수 없음";
+  }
+
+  function isMyTower(tower) {
+    return tower?.ownerId === clientId;
+  }
+
+  function towerOwnerLabel(tower) {
+    return isMyTower(tower) ? "내 타워" : `${towerOwnerName(tower)} 타워`;
+  }
+
+  function nameInitials(name) {
+    const parts = String(name || "?")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+    if (!parts.length) return "?";
+    const text =
+      parts.length > 1
+        ? parts
+            .slice(0, 2)
+            .map((part) => part[0])
+            .join("")
+        : parts[0].slice(0, 2);
+    return text.toUpperCase();
+  }
+
   function pathCoverageFor(center, range) {
     let count = 0;
     let closest = Infinity;
@@ -968,6 +1042,7 @@
       id: localIds.tower++,
       ownerId: "local",
       ownerName: player.name,
+      ownerColor: player.color,
       type,
       cellX,
       cellY,
@@ -1523,6 +1598,7 @@
     if (selected) {
       const config = towerTypes[selected.type] || towerTypes.basic;
       const range = towerRangeFor(selected, config);
+      const ownerText = towerOwnerLabel(selected);
       const boostText =
         selected.boost && selected.boost > 1
           ? ` · 증폭 x${selected.boost}`
@@ -1531,14 +1607,18 @@
         selected.cooldownLeft && selected.cooldownLeft > 0
           ? ` · 재장전 ${selected.cooldownLeft.toFixed(1)}s`
           : "";
-      ui.selection.textContent = `${config.name || "타워"} ${selected.level}단계 · 사거리 ${Math.round(range)} · ${selected.ownerName || "소유자"}${boostText}${cooldown}`;
+      const selectedText = `${config.name || "타워"} ${selected.level}단계 · ${ownerText} · 사거리 ${Math.round(range)}${boostText}${cooldown}`;
+      ui.selection.textContent = selectedText;
+      ui.toolbarSummary.textContent = selectedText;
     } else {
       const config = towerTypes[selectedTowerType] || towerTypes.basic;
       const hover =
         hoverCell && canPlace(hoverCell.x, hoverCell.y)
           ? ` · 경로 ${pathCoverageFor(cellCenter(hoverCell.x, hoverCell.y), config.range).count}칸`
           : "";
-      ui.selection.textContent = `${config.name || "타워"} 선택됨 · 비용 ${config.cost || 0} · 사거리 ${Math.round(config.range || 0)}${hover}`;
+      const selectionText = `${config.name || "타워"} 선택됨 · 비용 ${config.cost || 0} · 사거리 ${Math.round(config.range || 0)}${hover}`;
+      ui.selection.textContent = selectionText;
+      ui.toolbarSummary.textContent = selectionText;
     }
     const mapLocked = state.wave > 0 || state.towers.length > 0 || !isHost();
     ui.mapSelect.disabled = Boolean(mapLocked);
@@ -1550,11 +1630,15 @@
     renderWavePreview();
     renderSpeedButtons();
     renderSkillButtons();
+    const towerCounts = state.towers.reduce((counts, tower) => {
+      counts[tower.ownerId] = (counts[tower.ownerId] || 0) + 1;
+      return counts;
+    }, {});
     ui.players.innerHTML =
       state.players
         .map(
           (player) =>
-            `<li><span><i style="background:${player.color}"></i>${escapeHtml(player.name)}${player.isHost ? " · 방장" : ""}</span><strong>${player.resources} · K${player.kills || 0}</strong></li>`,
+            `<li><span><i style="background:${player.color}"></i>${escapeHtml(player.name)}${player.isHost ? " · 방장" : ""}</span><strong>${player.resources} · T${towerCounts[player.id] || 0} · K${player.kills || 0}</strong></li>`,
         )
         .join("") || "<li>참가자 없음</li>";
   }
@@ -1582,9 +1666,24 @@
     canvas.style.width = `${width}px`;
     canvas.style.height = `${height}px`;
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-    camera.scale = Math.min(width / world.width, height / world.height) * 0.94;
+    const toolbarRect = ui.toolbar?.getBoundingClientRect();
+    const sideDocked =
+      toolbarRect &&
+      toolbarRect.left > width * 0.45 &&
+      toolbarRect.width < width * 0.5;
+    const toolbarReserve =
+      toolbarRect && toolbarRect.height > 0 && !sideDocked
+        ? Math.min(
+            height * (toolbarCollapsed ? 0.12 : 0.36),
+            toolbarRect.height + 28,
+          )
+        : 0;
+    const availableHeight = Math.max(320, height - toolbarReserve);
+    camera.scale =
+      Math.min(width / world.width, availableHeight / world.height) * 0.94;
     camera.offsetX = (width - world.width * camera.scale) / 2;
-    camera.offsetY = (height - world.height * camera.scale) / 2;
+    camera.offsetY =
+      Math.max(8, (availableHeight - world.height * camera.scale) / 2) + 6;
   }
 
   function toWorld(clientX, clientY) {
@@ -2178,6 +2277,217 @@
     );
   }
 
+  function drawRoundRect(x, y, width, height, radius = 6) {
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, y, width, height, radius);
+    else ctx.rect(x, y, width, height);
+  }
+
+  function drawTowerOwnerRing(tower, center, selected) {
+    const ownerColor = towerOwnerColor(tower);
+    const mine = isMyTower(tower);
+    const level = Math.max(1, Math.min(3, Number(tower.level || 1)));
+    const pulse = 0.5 + Math.sin(performance.now() / 260) * 0.5;
+    ctx.save();
+    ctx.strokeStyle = colorWithAlpha(ownerColor, mine ? 0.92 : 0.72);
+    ctx.lineWidth = mine ? 4 : 3;
+    if (!mine) ctx.setLineDash([7, 6]);
+    ctx.beginPath();
+    ctx.arc(
+      center.x,
+      center.y,
+      24 + level * 3 + (selected ? pulse * 3 : 0),
+      0,
+      Math.PI * 2,
+    );
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = colorWithAlpha(ownerColor, mine ? 0.18 : 0.1);
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, 19 + level * 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawTowerOwnerBadge(tower, center, selected) {
+    const ownerColor = towerOwnerColor(tower);
+    const mine = isMyTower(tower);
+    const initials = mine ? "나" : nameInitials(towerOwnerName(tower));
+    ctx.save();
+    ctx.font = "900 10px Malgun Gothic, system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "rgba(7,17,31,.88)";
+    ctx.strokeStyle = colorWithAlpha(ownerColor, mine ? 0.95 : 0.72);
+    ctx.lineWidth = mine ? 2.5 : 2;
+    drawRoundRect(center.x - 13, center.y - 42, 26, 18, 6);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = mine ? "#f8f871" : "#f5fbff";
+    ctx.fillText(initials, center.x, center.y - 32.5);
+    ctx.restore();
+    if (selected) {
+      drawDefenseLabel(
+        `${towerOwnerLabel(tower)} · Lv${tower.level}`,
+        center.x,
+        center.y + 54,
+        ownerColor,
+      );
+    }
+  }
+
+  function drawTowerLevelPips(level, color) {
+    for (let index = 0; index < 3; index += 1) {
+      ctx.fillStyle =
+        index < level ? colorWithAlpha(color, 0.95) : "rgba(255,255,255,.18)";
+      ctx.fillRect(-13 + index * 9, 15, 6, 4);
+    }
+  }
+
+  function drawTowerBody(tower, center, config, aim, target) {
+    const type = tower.type || "basic";
+    const level = Math.max(1, Math.min(3, Number(tower.level || 1)));
+    const color = config.color || "#62e6ff";
+    const ownerColor = towerOwnerColor(tower);
+    const pulse = 0.5 + Math.sin(performance.now() / 220) * 0.5;
+    const baseSize = 28 + level * 3;
+    ctx.save();
+    ctx.translate(center.x, center.y);
+    ctx.fillStyle = "rgba(0,0,0,.34)";
+    ctx.beginPath();
+    ctx.ellipse(0, 15, 21 + level * 2, 8 + level, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#101827";
+    ctx.strokeStyle = colorWithAlpha(ownerColor, 0.64);
+    ctx.lineWidth = 2.5;
+    drawRoundRect(-baseSize / 2, -baseSize / 2, baseSize, baseSize, 5);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = colorWithAlpha(color, 0.28);
+    drawRoundRect(
+      -baseSize / 2 + 4,
+      -baseSize / 2 + 4,
+      baseSize - 8,
+      baseSize - 8,
+      4,
+    );
+    ctx.fill();
+
+    if (type === "boost") {
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 10 + level * 3;
+      ctx.strokeStyle = colorWithAlpha(color, 0.82);
+      ctx.lineWidth = 3;
+      for (let ring = 0; ring < level; ring += 1) {
+        ctx.beginPath();
+        ctx.arc(0, 0, 8 + ring * 6 + pulse * 2, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(0, 0, 7 + level, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    } else {
+      ctx.save();
+      ctx.rotate(aim);
+      ctx.lineCap = "round";
+      if (type === "sniper") {
+        ctx.strokeStyle = "rgba(0,0,0,.5)";
+        ctx.lineWidth = 8;
+        ctx.beginPath();
+        ctx.moveTo(-4, 0);
+        ctx.lineTo(31 + level * 4, 0);
+        ctx.stroke();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3.5;
+        ctx.beginPath();
+        ctx.moveTo(-2, 0);
+        ctx.lineTo(34 + level * 5, 0);
+        ctx.stroke();
+        ctx.strokeStyle = colorWithAlpha(color, 0.72);
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(12, 0, 8 + level, 0, Math.PI * 2);
+        ctx.moveTo(12, -12 - level);
+        ctx.lineTo(12, 12 + level);
+        ctx.moveTo(0 - level, 0);
+        ctx.lineTo(24 + level, 0);
+        ctx.stroke();
+      } else if (type === "blast") {
+        ctx.fillStyle = colorWithAlpha(color, 0.9);
+        ctx.beginPath();
+        ctx.arc(5, 0, 10 + level * 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "rgba(0,0,0,.44)";
+        ctx.lineWidth = 10 + level * 2;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(23 + level * 3, 0);
+        ctx.stroke();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 6 + level;
+        ctx.stroke();
+      } else if (type === "slow") {
+        ctx.strokeStyle = colorWithAlpha(color, 0.9);
+        ctx.lineWidth = 4;
+        for (let arm = 0; arm < 4; arm += 1) {
+          ctx.rotate(Math.PI / 2);
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.lineTo(20 + level * 3, 0);
+          ctx.stroke();
+        }
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        for (let index = 0; index < 6; index += 1) {
+          const angle = (Math.PI * 2 * index) / 6;
+          const radius = index % 2 ? 9 + level : 13 + level * 1.5;
+          const x = Math.cos(angle) * radius;
+          const y = Math.sin(angle) * radius;
+          if (index) ctx.lineTo(x, y);
+          else ctx.moveTo(x, y);
+        }
+        ctx.closePath();
+        ctx.fill();
+      } else {
+        ctx.strokeStyle = "rgba(0,0,0,.42)";
+        ctx.lineWidth = 7;
+        [-4, 4].forEach((offset) => {
+          ctx.beginPath();
+          ctx.moveTo(-2, offset);
+          ctx.lineTo(23 + level * 4, offset);
+          ctx.stroke();
+        });
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 4;
+        [-4, 4].forEach((offset) => {
+          ctx.beginPath();
+          ctx.moveTo(-2, offset);
+          ctx.lineTo(24 + level * 4, offset);
+          ctx.stroke();
+        });
+      }
+      if (target) {
+        ctx.fillStyle = "#f5fbff";
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 10;
+        ctx.beginPath();
+        ctx.arc(28 + level * 4, 0, 3.5 + level, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      }
+      ctx.restore();
+    }
+
+    ctx.fillStyle = "rgba(255,255,255,.24)";
+    ctx.beginPath();
+    ctx.arc(-5, -7, 5 + level, 0, Math.PI * 2);
+    ctx.fill();
+    drawTowerLevelPips(level, color);
+    ctx.restore();
+  }
+
   function drawTower(tower) {
     const config = towerTypes[tower.type] || towerTypes.basic;
     const center = cellCenter(tower.cellX, tower.cellY);
@@ -2196,66 +2506,9 @@
       });
       drawSelectedTowerLinks(tower, center, range, config, target);
     }
-    ctx.fillStyle = "rgba(0,0,0,.32)";
-    ctx.beginPath();
-    ctx.ellipse(center.x, center.y + 13, 19, 8, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "#101827";
-    ctx.fillRect(center.x - 15, center.y - 15, 30, 30);
-    ctx.fillStyle = config.color;
-    if (config.boost) {
-      ctx.shadowColor = config.color;
-      ctx.shadowBlur = 12;
-      ctx.beginPath();
-      ctx.arc(center.x, center.y, 12, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.shadowBlur = 0;
-      ctx.strokeStyle = "rgba(255,255,255,.34)";
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(center.x, center.y, 18, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.strokeStyle = `rgba(255,255,255,${0.18 + Math.sin(performance.now() / 240) * 0.06})`;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(center.x, center.y, range, 0, Math.PI * 2);
-      ctx.stroke();
-    } else {
-      ctx.fillRect(center.x - 10, center.y - 10, 20, 20);
-      ctx.fillStyle = "rgba(255,255,255,.28)";
-      ctx.fillRect(center.x - 5, center.y - 15, 10, 8);
-      ctx.save();
-      ctx.translate(center.x, center.y);
-      ctx.rotate(aim);
-      ctx.strokeStyle = "rgba(0,0,0,.38)";
-      ctx.lineWidth = 8;
-      ctx.lineCap = "round";
-      ctx.beginPath();
-      ctx.moveTo(-2, 0);
-      ctx.lineTo(24, 0);
-      ctx.stroke();
-      ctx.strokeStyle = config.color;
-      ctx.lineWidth = 5;
-      ctx.beginPath();
-      ctx.moveTo(-2, 0);
-      ctx.lineTo(24, 0);
-      ctx.stroke();
-      if (target) {
-        ctx.fillStyle = "#f5fbff";
-        ctx.shadowColor = config.color;
-        ctx.shadowBlur = 10;
-        ctx.beginPath();
-        ctx.arc(27, 0, 4, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-      }
-      ctx.restore();
-    }
-    ctx.fillStyle = "#fff";
-    ctx.font = "bold 13px monospace";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(String(tower.level), center.x, center.y);
+    drawTowerOwnerRing(tower, center, selected);
+    drawTowerBody(tower, center, config, aim, target);
+    drawTowerOwnerBadge(tower, center, selected);
     drawTowerCooldown(tower, center, config);
   }
 
@@ -2653,6 +2906,7 @@
         renderHud();
       };
     });
+    queueResize();
   }
 
   function renderSkillButtons() {
@@ -2674,7 +2928,10 @@
         return `<button type="button" data-skill="${escapeHtml(key)}" class="${disabled ? "disabled" : ""}" ${disabled ? "disabled" : ""}><span style="background:${skill.color}"></span><strong>${escapeHtml(skill.name)}</strong><small>${label} · ${escapeHtml(skill.desc || "")}</small></button>`;
       })
       .join("");
-    if (ui.skills.innerHTML !== html) ui.skills.innerHTML = html;
+    if (ui.skills.innerHTML !== html) {
+      ui.skills.innerHTML = html;
+      queueResize();
+    }
     ui.skills.querySelectorAll("[data-skill]").forEach((button) => {
       button.onclick = () => actionSkill(button.dataset.skill || "");
     });
@@ -2683,6 +2940,10 @@
   ui.panelToggle.onclick = () => {
     const collapsed = ui.panel.classList.toggle("collapsed");
     ui.panelToggle.setAttribute("aria-expanded", String(!collapsed));
+  };
+  ui.toolbarToggle.onclick = () => {
+    toolbarCollapsed = !toolbarCollapsed;
+    applyToolbarState();
   };
   ui.helpToggle.onclick = () => ui.help.classList.toggle("hidden");
   ui.form.addEventListener("submit", (event) => {
@@ -2774,6 +3035,7 @@
     setStatus("연결 대기", false);
     setCenter("연결하면 웨이브 디펜스가 시작됩니다.");
   }
+  applyToolbarState();
   renderMapOptions();
   renderTowerButtons();
   renderHud();
