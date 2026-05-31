@@ -5,6 +5,7 @@
   "scripts": {
     "format": "node -e \"const cp=require('child_process'),p=require('path');const r=cp.spawnSync(process.execPath,[p.join(p.dirname(process.env.npm_package_json),'tools','prettier.cjs'),'--write'],{stdio:'inherit'});process.exit(r.status||0)\"",
     "format:check": "node -e \"const cp=require('child_process'),p=require('path');const r=cp.spawnSync(process.execPath,[p.join(p.dirname(process.env.npm_package_json),'tools','prettier.cjs'),'--check'],{stdio:'inherit'});process.exit(r.status||0)\"",
-    "validate": "node -e \"const p=require('path');require(p.join(p.dirname(process.env.npm_package_json),'tools','validate-home.cjs'))\""
+    "validate": "node -e \"const p=require('path'),d=p.dirname(process.env.npm_package_json);require(p.join(d,'tools','validate-home.cjs'));require(p.join(d,'tools','validate-rpg.cjs'))\"",
+    "validate:rpg": "node tools/validate-rpg.cjs"
   }
 }

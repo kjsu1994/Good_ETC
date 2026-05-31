@@ -20,7 +20,20 @@ if (Test-Path $OutputExe) {
 $HomeData = "--add-data=$((Join-Path $RootDir 'home.html')):."
 $GameData = "--add-data=$((Join-Path $RootDir 'game')):game"
 
-py -3 -m PyInstaller `
+$PythonExe = "py"
+$PythonArgs = @("-3")
+
+cmd /d /c "py -3 --version >nul 2>nul"
+if ($LASTEXITCODE -ne 0) {
+  $PythonExe = "python"
+  $PythonArgs = @()
+  cmd /d /c "python --version >nul 2>nul"
+  if ($LASTEXITCODE -ne 0) {
+    throw "No Python 3 interpreter found. Install Python 3 or add python.exe to PATH."
+  }
+}
+
+& $PythonExe @PythonArgs -m PyInstaller `
   --noconfirm `
   --clean `
   --onefile `
