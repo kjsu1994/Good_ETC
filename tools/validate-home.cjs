@@ -79,6 +79,7 @@ new Function(script);
   "dropJoinRoom",
   "dropCopyShare",
   "dropStatus",
+  "dropRoomSummary",
   "dropZone",
   "dropFileInput",
   "dropSendList",

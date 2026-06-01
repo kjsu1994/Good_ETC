@@ -312,6 +312,21 @@
       line-height: 1.6;
       word-break: break-word;
     }
+    .drop-room-summary {
+      display: grid;
+      gap: 6px;
+    }
+    .drop-room-summary strong {
+      font-size: 0.92rem;
+    }
+    .drop-room-summary code {
+      font-size: 1rem;
+      font-weight: 800;
+    }
+    .drop-room-summary .warn {
+      color: #a45b00;
+      font-weight: 700;
+    }
     .lan-game-detail {
       display: grid;
       gap: 8px;
@@ -435,6 +450,10 @@
     .lan-drop-zone.dragging {
       border-color: var(--a);
       background: rgba(76, 175, 80, 0.12);
+    }
+    .lan-drop-zone.is-disabled {
+      cursor: not-allowed;
+      opacity: 0.6;
     }
     .lan-drop-zone strong {
       display: block;
@@ -2272,35 +2291,48 @@
       <div class="c1e feature-help" id="lanDropHelp">
         <div>
           Share&Drop은 같은 방 참가자끼리 짧은 채팅과 파일 전송을 함께 쓰는
-          공간입니다. 방을 만들거나 방 코드와 PIN으로 참여하세요.
+          공간입니다. 공유를 시작하면 초대 링크가 만들어지고, 받은 사람은 링크를
+          열거나 초대 코드만 붙여넣어 참여할 수 있습니다.
         </div>
         <div>
           채팅은 같은 방 참가자에게 바로 전달되고, 파일은 브라우저 메모리로
           중계됩니다. 파일당 최대 100MB까지 전송합니다.
         </div>
         <div>
-          초대 주소는 통합 입장 센터의 호스트 IP와 포트, 그리고 이 화면의 방
-          코드/PIN으로 자동 생성됩니다. 주소의 포트를 바꾸려면
-          <code>접속 설정</code>을 눌러 통합 입장 센터에서 포트를 수정하세요.
+          초대 주소는 통합 입장 센터의 호스트 IP/포트와 Share&Drop 방 코드로
+          자동 생성됩니다. 주소의 포트를 바꾸려면 <code>접속 설정</code>을 눌러
+          통합 입장 센터에서 포트를 수정하세요. 다른 PC가 접속해야 하면
+          localhost가 아닌 호스트 PC의 LAN IP를 사용해야 합니다.
         </div>
       </div>
       <div class="lan-grid">
-        <input id="dropRoomName" class="c26" placeholder="방 이름" />
-        <input id="dropRoomPin" class="c26" placeholder="PIN 선택 입력" />
-        <input id="dropRoomId" class="c26" placeholder="방 코드" />
+        <input
+          id="dropRoomName"
+          class="c26"
+          placeholder="공유방 이름"
+          aria-label="공유방 이름"
+        />
+        <input
+          id="dropRoomId"
+          class="c26"
+          placeholder="받은 초대 링크 또는 코드"
+          aria-label="받은 초대 링크 또는 코드"
+        />
+        <input id="dropRoomPin" type="hidden" />
         <input
           id="dropShareUrl"
           class="c26"
           readonly
-          title="통합 입장 센터의 호스트 IP/포트와 방 코드/PIN으로 자동 생성되는 초대 주소입니다."
+          placeholder="공유 시작 후 초대 링크가 표시됩니다."
+          title="통합 입장 센터의 호스트 IP/포트와 Share&Drop 방 코드로 자동 생성되는 초대 주소입니다."
         />
       </div>
       <div class="lan-toolbar">
         <button type="button" id="dropCreateRoom">
-          <i class="fas fa-plus"></i> 공유 시작
+          <i class="fas fa-plus"></i> 새 공유방
         </button>
         <button type="button" class="ck" id="dropJoinRoom">
-          <i class="fas fa-sign-in-alt"></i> 참여
+          <i class="fas fa-sign-in-alt"></i> 초대로 참여
         </button>
         <button type="button" class="ck" id="dropCopyShare">
           <i class="fas fa-copy"></i> 초대 복사
@@ -2314,6 +2346,7 @@
           <i class="fas fa-network-wired"></i> 접속 설정
         </button>
       </div>
+      <div class="lan-status drop-room-summary" id="dropRoomSummary"></div>
       <div class="lan-status" id="dropStatus"></div>
       <h4>방 채팅</h4>
       <div class="lan-chat-list" id="dropChatList"></div>
@@ -5037,6 +5070,77 @@
       const n = t("dropStatus");
       n && (n.innerHTML = e);
     }
+    function dropParseInvite(e = "", n = "") {
+      let i = String(e || "").trim(),
+        o = String(n || "").trim();
+      try {
+        const e = new URL(i, window.location.href);
+        if (
+          e.searchParams.has("room") ||
+          "drop" === e.searchParams.get("tool")
+        ) {
+          i = e.searchParams.get("room") || "";
+          o = o || e.searchParams.get("pin") || "";
+        }
+      } catch {}
+      return {
+        roomId: i
+          .replace(/[^a-z0-9]/gi, "")
+          .toUpperCase()
+          .slice(0, 16),
+        pin: o.slice(0, 24),
+      };
+    }
+    function dropCurrentRoomId() {
+      return "drop" === lanState.room?.feature ? lanState.room.id : "";
+    }
+    function dropRoomReady() {
+      return !!dropCurrentRoomId();
+    }
+    function dropRenderRoomSummary() {
+      const n = t("dropRoomSummary");
+      if (!n) return;
+      const i = dropCurrentRoomId(),
+        o = lanState.connected,
+        a = (() => {
+          try {
+            return lanHostValue() + ":" + lanPortValue();
+          } catch {
+            return "-";
+          }
+        })(),
+        s = (() => {
+          try {
+            return gameIsLoopbackHost(lanHostValue());
+          } catch {
+            return !1;
+          }
+        })();
+      t("dropCopyShare") && (t("dropCopyShare").disabled = !i);
+      t("dropChatInput") && (t("dropChatInput").disabled = !i);
+      t("dropSendChat") && (t("dropSendChat").disabled = !i);
+      t("dropFileInput") && (t("dropFileInput").disabled = !i);
+      t("dropZone") && t("dropZone").classList.toggle("is-disabled", !i);
+      if (i) {
+        n.innerHTML =
+          "<strong>공유방 준비됨</strong>" +
+          "<span>초대 코드 <code>" +
+          Me(i) +
+          "</code> · 참가자 " +
+          Me(lanState.peers.length || lanState.room?.count || 1) +
+          "명</span>" +
+          "<span>접속 주소 <code>" +
+          Me(a) +
+          "</code></span>" +
+          (s
+            ? '<span class="warn">다른 PC는 localhost 대신 호스트 PC의 LAN IP로 접속해야 합니다.</span>'
+            : "");
+        return;
+      }
+      n.innerHTML = o
+        ? "Hub 연결됨. 새 공유방을 만들거나 받은 초대 링크/코드를 붙여넣고 참여하세요."
+        : "새 공유방을 누르면 Hub 연결과 방 생성이 한 번에 진행됩니다.";
+    }
     function lanSetConnectBusy(e) {
       const n = t("lanConnect");
       if (!n) return;
@@ -5151,18 +5255,14 @@
     }
     function lanRefreshDropShare() {
       try {
-        const e =
-          ("drop" === lanState.room?.feature ? lanState.room.id : "") ||
-          t("dropRoomId").value.trim().toUpperCase();
+        const e = dropCurrentRoomId();
         t("dropShareUrl").value = e
-          ? lanHomeShareUrl({
-              tool: "drop",
-              room: e,
-              pin: t("dropRoomPin").value.trim(),
-            })
-          : lanHomeShareUrl({ tool: "drop" });
+          ? lanHomeShareUrl({ tool: "drop", room: e })
+          : "";
+        dropRenderRoomSummary();
       } catch (e) {
         t("dropShareUrl").value = "";
+        dropRenderRoomSummary();
         dropSetStatus("초대 주소 생성 실패: " + Me(e.message));
       }
     }
@@ -5427,6 +5527,7 @@
           lanState.connectFailed = !1;
           lanRenderRooms();
           lanRenderPeers();
+          lanRefreshDropShare();
         });
         n.addEventListener("error", () => {
           lanState.connectFailed = !0;
@@ -5538,6 +5639,7 @@
         lanState.peers = n.participants || [];
         lanRenderPeers();
         lanRenderGameDetail();
+        dropRenderRoomSummary();
         return;
       }
       if ("pong" === n.type) {
@@ -5660,6 +5762,7 @@
       });
     }
     function dropCreateRoom() {
+      t("dropRoomPin").value = "";
       if (!lanState.connected) {
         lanConnect({ create: !0 });
         return;
@@ -5668,21 +5771,23 @@
         type: "create_room",
         feature: "drop",
         name: t("dropRoomName").value.trim() || "Share&Drop",
-        pin: t("dropRoomPin").value.trim(),
+        pin: "",
       });
     }
     function dropJoinRoom(roomId = "", pin = "") {
-      const e = (roomId || t("dropRoomId").value).trim().toUpperCase(),
-        n = pin || t("dropRoomPin").value.trim();
-      if (!e) {
-        dropSetStatus("참여할 방 코드를 입력하세요.");
+      const e = dropParseInvite(roomId || t("dropRoomId").value, pin),
+        n = e.roomId;
+      if (!n) {
+        dropSetStatus("받은 초대 링크 또는 코드를 입력하세요.");
         return;
       }
+      t("dropRoomId").value = n;
+      t("dropRoomPin").value = e.pin;
       if (!lanState.connected) {
-        lanConnect({ roomId: e, pin: n });
+        lanConnect({ roomId: n, pin: e.pin });
         return;
       }
-      lanSend({ type: "join_room", roomId: e, pin: n });
+      lanSend({ type: "join_room", roomId: n, pin: e.pin });
     }
     function dropMakeId(e) {
       return e + "_" + Date.now() + "_" + Math.random().toString(16).slice(2);
@@ -6104,23 +6209,20 @@
       t("lanHost").value = e.host;
       t("lanPort").value = e.port;
       t("dropRoomName").value = "Share&Drop";
-      t("dropRoomId").value = (
-        n.get("room") ||
-        s.getItem(STORAGE_KEYS.lanLastRoom) ||
-        ""
-      ).toUpperCase();
-      t("dropRoomPin").value = n.get("pin") || dropRandomPin();
-      ["lanName", "lanHost", "lanPort", "dropRoomPin", "dropRoomId"].forEach(
-        (e) => {
-          t(e).addEventListener("input", () => {
-            lanRefreshShareUrls();
-            "dropRoomPin" !== e &&
-              "dropRoomId" !== e &&
-              lanState.connected &&
-              lanSend(lanHelloPayload());
-          });
-        },
-      );
+      t("dropRoomId").value = (n.get("room") || "").toUpperCase();
+      t("dropRoomPin").value = n.get("pin") || "";
+      ["lanName", "lanHost", "lanPort", "dropRoomId"].forEach((e) => {
+        t(e).addEventListener("input", () => {
+          if ("dropRoomId" === e) {
+            const n = dropParseInvite(t(e).value);
+            t("dropRoomPin").value = n.pin;
+          }
+          lanRefreshShareUrls();
+          "dropRoomId" !== e &&
+            lanState.connected &&
+            lanSend(lanHelloPayload());
+        });
+      });
       t("lanConnect").onclick = () => lanConnect();
       t("lanDisconnect").onclick = lanDisconnect;
       t("lanCopyShare").onclick = () => Ce(t("lanShareUrl").value);
@@ -6153,7 +6255,13 @@
           dropSendChat();
         }
       });
-      t("dropZone").onclick = () => t("dropFileInput").click();
+      t("dropZone").onclick = () => {
+        if (!dropRoomReady()) {
+          dropSetStatus("먼저 새 공유방을 만들거나 초대로 참여하세요.");
+          return;
+        }
+        t("dropFileInput").click();
+      };
       t("dropFileInput").onchange = (e) => {
         dropSendFiles(e.target.files);
         e.target.value = "";
@@ -6171,6 +6279,10 @@
         });
       });
       t("dropZone").addEventListener("drop", (e) => {
+        if (!dropRoomReady()) {
+          dropSetStatus("먼저 새 공유방을 만들거나 초대로 참여하세요.");
+          return;
+        }
         dropSendFiles(e.dataTransfer.files);
       });
       lanRefreshShareUrls();
@@ -6189,9 +6301,6 @@
         X("lanCenter");
         n.get("room") && lanConnect();
       }
-    }
-    function dropRandomPin() {
-      return String(Math.floor(1000 + Math.random() * 9000));
     }
     lanInitPanel();
     function Ae(e, t) {
