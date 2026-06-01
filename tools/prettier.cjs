@@ -16,6 +16,7 @@ const files = [
   "game/README.md",
   "game/index.html",
   "game/style.css",
+  "game/storage.js",
   "game/game.js",
   "game/fortress.js",
   "game/defense.js",

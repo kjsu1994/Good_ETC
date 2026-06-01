@@ -3257,6 +3257,7 @@
   </footer>
   <script src="https://cdn.jsdelivr.net/npm/markdown-it@14.1.0/dist/markdown-it.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.5/dist/purify.min.js"></script>
+  <script src="game/storage.js?v=20260601storage"></script>
   <script>
     const e = document,
       t = e.getElementById.bind(e),
@@ -3264,7 +3265,7 @@
       i = e.querySelector.bind(e),
       o = e.createElement.bind(e),
       a = e.addEventListener.bind(e),
-      s = localStorage,
+      s = window.goodEtcStorage || localStorage,
       r = JSON.parse,
       c = JSON.stringify;
 
@@ -4502,7 +4503,7 @@
         e.textContent = "Connection info unavailable: " + n.message;
       }
     }
-    const GAME_ASSET_VERSION = "20260531wd01";
+    const GAME_ASSET_VERSION = "20260601storage";
     const PARTY_GAME_LABELS = {
       kart: "카트 랠리",
       bomb: "폭탄 그리드",
@@ -7644,7 +7645,7 @@
                   const n = t(e);
                   n && (n.checked = "x14" !== e);
                 }),
-                Object.keys(localStorage)
+                (s.keys ? s.keys() : Object.keys(localStorage))
                   .filter(
                     (e) =>
                       e.startsWith(STORAGE_KEYS.analysisLogPrefix) ||

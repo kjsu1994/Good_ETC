@@ -20,6 +20,7 @@ const netInfoShare = document.getElementById("netInfoShare");
 const netInfoWarning = document.getElementById("netInfoWarning");
 
 const launchParams = new URLSearchParams(window.location.search);
+const storage = window.goodEtcStorage || localStorage;
 const isLocalArena = ["solo", "local"].includes(launchParams.get("mode") || "");
 const keys = new Set();
 const pointer = { x: 0, y: 0, down: false };
@@ -242,7 +243,9 @@ function safeUrl(value) {
 }
 
 function currentAssetVersion() {
-  return new URLSearchParams(window.location.search).get("v") || "20260530bd";
+  return (
+    new URLSearchParams(window.location.search).get("v") || "20260601storage"
+  );
 }
 
 function nowSeconds() {
@@ -478,8 +481,8 @@ function connect() {
   }
   const name = cleanName(playerNameInput.value);
   const url = serverUrlInput.value.trim() || getDefaultServerUrl();
-  localStorage.setItem("lan_arena_name", name);
-  localStorage.setItem("lan_arena_url", url);
+  storage.setItem("lan_arena_name", name);
+  storage.setItem("lan_arena_url", url);
   updateNetInfo(url);
 
   if (socket) socket.close();
@@ -590,7 +593,7 @@ function startLocalArena() {
   playerId = "local";
   localArenaIds = { bullet: 1, pickup: 1 };
   const name = cleanName(playerNameInput.value);
-  localStorage.setItem("lan_arena_name", name);
+  storage.setItem("lan_arena_name", name);
   latestState = {
     type: "state",
     roomId: "LOCAL",
@@ -2053,7 +2056,7 @@ window.addEventListener("pointerup", () => {
   pointer.down = false;
 });
 
-playerNameInput.value = localStorage.getItem("lan_arena_name") || "Player";
+playerNameInput.value = storage.getItem("lan_arena_name") || "Player";
 if (isLocalArena) {
   serverUrlInput.value = "혼자하기: 서버 연결 없음";
   serverUrlInput.disabled = true;
@@ -2062,7 +2065,7 @@ if (isLocalArena) {
 } else {
   serverUrlInput.value = launchParams.has("host")
     ? getDefaultServerUrl()
-    : localStorage.getItem("lan_arena_url") || getDefaultServerUrl();
+    : storage.getItem("lan_arena_url") || getDefaultServerUrl();
 }
 serverUrlInput.addEventListener("input", () => updateNetInfo());
 setStatus("연결 끊김");

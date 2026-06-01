@@ -1,7 +1,8 @@
 (() => {
   const params = new URLSearchParams(window.location.search);
   const isSolo = ["solo", "local"].includes(params.get("mode") || "");
-  const assetVersion = params.get("v") || "20260531wd01";
+  const assetVersion = params.get("v") || "20260601storage";
+  const storage = window.goodEtcStorage || localStorage;
   const world = { width: 1536, height: 960, cell: 24, columns: 64, rows: 40 };
   const speedOptions = [1, 2, 3];
   const speedStorageKey = "defense_game_speed";
@@ -305,8 +306,8 @@
   let lastPingSeenAt = 0;
   let camera = { scale: 1, offsetX: 0, offsetY: 0 };
   let localIds = { tower: 1, enemy: 1, shot: 1 };
-  let gameSpeed = normalizeGameSpeed(localStorage.getItem(speedStorageKey));
-  let toolbarCollapsed = localStorage.getItem(toolbarStorageKey) === "1";
+  let gameSpeed = normalizeGameSpeed(storage.getItem(speedStorageKey));
+  let toolbarCollapsed = storage.getItem(toolbarStorageKey) === "1";
   let resizeQueued = false;
 
   let state = createInitialState();
@@ -351,7 +352,7 @@
       players: [
         {
           id: "local",
-          name: localStorage.getItem("defense_name") || "Player",
+          name: storage.getItem("defense_name") || "Player",
           color: "#62e6ff",
           resources: defenseMaps.classic.startResources,
           kills: 0,
@@ -459,7 +460,7 @@
     if (nextState.skillTypes) skillTypes = nextState.skillTypes;
     if (nextState.gameSpeed) {
       gameSpeed = normalizeGameSpeed(nextState.gameSpeed);
-      localStorage.setItem(speedStorageKey, String(gameSpeed));
+      storage.setItem(speedStorageKey, String(gameSpeed));
     }
     if (nextState.pathPoints) setPath(nextState.pathPoints);
     if (nextState.lastPing) {
@@ -629,7 +630,7 @@
       ? "패널 펼치기"
       : "패널 접기";
     ui.toolbarToggle.setAttribute("aria-expanded", String(!toolbarCollapsed));
-    localStorage.setItem(toolbarStorageKey, toolbarCollapsed ? "1" : "0");
+    storage.setItem(toolbarStorageKey, toolbarCollapsed ? "1" : "0");
     queueResize();
   }
 
@@ -670,8 +671,8 @@
     }
     const name = cleanName(ui.name.value);
     const url = ui.serverUrl.value.trim() || defaultServerUrl();
-    localStorage.setItem("defense_name", name);
-    localStorage.setItem("defense_url", url);
+    storage.setItem("defense_name", name);
+    storage.setItem("defense_url", url);
     updateNetInfo(url);
     if (socket) socket.close();
     const activeSocket = new WebSocket(url);
@@ -798,7 +799,7 @@
     clientId = "local";
     state = createInitialState();
     state.players[0].name = cleanName(ui.name.value);
-    localStorage.setItem("defense_name", state.players[0].name);
+    storage.setItem("defense_name", state.players[0].name);
     setStatus("혼자하기", true);
     setCenter("타워를 배치하고 웨이브를 시작하세요.");
     renderHud();
@@ -848,7 +849,7 @@
 
   function actionGameSpeed(value) {
     const nextSpeed = normalizeGameSpeed(value);
-    localStorage.setItem(speedStorageKey, String(nextSpeed));
+    storage.setItem(speedStorageKey, String(nextSpeed));
     if (isSolo) {
       gameSpeed = nextSpeed;
       state.gameSpeed = nextSpeed;
@@ -3021,10 +3022,10 @@
     }
   });
 
-  ui.name.value = localStorage.getItem("defense_name") || "Player";
+  ui.name.value = storage.getItem("defense_name") || "Player";
   ui.serverUrl.value = params.has("host")
     ? defaultServerUrl()
-    : localStorage.getItem("defense_url") || defaultServerUrl();
+    : storage.getItem("defense_url") || defaultServerUrl();
   renderMapOptions();
   if (isSolo) {
     ui.serverUrl.disabled = true;

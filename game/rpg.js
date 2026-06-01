@@ -1,6 +1,7 @@
 (() => {
   const params = new URLSearchParams(window.location.search);
-  const assetVersion = params.get("v") || "20260531wd01";
+  const assetVersion = params.get("v") || "20260601storage";
+  const storage = window.goodEtcStorage || localStorage;
   const SAVE_KEY = "good_etc_rpg_save_v1";
   const PANEL_PREF_KEY = "good_etc_rpg_panels_v1";
   const SAVE_API = "/api/rpg/save";
@@ -596,7 +597,7 @@
 
   function readPanelState() {
     try {
-      const saved = JSON.parse(localStorage.getItem(PANEL_PREF_KEY) || "{}");
+      const saved = JSON.parse(storage.getItem(PANEL_PREF_KEY) || "{}");
       const fallback = defaultPanelState();
       return Object.fromEntries(
         Object.keys(fallback).map((key) => [key, Boolean(saved[key])]),
@@ -608,7 +609,7 @@
 
   function savePanelState() {
     try {
-      localStorage.setItem(PANEL_PREF_KEY, JSON.stringify(panelState));
+      storage.setItem(PANEL_PREF_KEY, JSON.stringify(panelState));
     } catch {
       // Panel state is only a convenience preference.
     }

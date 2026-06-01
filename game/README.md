@@ -109,7 +109,7 @@ The server also exposes `/hub` for the unified entry center and Share&Drop. It r
 
 `진단` 화면의 추천 장기 루트는 서사 회수, 장비 파밍, 보스 준비, 지역 안정화 네 방향으로 현재 상태에 맞는 다음 목표를 보여줍니다. 플레이어는 메인 장 진행, 고유 장비 추적, 회상전/강적 준비, 의뢰/수배/순찰/보물지도 순환 중 하나를 골라 30시간 장기 진행을 이어갈 수 있습니다.
 
-EXE 또는 `python game/server.py` 로컬 서버로 실행하면 `/api/rpg/save`가 사용자 데이터 폴더의 `Good_ETC/saves/rpg_save.json`에 저장합니다. `game/index.html`을 파일로 직접 연 경우에는 같은 저장 구조를 브라우저 `localStorage`에 저장해 서버 없는 환경에서도 이어하기가 가능합니다.
+EXE 또는 `python game/server.py` 로컬 서버로 실행하면 `/api/rpg/save`가 RPG 진행 데이터를 사용자 데이터 폴더의 `Good_ETC/saves/rpg_save.json`에 저장합니다. 게임 패널 접힘 상태, 플레이어 이름, 마지막 접속 주소, 속도/툴바 같은 `localStorage` 기반 설정은 같은 사용자 데이터 폴더의 `Good_ETC/storage/local_storage.json`에도 저장됩니다. `game/index.html`을 파일로 직접 연 경우에는 같은 저장 구조를 브라우저 `localStorage`에 저장해 서버 없는 환경에서도 이어하기가 가능합니다.
 
 파티 게임 월드는 5200x3200 좌표계로 확장되며, 클라이언트는 전체 맵을 한 화면에 축소하지 않고 플레이어 중심 카메라를 사용합니다. LAN 아레나도 5200x3200 전장과 강화된 배경 오브젝트를 사용합니다.
 

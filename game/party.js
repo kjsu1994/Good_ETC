@@ -2,7 +2,8 @@
   const params = new URLSearchParams(window.location.search);
   const gameKey = params.get("game") || "kart";
   const isSolo = ["solo", "local"].includes(params.get("mode") || "");
-  const assetVersion = params.get("v") || "20260530bd";
+  const assetVersion = params.get("v") || "20260601storage";
+  const storage = window.goodEtcStorage || localStorage;
   const world = { width: 5200, height: 3200 };
   const SNAKE_TRAIL_POINT_GAP = 8;
   const SNAKE_SELF_SAFE_POINTS = 8;
@@ -171,7 +172,7 @@
   function createInitialState() {
     const player = {
       id: "local",
-      name: localStorage.getItem("party_name") || "Player",
+      name: storage.getItem("party_name") || "Player",
       color: config.accent,
       x: 250,
       y: 720,
@@ -442,8 +443,7 @@
 
   function savedServerUrl() {
     const saved =
-      localStorage.getItem(partyUrlStorageKey()) ||
-      localStorage.getItem("party_url");
+      storage.getItem(partyUrlStorageKey()) || storage.getItem("party_url");
     const target = safeUrl(saved);
     if (!target) return "";
     target.searchParams.set("game", game);
@@ -537,9 +537,9 @@
     }
     const name = cleanName(ui.name.value);
     const url = ui.serverUrl.value.trim() || defaultServerUrl();
-    localStorage.setItem("party_name", name);
-    localStorage.setItem("party_url", url);
-    localStorage.setItem(partyUrlStorageKey(), url);
+    storage.setItem("party_name", name);
+    storage.setItem("party_url", url);
+    storage.setItem(partyUrlStorageKey(), url);
     updateNetInfo(url);
     if (socket) socket.close();
     let activeSocket;
@@ -660,7 +660,7 @@
     clientId = "local";
     state = createInitialState();
     state.players[0].name = cleanName(ui.name.value);
-    localStorage.setItem("party_name", state.players[0].name);
+    storage.setItem("party_name", state.players[0].name);
     setStatus("혼자하기", true);
     setCenter(`${config.name} 혼자하기`, 1200);
     renderHud();
@@ -3992,7 +3992,7 @@
   window.addEventListener("resize", resize);
   setInterval(sendInput, 80);
 
-  ui.name.value = localStorage.getItem("party_name") || "Player";
+  ui.name.value = storage.getItem("party_name") || "Player";
   ui.serverUrl.value =
     params.has("host") || params.has("port") || params.has("room")
       ? defaultServerUrl()

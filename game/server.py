@@ -33,6 +33,7 @@ RESPAWN_DELAY = 1.8
 TICK_RATE = 30
 ARENA_PICKUP_TARGET = 28
 RPG_SAVE_LIMIT = 2_000_000
+LOCAL_STORAGE_LIMIT = 8_000_000
 ARENA_WEAPONS: dict[str, dict[str, Any]] = {
     "blaster": {
         "damage": 25,
@@ -3499,6 +3500,9 @@ class ArenaServer:
         self.hub_clients: dict[str, HubClient] = {}
         self.hub_rooms: dict[str, HubRoom] = {}
         self.rpg_save_path = self.default_user_data_dir() / "saves" / "rpg_save.json"
+        self.local_storage_path = (
+            self.default_user_data_dir() / "storage" / "local_storage.json"
+        )
         self.next_hub_client_id = 1
         self.running = True
 
@@ -3593,6 +3597,25 @@ class ArenaServer:
             return
 
         parsed = urlparse(path)
+        if parsed.path == "/api/storage":
+            body = b""
+            if method.upper() in {"POST", "PUT"}:
+                try:
+                    length = int(headers.get("content-length", "0") or "0")
+                except ValueError:
+                    length = 0
+                if length > LOCAL_STORAGE_LIMIT:
+                    await self.write_json_response(
+                        writer,
+                        413,
+                        {"ok": False, "message": "Storage payload is too large."},
+                    )
+                    return
+                if length:
+                    body = await reader.readexactly(length)
+            await self.handle_local_storage_api(writer, method, body, parsed.query)
+            return
+
         if parsed.path == "/api/rpg/save":
             body = b""
             if method.upper() in {"POST", "PUT"}:
@@ -3713,6 +3736,138 @@ class ArenaServer:
             writer,
             200,
             {"ok": True, "path": str(self.rpg_save_path)},
+        )
+
+    def read_local_storage_items(self) -> dict[str, str]:
+        if not self.local_storage_path.is_file():
+            return {}
+        try:
+            payload = json.loads(self.local_storage_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+        if not isinstance(payload, dict):
+            return {}
+        return {
+            str(key): str(value)
+            for key, value in payload.items()
+            if value is not None
+        }
+
+    def write_local_storage_items(self, items: dict[str, str]) -> None:
+        clean = {
+            str(key): str(value)
+            for key, value in items.items()
+            if value is not None
+        }
+        self.local_storage_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = self.local_storage_path.with_suffix(".tmp")
+        tmp_path.write_text(
+            json.dumps(clean, ensure_ascii=False, separators=(",", ":")),
+            encoding="utf-8",
+        )
+        tmp_path.replace(self.local_storage_path)
+
+    async def handle_local_storage_api(
+        self,
+        writer: asyncio.StreamWriter,
+        method: str,
+        body: bytes,
+        query: str = "",
+    ) -> None:
+        verb = method.upper()
+        if verb in {"GET", "HEAD"}:
+            await self.write_json_response(
+                writer,
+                200,
+                {
+                    "ok": True,
+                    "items": self.read_local_storage_items(),
+                    "path": str(self.local_storage_path),
+                },
+            )
+            return
+
+        try:
+            items = self.read_local_storage_items()
+            if verb == "DELETE":
+                key = parse_qs(query).get("key", [""])[0]
+                if not key:
+                    await self.write_json_response(
+                        writer,
+                        400,
+                        {"ok": False, "message": "Missing storage key."},
+                    )
+                    return
+                items.pop(key, None)
+                self.write_local_storage_items(items)
+                await self.write_json_response(
+                    writer, 200, {"ok": True, "path": str(self.local_storage_path)}
+                )
+                return
+
+            if verb not in {"POST", "PUT"}:
+                await self.write_json_response(
+                    writer,
+                    405,
+                    {"ok": False, "message": "Unsupported storage request."},
+                )
+                return
+
+            try:
+                payload = json.loads(body.decode("utf-8") if body else "{}")
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                await self.write_json_response(
+                    writer,
+                    400,
+                    {"ok": False, "message": "Invalid storage payload."},
+                )
+                return
+            if not isinstance(payload, dict):
+                await self.write_json_response(
+                    writer,
+                    400,
+                    {"ok": False, "message": "Storage payload must be an object."},
+                )
+                return
+
+            if isinstance(payload.get("items"), dict):
+                items = {
+                    str(key): str(value)
+                    for key, value in payload["items"].items()
+                    if value is not None
+                }
+            elif "key" in payload:
+                key = str(payload.get("key") or "")
+                if not key:
+                    await self.write_json_response(
+                        writer,
+                        400,
+                        {"ok": False, "message": "Missing storage key."},
+                    )
+                    return
+                if payload.get("value") is None:
+                    items.pop(key, None)
+                else:
+                    items[key] = str(payload.get("value"))
+            else:
+                await self.write_json_response(
+                    writer,
+                    400,
+                    {"ok": False, "message": "Missing storage items."},
+                )
+                return
+
+            self.write_local_storage_items(items)
+        except OSError as exc:
+            await self.write_json_response(
+                writer, 500, {"ok": False, "message": str(exc)}
+            )
+            return
+
+        await self.write_json_response(
+            writer,
+            200,
+            {"ok": True, "path": str(self.local_storage_path)},
         )
 
     def resolve_static_path(self, path: str) -> Path | None:
