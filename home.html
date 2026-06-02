@@ -1554,6 +1554,75 @@
     .text-tool-output table {
       min-width: 100%;
     }
+    .wpf-pane.hidden {
+      display: none;
+    }
+    .wpf-input-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .wpf-input-grid label {
+      display: grid;
+      gap: 6px;
+      font-size: 0.82rem;
+      font-weight: 800;
+      opacity: 0.86;
+    }
+    .wpf-input-grid .c26 {
+      margin-bottom: 0;
+    }
+    .wpf-output {
+      min-height: 220px;
+    }
+    .wpf-card {
+      border: 1px solid var(--b);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+      background: rgba(0, 0, 0, 0.03);
+    }
+    .wpf-card-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+      font-weight: 900;
+    }
+    .wpf-badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 4px 8px;
+      font-size: 0.74rem;
+      font-weight: 900;
+      background: rgba(0, 0, 0, 0.06);
+      color: var(--t);
+      white-space: nowrap;
+    }
+    .wpf-badge.error {
+      background: rgba(255, 82, 82, 0.16);
+      color: #ff5252;
+    }
+    .wpf-badge.warn {
+      background: rgba(255, 193, 7, 0.16);
+      color: #b77900;
+    }
+    .wpf-badge.ok {
+      background: rgba(76, 175, 80, 0.16);
+      color: #2e7d32;
+    }
+    .wpf-report-list {
+      margin: 8px 0 0;
+      padding-left: 20px;
+    }
+    .wpf-code {
+      font-family: Consolas, monospace;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
     .c12 {
       position: relative;
     }
@@ -2132,6 +2201,9 @@
       </button>
       <button class="c1y" id="textToolToggle" title="텍스트 유틸">
         <i class="fas fa-font"></i>
+      </button>
+      <button class="c1y" id="wpfToggle" title="WPF 도구함">
+        <i class="fas fa-window-restore"></i>
       </button>
       <button class="c1y" id="logToggle" title="로그 워크벤치">
         <i class="fas fa-bug"></i>
@@ -2972,6 +3044,212 @@
         텍스트를 입력하고 실행하세요.
       </div>
     </div>
+    <div class="c28 cx" id="wpfPanel">
+      <div class="c1t">
+        <h3><i class="fas fa-window-restore"></i> WPF 도구함</h3>
+        <div class="c1t-actions">
+          <button
+            class="ck cl"
+            type="button"
+            data-help-target="wpfHelp"
+            title="사용 방법"
+          >
+            <i class="fas fa-question"></i>
+          </button>
+          <button class="ck" type="button" id="wpfClear">
+            <i class="fas fa-eraser"></i>
+          </button>
+        </div>
+      </div>
+      <div class="c1e feature-help" id="wpfHelp">
+        <div>
+          Visual Studio 출력창의 WPF 바인딩 오류, XAML 리소스 키, Grid 크기
+          정의, MVVM 속성/Command, 프로젝트 설정을 붙여넣고 점검합니다.
+        </div>
+        <div>
+          붙여넣은 범위 안에서 분석하므로 App.xaml이나 병합된
+          ResourceDictionary처럼 다른 파일에 있는 값은 결과의 주의 항목으로
+          확인하세요.
+        </div>
+      </div>
+      <div class="c15">
+        <button
+          class="c2i active"
+          type="button"
+          data-wpf-tab="binding"
+          id="wpfTabBinding"
+        >
+          <i class="fas fa-link"></i> 바인딩 로그</button
+        ><button
+          class="c2i"
+          type="button"
+          data-wpf-tab="resource"
+          id="wpfTabResource"
+        >
+          <i class="fas fa-palette"></i> XAML 리소스</button
+        ><button
+          class="c2i"
+          type="button"
+          data-wpf-tab="layout"
+          id="wpfTabLayout"
+        >
+          <i class="fas fa-th-large"></i> 레이아웃/DPI</button
+        ><button class="c2i" type="button" data-wpf-tab="mvvm" id="wpfTabMvvm">
+          <i class="fas fa-code"></i> MVVM 스니펫</button
+        ><button
+          class="c2i"
+          type="button"
+          data-wpf-tab="project"
+          id="wpfTabProject"
+        >
+          <i class="fas fa-clipboard-check"></i> 프로젝트 점검
+        </button>
+      </div>
+      <div class="wpf-pane" id="wpfPaneBinding" data-wpf-pane="binding">
+        <textarea
+          id="wpfBindingInput"
+          class="c1c cw"
+          placeholder="Visual Studio 출력창의 System.Windows.Data Error / BindingExpression 로그를 붙여넣으세요."
+        ></textarea>
+        <div class="c1j">
+          <button type="button" id="wpfBindingAnalyze">
+            <i class="fas fa-search"></i> 분석</button
+          ><button class="ck" type="button" id="wpfBindingCopy">
+            <i class="fas fa-copy"></i> 리포트 복사</button
+          ><button class="ck" type="button" id="wpfBindingDownload">
+            <i class="fas fa-download"></i> 다운로드
+          </button>
+        </div>
+        <div class="c1h" id="wpfBindingStats"></div>
+        <div class="c1x co wpf-output" id="wpfBindingOutput">
+          바인딩 로그를 붙여넣고 분석하세요.
+        </div>
+      </div>
+      <div
+        class="wpf-pane hidden"
+        id="wpfPaneResource"
+        data-wpf-pane="resource"
+      >
+        <textarea
+          id="wpfResourceInput"
+          class="c1c cw"
+          placeholder="ResourceDictionary, App.xaml, Window/UserControl XAML을 붙여넣으세요."
+        ></textarea>
+        <div class="c1j">
+          <button type="button" id="wpfResourceAnalyze">
+            <i class="fas fa-search"></i> 검사</button
+          ><button class="ck" type="button" id="wpfResourceCopy">
+            <i class="fas fa-copy"></i> 리포트 복사</button
+          ><button class="ck" type="button" id="wpfResourceDownload">
+            <i class="fas fa-download"></i> 다운로드
+          </button>
+        </div>
+        <div class="c1h" id="wpfResourceStats"></div>
+        <div class="c1x co wpf-output" id="wpfResourceOutput">
+          XAML을 붙여넣고 검사하세요.
+        </div>
+      </div>
+      <div class="wpf-pane hidden" id="wpfPaneLayout" data-wpf-pane="layout">
+        <div class="wpf-input-grid">
+          <label
+            >사용 가능 너비(DIP)
+            <input id="wpfLayoutWidth" class="c26" type="number" value="1280"
+          /></label>
+          <label
+            >사용 가능 높이(DIP)
+            <input id="wpfLayoutHeight" class="c26" type="number" value="720"
+          /></label>
+          <label
+            >Auto 예상값(DIP)
+            <input id="wpfLayoutAuto" class="c26" type="number" value="120"
+          /></label>
+          <label
+            >DPI <input id="wpfLayoutDpi" class="c26" type="number" value="144"
+          /></label>
+        </div>
+        <textarea
+          id="wpfLayoutColumns"
+          class="c1c cw"
+          placeholder="ColumnDefinition Width 값 또는 XAML을 입력하세요. 예: Auto, 2*, 160, *"
+        ></textarea>
+        <textarea
+          id="wpfLayoutRows"
+          class="c1c cw"
+          placeholder="RowDefinition Height 값 또는 XAML을 입력하세요. 예: 48, *, Auto"
+        ></textarea>
+        <div class="c1j">
+          <button type="button" id="wpfLayoutRun">
+            <i class="fas fa-calculator"></i> 계산</button
+          ><button class="ck" type="button" id="wpfLayoutCopy">
+            <i class="fas fa-copy"></i> 결과 복사</button
+          ><button class="ck" type="button" id="wpfLayoutDownload">
+            <i class="fas fa-download"></i> 다운로드
+          </button>
+        </div>
+        <div class="c1h" id="wpfLayoutStats"></div>
+        <div class="c1x co wpf-output" id="wpfLayoutOutput">
+          Grid 정의와 화면 크기를 입력하고 계산하세요.
+        </div>
+      </div>
+      <div class="wpf-pane hidden" id="wpfPaneMvvm" data-wpf-pane="mvvm">
+        <div class="wpf-input-grid">
+          <label
+            >ViewModel 이름
+            <input id="wpfSnippetClass" class="c26" value="MainViewModel"
+          /></label>
+          <label
+            >스타일
+            <select id="wpfSnippetStyle" class="c26">
+              <option value="toolkit">CommunityToolkit.Mvvm</option>
+              <option value="manual">순수 INotifyPropertyChanged</option>
+            </select></label
+          >
+        </div>
+        <textarea
+          id="wpfSnippetProperties"
+          class="c1c cw"
+          placeholder="속성을 한 줄에 하나씩 입력하세요. 예: Name:string&#10;IsBusy:bool&#10;Items:ObservableCollection&lt;ItemViewModel&gt;"
+        ></textarea>
+        <textarea
+          id="wpfSnippetCommands"
+          class="c1c cw"
+          placeholder="Command 이름을 한 줄에 하나씩 입력하세요. 예: LoadAsync&#10;Save"
+        ></textarea>
+        <div class="c1j">
+          <button type="button" id="wpfSnippetRun">
+            <i class="fas fa-code"></i> 생성</button
+          ><button class="ck" type="button" id="wpfSnippetCopy">
+            <i class="fas fa-copy"></i> 코드 복사</button
+          ><button class="ck" type="button" id="wpfSnippetDownload">
+            <i class="fas fa-download"></i> 다운로드
+          </button>
+        </div>
+        <div class="c1h" id="wpfSnippetStats"></div>
+        <div class="c1x co wpf-output wpf-code" id="wpfSnippetOutput">
+          속성과 Command를 입력하고 생성하세요.
+        </div>
+      </div>
+      <div class="wpf-pane hidden" id="wpfPaneProject" data-wpf-pane="project">
+        <textarea
+          id="wpfProjectInput"
+          class="c1c cw"
+          placeholder=".csproj, App.xaml, 주요 XAML 또는 Program.cs 내용을 붙여넣으세요."
+        ></textarea>
+        <div class="c1j">
+          <button type="button" id="wpfProjectRun">
+            <i class="fas fa-clipboard-check"></i> 점검</button
+          ><button class="ck" type="button" id="wpfProjectCopy">
+            <i class="fas fa-copy"></i> 리포트 복사</button
+          ><button class="ck" type="button" id="wpfProjectDownload">
+            <i class="fas fa-download"></i> 다운로드
+          </button>
+        </div>
+        <div class="c1h" id="wpfProjectStats"></div>
+        <div class="c1x co wpf-output" id="wpfProjectOutput">
+          프로젝트 파일이나 XAML을 붙여넣고 점검하세요.
+        </div>
+      </div>
+    </div>
     <div class="c28 cx" id="logPanel">
       <div class="c1t">
         <h3><i class="fas fa-bug"></i> 로그 워크벤치</h3>
@@ -3325,6 +3603,19 @@
       analysisHexSpec: "analysis_hex_spec",
       analysisStructuredInput: "analysis_structured_input",
       analysisStructuredSearch: "analysis_structured_search",
+      wpfBindingInput: "wpf_binding_input_v1",
+      wpfResourceInput: "wpf_resource_input_v1",
+      wpfLayoutColumns: "wpf_layout_columns_v1",
+      wpfLayoutRows: "wpf_layout_rows_v1",
+      wpfLayoutWidth: "wpf_layout_width_v1",
+      wpfLayoutHeight: "wpf_layout_height_v1",
+      wpfLayoutAuto: "wpf_layout_auto_v1",
+      wpfLayoutDpi: "wpf_layout_dpi_v1",
+      wpfProjectInput: "wpf_project_input_v1",
+      wpfSnippetClass: "wpf_snippet_class_v1",
+      wpfSnippetStyle: "wpf_snippet_style_v1",
+      wpfSnippetProperties: "wpf_snippet_properties_v1",
+      wpfSnippetCommands: "wpf_snippet_commands_v1",
       analysisLogPrefix: "analysis_log_",
       analysisPatternPrefix: "analysis_pattern_",
       analysisTimelinePrefix: "analysis_timeline_",
@@ -3939,6 +4230,7 @@
         t.classList.toggle("open", t.id === e + "Panel"),
       ),
         "chat" === e && ee(),
+        "wpf" === e && wpfRefreshActive(),
         ["lanCenter", "lanDrop"].includes(e) && lanEnsureHub(),
         "lanDrop" === e && lanRefreshDropShare());
     }
@@ -3967,6 +4259,7 @@
         "regex",
         "diff",
         "textTool",
+        "wpf",
         "log",
         "lanCenter",
         "lanDrop",
@@ -7076,6 +7369,862 @@
         2,
       );
     }
+    let wpfActiveTab = "binding",
+      wpfPlainOutput = "";
+    function wpfLines(e) {
+      return String(e || "")
+        .split(/\r?\n/)
+        .map((e, t) => ({ text: e, line: t + 1 }))
+        .filter((e) => e.text.trim());
+    }
+    function wpfTextMatch(e, t) {
+      const n = String(e || "").match(t);
+      return n ? n[1] || "" : "";
+    }
+    function wpfCountBy(e, t) {
+      const n = new Map();
+      return (
+        e.forEach((e) => {
+          const i = t(e) || "-";
+          n.set(i, (n.get(i) || 0) + 1);
+        }),
+        [...n.entries()]
+          .map(([e, t]) => ({ label: e, count: t }))
+          .sort((e, t) => t.count - e.count || e.label.localeCompare(t.label))
+      );
+    }
+    function wpfTable(e, t) {
+      return `<table class="cy"><thead><tr>${e.map((e) => `<th>${Me(e)}</th>`).join("")}</tr></thead><tbody>${t.join("")}</tbody></table>`;
+    }
+    function wpfIssueRule(e) {
+      const t = String(e || "");
+      if (/BindingExpression path error|property not found/i.test(t))
+        return {
+          type: "속성 경로 없음",
+          severity: "error",
+          cause:
+            "Path 이름이 현재 DataContext 타입의 public property와 일치하지 않거나 DataContext가 예상 타입이 아닙니다.",
+          fix: "오타, 중첩 Path, DataContext 할당 위치, INotifyPropertyChanged 구현을 확인하세요.",
+          checks: [
+            "바인딩 Path와 ViewModel property 이름을 대소문자까지 비교",
+            "해당 화면의 DataContext가 실제 ViewModel 인스턴스인지 확인",
+            "동적으로 바뀌는 값이면 PropertyChanged가 발생하는지 확인",
+          ],
+        };
+      if (
+        /Cannot find source for binding|ElementName=|AncestorType|RelativeSource/i.test(
+          t,
+        )
+      )
+        return {
+          type: "소스 탐색 실패",
+          severity: "error",
+          cause:
+            "ElementName, RelativeSource, AncestorType이 현재 XAML namescope나 시각 트리에서 찾을 수 없습니다.",
+          fix: "템플릿/Popup/DataTemplate 경계를 확인하고 x:Reference, BindingProxy, PlacementTarget 바인딩을 검토하세요.",
+          checks: [
+            "ElementName 대상에 x:Name이 있고 같은 namescope 안에 있는지 확인",
+            "DataTemplate 내부라면 부모 DataContext 참조 방식을 분리",
+            "Popup/ContextMenu는 시각 트리가 분리된다는 점 확인",
+          ],
+        };
+      if (/DataItem=null|Cannot find governing FrameworkElement/i.test(t))
+        return {
+          type: "DataContext 없음",
+          severity: "warn",
+          cause:
+            "바인딩 평가 시점에 대상 요소가 아직 트리에 붙지 않았거나 DataContext가 null입니다.",
+          fix: "Loaded 이후 할당, ItemsControl ItemTemplate의 DataContext, 초기화 순서를 확인하세요.",
+          checks: [
+            "생성자에서 InitializeComponent 전후 DataContext 할당 순서 확인",
+            "ItemsSource 항목 타입과 템플릿 내부 Path 확인",
+            "디자인 타임 DataContext와 런타임 DataContext 구분",
+          ],
+        };
+      if (
+        /Cannot convert|Failed to convert|ConvertBack|IValueConverter/i.test(t)
+      )
+        return {
+          type: "값 변환 실패",
+          severity: "error",
+          cause:
+            "소스 값과 대상 DependencyProperty 타입이 맞지 않거나 Converter가 예외를 냈습니다.",
+          fix: "TargetNullValue, FallbackValue, Converter Culture/Parameter, nullable 타입을 확인하세요.",
+          checks: [
+            "대상 property 타입과 소스 property 타입 비교",
+            "Converter가 null, UnsetValue, DoNothing을 처리하는지 확인",
+            "TwoWay 바인딩이면 ConvertBack 구현 확인",
+          ],
+        };
+      if (
+        /StaticResource|DynamicResource|Cannot find resource named|resource.*not found/i.test(
+          t,
+        )
+      )
+        return {
+          type: "리소스 누락",
+          severity: "error",
+          cause:
+            "ResourceDictionary 병합 순서, x:Key 오타, App.xaml 범위 문제일 수 있습니다.",
+          fix: "리소스 정의 위치와 MergedDictionaries 순서를 확인하고 DynamicResource가 필요한지 검토하세요.",
+          checks: [
+            "x:Key와 참조 키 문자열 비교",
+            "App.xaml 또는 상위 컨테이너 Resources에 포함됐는지 확인",
+            "테마별 Dictionary가 런타임에 병합되는지 확인",
+          ],
+        };
+      if (/TwoWay|OneWayToSource|read-only|readonly/i.test(t))
+        return {
+          type: "읽기 전용 바인딩",
+          severity: "warn",
+          cause:
+            "TwoWay 또는 OneWayToSource 바인딩 대상이 쓰기 가능한 property가 아닙니다.",
+          fix: "Mode를 OneWay로 낮추거나 setter가 있는 ViewModel property로 바인딩하세요.",
+          checks: [
+            "대상 property에 setter가 있는지 확인",
+            "UpdateSourceTrigger가 필요한 입력 컨트롤인지 확인",
+          ],
+        };
+      return {
+        type: "WPF 바인딩 오류",
+        severity: "warn",
+        cause:
+          "일반 바인딩 오류입니다. 추출된 Path와 대상 컨트롤부터 확인하세요.",
+        fix: "전체 로그 문맥과 XAML 위치를 함께 비교하세요.",
+        checks: ["Path, DataItem, target element, target property 순서로 확인"],
+      };
+    }
+    function wpfParseBindingIssue(e) {
+      if (
+        !/System\.Windows\.Data Error|BindingExpression|Cannot find source for binding|Cannot find governing FrameworkElement|StaticResource|DynamicResource|Cannot find resource named/i.test(
+          e.text,
+        )
+      )
+        return null;
+      const t = wpfIssueRule(e.text);
+      return {
+        line: e.line,
+        raw: e.text.trim(),
+        type: t.type,
+        severity: t.severity,
+        cause: t.cause,
+        fix: t.fix,
+        checks: t.checks,
+        code: wpfTextMatch(e.text, /System\.Windows\.Data Error:\s*(\d+)/i),
+        path:
+          wpfTextMatch(e.text, /BindingExpression path error:\s*'([^']+)'/i) ||
+          wpfTextMatch(e.text, /Path=([^;]+)/i),
+        dataItem: wpfTextMatch(e.text, /DataItem='([^']*)'/i),
+        targetElement: wpfTextMatch(e.text, /target element is '([^']+)'/i),
+        targetName: wpfTextMatch(e.text, /Name='([^']*)'/i),
+        targetProperty: wpfTextMatch(e.text, /target property is '([^']+)'/i),
+        reference: wpfTextMatch(e.text, /reference '([^']+)'/i),
+      };
+    }
+    function wpfBindingReport(e) {
+      const t = wpfLines(e).map(wpfParseBindingIssue).filter(Boolean),
+        n = wpfCountBy(t, (e) => e.type),
+        i = wpfCountBy(
+          t.filter((e) => e.path),
+          (e) => e.path,
+        ).slice(0, 8);
+      wpfPlainOutput = t.length
+        ? [
+            "WPF 바인딩 로그 리포트",
+            "총 항목: " + t.length,
+            "",
+            "유형별:",
+            ...n.map((e) => "- " + e.label + ": " + e.count),
+            "",
+            "상위 Path:",
+            ...(i.length ? i : [{ label: "-", count: 0 }]).map(
+              (e) => "- " + e.label + ": " + e.count,
+            ),
+            "",
+            ...t.map(
+              (e) =>
+                `[${e.line}] ${e.type} / Path=${e.path || "-"} / Target=${e.targetElement || "-"}.${
+                  e.targetProperty || "-"
+                }\n원인: ${e.cause}\n수정: ${e.fix}\n원문: ${e.raw}`,
+            ),
+          ].join("\n")
+        : "WPF 바인딩 오류를 찾지 못했습니다.";
+      return { issues: t, types: n, paths: i };
+    }
+    function wpfRunBinding() {
+      const e = t("wpfBindingInput").value,
+        n = wpfBindingReport(e),
+        i = t("wpfBindingOutput");
+      (Ae(STORAGE_KEYS.wpfBindingInput, e),
+        Ie("wpfBindingStats", [
+          ["항목", n.issues.length],
+          ["유형", n.types.length],
+          ["Path", n.paths.length],
+        ]));
+      if (!n.issues.length)
+        return void (i.innerText =
+          "WPF 바인딩 오류를 찾지 못했습니다. Visual Studio 출력창의 System.Windows.Data Error 줄을 붙여넣으세요.");
+      const o = wpfTable(
+          ["유형", "개수"],
+          n.types.map(
+            (e) => `<tr><td>${Me(e.label)}</td><td>${Me(e.count)}</td></tr>`,
+          ),
+        ),
+        a = n.issues
+          .map(
+            (e) =>
+              `<div class="wpf-card"><div class="wpf-card-title"><span>${Me(e.type)}</span><span class="wpf-badge ${Me(e.severity)}">${Me(e.severity === "error" ? "오류" : "주의")}</span></div><div><b>위치</b>: ${Me(
+                "line " + e.line,
+              )}</div><div><b>Path</b>: ${Me(e.path || "-")} / <b>대상</b>: ${Me(
+                [
+                  e.targetElement,
+                  e.targetName ? "#" + e.targetName : "",
+                  e.targetProperty ? "." + e.targetProperty : "",
+                ]
+                  .filter(Boolean)
+                  .join(""),
+              )}</div><div><b>DataItem</b>: ${Me(e.dataItem || "-")} ${
+                e.reference ? "/ <b>참조</b>: " + Me(e.reference) : ""
+              }</div><div><b>추정 원인</b>: ${Me(e.cause)}</div><div><b>수정 방향</b>: ${Me(
+                e.fix,
+              )}</div><ul class="wpf-report-list">${e.checks
+                .map((t) => `<li>${Me(t)}</li>`)
+                .join(
+                  "",
+                )}</ul><div class="line-info wpf-code">${Me(e.raw)}</div></div>`,
+          )
+          .join("");
+      i.innerHTML = o + a;
+    }
+    function wpfResourceKeys(e) {
+      const t = [],
+        n = [];
+      let i;
+      const o = /\b(?:x:Key|Key)\s*=\s*["']([^"']+)["']/gi;
+      while ((i = o.exec(e))) t.push({ key: i[1], index: i.index });
+      const a =
+        /<Style\b(?=[^>]*TargetType\s*=\s*["'](?:\{x:Type\s*)?([^}"']+)[}"'])(?![^>]*(?:x:Key|Key)\s*=)/gi;
+      while ((i = a.exec(e)))
+        t.push({ key: "implicit Style:" + i[1].trim(), index: i.index });
+      const s =
+        /\{(?:StaticResource|DynamicResource)\s+(?:ResourceKey\s*=\s*)?([^},\s]+)[^}]*\}/gi;
+      while ((i = s.exec(e))) {
+        const e = i[1].replace(/^['"]|['"]$/g, "");
+        /^\{?x:Static/i.test(e) || n.push({ key: e, index: i.index });
+      }
+      return { definitions: t, references: n };
+    }
+    function wpfRunResource() {
+      const e = t("wpfResourceInput").value,
+        n = wpfResourceKeys(e),
+        i = wpfCountBy(n.definitions, (e) => e.key),
+        o = new Set(n.definitions.map((e) => e.key)),
+        a = wpfCountBy(
+          n.references.filter((e) => !o.has(e.key)),
+          (e) => e.key,
+        ),
+        s = i.filter((e) => e.count > 1),
+        r = wpfCountBy(n.references, (e) => e.key),
+        l = new Set(n.references.map((e) => e.key)),
+        d = i.filter((e) => !l.has(e.label)).slice(0, 20),
+        u = wpfCountBy(e.match(/#[0-9a-fA-F]{3,8}\b/g) || [], (e) =>
+          e.toUpperCase(),
+        ).filter((e) => e.count > 1),
+        f = [
+          ...e.matchAll(
+            /\b(?:Source|Icon|UriSource)\s*=\s*["']([^"']+\.(?:png|jpe?g|gif|ico|svg|xaml|ttf|otf))["']/gi,
+          ),
+        ].map((e) => e[1]),
+        p = e.match(/pack:\/\/application:,,,[^"'\s)]+/gi) || [];
+      (Ae(STORAGE_KEYS.wpfResourceInput, e),
+        Ie("wpfResourceStats", [
+          ["정의", n.definitions.length],
+          ["참조", n.references.length],
+          ["중복", s.length],
+          ["범위 밖 가능", a.length],
+        ]));
+      wpfPlainOutput = [
+        "WPF XAML 리소스 검사 리포트",
+        "정의: " + n.definitions.length,
+        "참조: " + n.references.length,
+        "중복 키: " + s.length,
+        "붙여넣은 범위 안에서 못 찾은 참조: " + a.length,
+        "",
+        "중복 키",
+        ...(s.length ? s : [{ label: "-", count: 0 }]).map(
+          (e) => "- " + e.label + ": " + e.count,
+        ),
+        "",
+        "범위 밖 가능 참조",
+        ...(a.length ? a : [{ label: "-", count: 0 }]).map(
+          (e) => "- " + e.label + ": " + e.count,
+        ),
+      ].join("\n");
+      const h = [];
+      s.length &&
+        h.push(
+          `<div class="wpf-card"><div class="wpf-card-title"><span>중복 x:Key</span><span class="wpf-badge error">${s.length}</span></div>${wpfTable(
+            ["Key", "개수"],
+            s.map(
+              (e) => `<tr><td>${Me(e.label)}</td><td>${Me(e.count)}</td></tr>`,
+            ),
+          )}</div>`,
+        );
+      a.length &&
+        h.push(
+          `<div class="wpf-card"><div class="wpf-card-title"><span>정의가 안 보이는 참조</span><span class="wpf-badge warn">${a.length}</span></div><div class="line-info">다른 ResourceDictionary나 App.xaml에 있을 수 있습니다. 붙여넣은 범위 안에서는 정의를 찾지 못했습니다.</div>${wpfTable(
+            ["Key", "참조"],
+            a.map(
+              (e) => `<tr><td>${Me(e.label)}</td><td>${Me(e.count)}</td></tr>`,
+            ),
+          )}</div>`,
+        );
+      d.length &&
+        h.push(
+          `<div class="wpf-card"><div class="wpf-card-title"><span>이 범위에서 참조되지 않은 Key</span><span class="wpf-badge">${d.length}</span></div>${wpfTable(
+            ["Key", "정의"],
+            d.map(
+              (e) => `<tr><td>${Me(e.label)}</td><td>${Me(e.count)}</td></tr>`,
+            ),
+          )}</div>`,
+        );
+      u.length &&
+        h.push(
+          `<div class="wpf-card"><div class="wpf-card-title"><span>반복 색상</span><span class="wpf-badge warn">${u.length}</span></div><div class="line-info">반복되는 색상은 Brush/Color 리소스로 빼면 테마 전환과 유지보수가 쉬워집니다.</div>${wpfTable(
+            ["색상", "개수"],
+            u.map(
+              (e) => `<tr><td>${Me(e.label)}</td><td>${Me(e.count)}</td></tr>`,
+            ),
+          )}</div>`,
+        );
+      (f.length || p.length) &&
+        h.push(
+          `<div class="wpf-card"><div class="wpf-card-title"><span>파일/Pack URI</span><span class="wpf-badge">${f.length + p.length}</span></div>${wpfTable(
+            ["종류", "값"],
+            [
+              ...f.map((e) => `<tr><td>Source</td><td>${Me(e)}</td></tr>`),
+              ...p.map((e) => `<tr><td>Pack URI</td><td>${Me(e)}</td></tr>`),
+            ],
+          )}<div class="line-info">이미지/폰트가 실행 파일에서 안 보이면 Build Action(Resource/Content)과 CopyToOutputDirectory를 확인하세요.</div></div>`,
+        );
+      h.length ||
+        h.push(
+          '<div class="wpf-card"><div class="wpf-card-title"><span>눈에 띄는 리소스 문제 없음</span><span class="wpf-badge ok">통과</span></div>붙여넣은 범위 안에서는 중복 키나 누락 참조를 찾지 못했습니다.</div>',
+        );
+      t("wpfResourceOutput").innerHTML = h.join("");
+    }
+    function wpfNumber(e, n) {
+      const i = Number(t(e)?.value);
+      return Number.isFinite(i) && i >= 0 ? i : n;
+    }
+    function wpfDefinitions(e, t) {
+      const n = [],
+        i = new RegExp(
+          "<" +
+            t +
+            "Definition\\b[^>]*(?:Width|Height)\\s*=\\s*[\"\\']([^\"\\']+)[\"\\']",
+          "gi",
+        );
+      let o;
+      while ((o = i.exec(e))) n.push(o[1]);
+      return n.length
+        ? n
+        : String(e || "")
+            .split(/[\n,;]+/)
+            .map((e) => e.trim())
+            .filter(Boolean);
+    }
+    function wpfGridUnit(e) {
+      const t = String(e || "").trim();
+      if (/^auto$/i.test(t))
+        return { raw: t, type: "Auto", weight: 0, fixed: 0 };
+      const n = t.match(/^(\d+(?:\.\d+)?)?\*$/);
+      if (n)
+        return {
+          raw: t,
+          type: "Star",
+          weight: Number(n[1] || 1),
+          fixed: 0,
+        };
+      const i = t.match(/^(\d+(?:\.\d+)?)(?:px|dip)?$/i);
+      return i
+        ? { raw: t, type: "Fixed", weight: 0, fixed: Number(i[1]) }
+        : { raw: t || "-", type: "Unknown", weight: 0, fixed: 0 };
+    }
+    function wpfMeasureGrid(e, t, n) {
+      const i = e.map(wpfGridUnit),
+        o = i.reduce((e, t) => e + ("Fixed" === t.type ? t.fixed : 0), 0),
+        a =
+          i.filter((e) => "Auto" === e.type || "Unknown" === e.type).length * n,
+        s = i.reduce((e, t) => e + ("Star" === t.type ? t.weight : 0), 0),
+        r = Math.max(0, t - o - a),
+        l = s ? r / s : 0,
+        d = o + a + r;
+      return {
+        units: i.map((e, t) => ({
+          index: t + 1,
+          raw: e.raw,
+          type: e.type,
+          size:
+            "Fixed" === e.type ? e.fixed : "Star" === e.type ? e.weight * l : n,
+        })),
+        fixed: o,
+        auto: a,
+        star: r,
+        used: d,
+        overflow: o + a > t,
+      };
+    }
+    function wpfRunLayout() {
+      const e = wpfNumber("wpfLayoutWidth", 1280),
+        n = wpfNumber("wpfLayoutHeight", 720),
+        i = wpfNumber("wpfLayoutAuto", 120),
+        o = wpfNumber("wpfLayoutDpi", 96),
+        a = wpfDefinitions(t("wpfLayoutColumns").value, "Column"),
+        s = wpfDefinitions(t("wpfLayoutRows").value, "Row"),
+        r = wpfMeasureGrid(a, e, i),
+        l = wpfMeasureGrid(s, n, i),
+        d = o / 96;
+      (Ae(STORAGE_KEYS.wpfLayoutColumns, t("wpfLayoutColumns").value),
+        Ae(STORAGE_KEYS.wpfLayoutRows, t("wpfLayoutRows").value),
+        Ie("wpfLayoutStats", [
+          ["DPI 배율", d.toFixed(2) + "x"],
+          ["너비 px", Math.round(e * d)],
+          ["높이 px", Math.round(n * d)],
+          ["초과", r.overflow || l.overflow ? "있음" : "없음"],
+        ]));
+      wpfPlainOutput = [
+        "WPF Grid/DPI 계산",
+        `DIP ${e}x${n} / DPI ${o} / Pixel ${Math.round(e * d)}x${Math.round(n * d)}`,
+        "",
+        "Columns",
+        ...r.units.map(
+          (e) => `${e.index}. ${e.raw} => ${e.size.toFixed(1)} DIP`,
+        ),
+        "",
+        "Rows",
+        ...l.units.map(
+          (e) => `${e.index}. ${e.raw} => ${e.size.toFixed(1)} DIP`,
+        ),
+      ].join("\n");
+      t("wpfLayoutOutput").innerHTML =
+        `<div class="wpf-card"><div class="wpf-card-title"><span>DPI 변환</span><span class="wpf-badge">${d.toFixed(
+          2,
+        )}x</span></div>${wpfTable(
+          ["항목", "DIP", "Pixel"],
+          [
+            `<tr><td>너비</td><td>${Me(e)}</td><td>${Me(Math.round(e * d))}</td></tr>`,
+            `<tr><td>높이</td><td>${Me(n)}</td><td>${Me(Math.round(n * d))}</td></tr>`,
+          ],
+        )}</div>` +
+        `<div class="wpf-card"><div class="wpf-card-title"><span>Column 계산</span><span class="wpf-badge ${r.overflow ? "warn" : "ok"}">${r.overflow ? "초과" : "정상"}</span></div>${wpfTable(
+          ["#", "원본", "종류", "예상 DIP"],
+          r.units.map(
+            (e) =>
+              `<tr><td>${Me(e.index)}</td><td>${Me(e.raw)}</td><td>${Me(e.type)}</td><td>${Me(e.size.toFixed(1))}</td></tr>`,
+          ),
+        )}</div>` +
+        `<div class="wpf-card"><div class="wpf-card-title"><span>Row 계산</span><span class="wpf-badge ${l.overflow ? "warn" : "ok"}">${l.overflow ? "초과" : "정상"}</span></div>${wpfTable(
+          ["#", "원본", "종류", "예상 DIP"],
+          l.units.map(
+            (e) =>
+              `<tr><td>${Me(e.index)}</td><td>${Me(e.raw)}</td><td>${Me(e.type)}</td><td>${Me(e.size.toFixed(1))}</td></tr>`,
+          ),
+        )}</div>`;
+    }
+    function wpfIdentifier(e, t = "Value") {
+      const n = String(e || "")
+        .replace(/[^A-Za-z0-9_]/g, " ")
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean)
+        .map((e) => e.charAt(0).toUpperCase() + e.slice(1))
+        .join("");
+      return /^[A-Za-z_]/.test(n) ? n : t;
+    }
+    function wpfCamel(e) {
+      const t = wpfIdentifier(e);
+      return t.charAt(0).toLowerCase() + t.slice(1);
+    }
+    function wpfParseProperties(e) {
+      return wpfLines(e)
+        .map((e) => e.text.replace(/\/\/.*$/, "").trim())
+        .filter(Boolean)
+        .map((e) => {
+          const t = e.includes(":")
+              ? e.split(":").map((e) => e.trim())
+              : e.split(/\s+/).reverse(),
+            n = wpfIdentifier(t[0], "Value"),
+            i = (t[1] || "string").trim();
+          return { name: n, type: i || "string" };
+        });
+    }
+    function wpfParseCommands(e) {
+      return wpfLines(e)
+        .map((e) => wpfIdentifier(e.text.replace(/Command$/i, ""), "Run"))
+        .filter(Boolean);
+    }
+    function wpfDefaultValue(e) {
+      return /^string$/i.test(e)
+        ? " = string.Empty"
+        : /ObservableCollection|List<|Collection</.test(e)
+          ? " = new()"
+          : "";
+    }
+    function wpfBuildToolkitSnippet(e, t, n) {
+      const i = t.some((e) => /ObservableCollection/.test(e.type)),
+        o = n.some((e) => /Async$/.test(e)),
+        a = t.some((e) => "IsBusy" === e.name && /^bool$/i.test(e.type)),
+        s = [
+          "using CommunityToolkit.Mvvm.ComponentModel;",
+          "using CommunityToolkit.Mvvm.Input;",
+          i ? "using System.Collections.ObjectModel;" : "",
+          o ? "using System.Threading.Tasks;" : "",
+          "",
+          `public partial class ${e} : ObservableObject`,
+          "{",
+          ...t.flatMap((e) => [
+            "    [ObservableProperty]",
+            `    private ${e.type} ${wpfCamel(e.name)}${wpfDefaultValue(e.type)};`,
+            "",
+          ]),
+          ...n.flatMap((e) => {
+            const t = /Async$/.test(e),
+              n = t ? e : e.replace(/Async$/, "");
+            return [
+              "    [RelayCommand]",
+              `    private ${t ? "async Task" : "void"} ${n}()`,
+              "    {",
+              ...(t && a
+                ? [
+                    "        if (IsBusy) return;",
+                    "        try",
+                    "        {",
+                    "            IsBusy = true;",
+                    "            await Task.CompletedTask;",
+                    "        }",
+                    "        finally",
+                    "        {",
+                    "            IsBusy = false;",
+                    "        }",
+                  ]
+                : t
+                  ? ["        await Task.CompletedTask;"]
+                  : ["        "]),
+              "    }",
+              "",
+            ];
+          }),
+          "}",
+        ].filter((e, t, n) => e || n[t - 1]);
+      return s.join("\n");
+    }
+    function wpfBuildManualSnippet(e, t, n) {
+      const i = n.some((e) => /Async$/.test(e)),
+        o = t.some((e) => "IsBusy" === e.name && /^bool$/i.test(e.type)),
+        a = [
+          "using System;",
+          "using System.Collections.Generic;",
+          "using System.ComponentModel;",
+          "using System.Runtime.CompilerServices;",
+          i ? "using System.Threading.Tasks;" : "",
+          "using System.Windows.Input;",
+          "",
+          `public class ${e} : INotifyPropertyChanged`,
+          "{",
+          "    public event PropertyChangedEventHandler? PropertyChanged;",
+          "",
+          ...t.flatMap((e) => [
+            `    private ${e.type} _${wpfCamel(e.name)}${wpfDefaultValue(e.type)};`,
+            `    public ${e.type} ${e.name}`,
+            "    {",
+            `        get => _${wpfCamel(e.name)};`,
+            `        set => SetProperty(ref _${wpfCamel(e.name)}, value);`,
+            "    }",
+            "",
+          ]),
+          ...n.map(
+            (e) =>
+              `    public ICommand ${e.replace(/Async$/, "")}Command { get; }`,
+          ),
+          n.length ? "" : "",
+          `    public ${e}()`,
+          "    {",
+          ...n.map((e) =>
+            /Async$/.test(e)
+              ? `        ${e.replace(/Async$/, "")}Command = new RelayCommand(async _ => await ${e}(), _ => ${o ? "!IsBusy" : "true"});`
+              : `        ${e}Command = new RelayCommand(_ => ${e}());`,
+          ),
+          "    }",
+          "",
+          ...n.flatMap((e) => {
+            const t = /Async$/.test(e);
+            return [
+              `    private ${t ? "async Task" : "void"} ${e}()`,
+              "    {",
+              ...(t && o
+                ? [
+                    "        if (IsBusy) return;",
+                    "        try",
+                    "        {",
+                    "            IsBusy = true;",
+                    "            await Task.CompletedTask;",
+                    "        }",
+                    "        finally",
+                    "        {",
+                    "            IsBusy = false;",
+                    "        }",
+                  ]
+                : t
+                  ? ["        await Task.CompletedTask;"]
+                  : ["        "]),
+              "    }",
+              "",
+            ];
+          }),
+          "    private bool SetProperty<T>(ref T storage, T value, [CallerMemberName] string? propertyName = null)",
+          "    {",
+          "        if (EqualityComparer<T>.Default.Equals(storage, value)) return false;",
+          "        storage = value;",
+          "        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));",
+          "        CommandManager.InvalidateRequerySuggested();",
+          "        return true;",
+          "    }",
+          "",
+          "    private sealed class RelayCommand : ICommand",
+          "    {",
+          "        private readonly Action<object?> _execute;",
+          "        private readonly Predicate<object?>? _canExecute;",
+          "        public RelayCommand(Action<object?> execute, Predicate<object?>? canExecute = null)",
+          "        {",
+          "            _execute = execute;",
+          "            _canExecute = canExecute;",
+          "        }",
+          "        public bool CanExecute(object? parameter) => _canExecute?.Invoke(parameter) ?? true;",
+          "        public void Execute(object? parameter) => _execute(parameter);",
+          "        public event EventHandler? CanExecuteChanged",
+          "        {",
+          "            add => CommandManager.RequerySuggested += value;",
+          "            remove => CommandManager.RequerySuggested -= value;",
+          "        }",
+          "    }",
+          "}",
+        ].filter((e, t, n) => e || n[t - 1]);
+      return a.join("\n");
+    }
+    function wpfRunSnippet() {
+      const e = wpfIdentifier(t("wpfSnippetClass").value, "MainViewModel"),
+        n = wpfParseProperties(t("wpfSnippetProperties").value),
+        i = wpfParseCommands(t("wpfSnippetCommands").value),
+        o = t("wpfSnippetStyle").value;
+      (Ae(STORAGE_KEYS.wpfSnippetProperties, t("wpfSnippetProperties").value),
+        Ae(STORAGE_KEYS.wpfSnippetCommands, t("wpfSnippetCommands").value),
+        (wpfPlainOutput =
+          "manual" === o
+            ? wpfBuildManualSnippet(e, n, i)
+            : wpfBuildToolkitSnippet(e, n, i)),
+        (t("wpfSnippetOutput").innerText = wpfPlainOutput),
+        Ie("wpfSnippetStats", [
+          ["속성", n.length],
+          ["Command", i.length],
+          ["스타일", "manual" === o ? "순수" : "Toolkit"],
+        ]));
+    }
+    function wpfProjectCheck(e, t, n, i) {
+      return { name: e, ok: t, level: n, message: i };
+    }
+    function wpfRunProject() {
+      const e = t("wpfProjectInput").value,
+        n = [
+          wpfProjectCheck(
+            "TargetFramework",
+            /<TargetFrameworks?>[^<]*-windows/i.test(e),
+            "error",
+            "WPF 프로젝트는 netX.0-windows 대상 프레임워크가 필요합니다.",
+          ),
+          wpfProjectCheck(
+            "UseWPF",
+            /<UseWPF>\s*true\s*<\/UseWPF>/i.test(e),
+            "error",
+            "SDK 스타일 프로젝트에서는 <UseWPF>true</UseWPF>가 필요합니다.",
+          ),
+          wpfProjectCheck(
+            "OutputType",
+            /<OutputType>\s*WinExe\s*<\/OutputType>/i.test(e),
+            "warn",
+            "GUI 앱은 WinExe여야 콘솔 창이 뜨지 않습니다.",
+          ),
+          wpfProjectCheck(
+            "App.xaml",
+            /App\.xaml|ApplicationDefinition/i.test(e),
+            "warn",
+            "ApplicationDefinition 또는 App.xaml 포함 여부를 확인하세요.",
+          ),
+          wpfProjectCheck(
+            "리소스 포함",
+            /<Resource\b|<Content\b|<None\b/i.test(e),
+            "warn",
+            "이미지/폰트/데이터 파일은 Resource 또는 Content 빌드 액션이 명확해야 합니다.",
+          ),
+          wpfProjectCheck(
+            "Content 복사",
+            !/<Content\b/i.test(e) || /CopyToOutputDirectory/i.test(e),
+            "warn",
+            "Content 파일은 실행 폴더에 필요하면 CopyToOutputDirectory를 지정하세요.",
+          ),
+          wpfProjectCheck(
+            "STAThread",
+            !/static\s+void\s+Main/i.test(e) || /\[STAThread\]/i.test(e),
+            "error",
+            "직접 Main을 작성했다면 [STAThread]가 필요합니다.",
+          ),
+          wpfProjectCheck(
+            "WindowsDesktop SDK",
+            !/Microsoft\.NET\.Sdk\.WindowsDesktop/i.test(e),
+            "warn",
+            "신규 SDK 스타일은 Microsoft.NET.Sdk와 UseWPF 조합을 권장합니다.",
+          ),
+        ],
+        i = n.filter((e) => !e.ok),
+        o = n.filter((e) => !e.ok && "error" === e.level).length;
+      (Ae(STORAGE_KEYS.wpfProjectInput, e),
+        Ie("wpfProjectStats", [
+          ["점검", n.length],
+          ["주의", i.length],
+          ["필수", o],
+        ]));
+      wpfPlainOutput = [
+        "WPF 프로젝트 점검",
+        ...n.map(
+          (e) =>
+            `${e.ok ? "OK" : e.level.toUpperCase()} - ${e.name}: ${e.message}`,
+        ),
+      ].join("\n");
+      t("wpfProjectOutput").innerHTML = wpfTable(
+        ["상태", "항목", "확인 내용"],
+        n.map(
+          (e) =>
+            `<tr class="${e.ok ? "line-added" : "error" === e.level ? "line-error" : "line-warn"}"><td>${Me(
+              e.ok ? "통과" : "error" === e.level ? "필수" : "주의",
+            )}</td><td>${Me(e.name)}</td><td>${Me(e.message)}</td></tr>`,
+        ),
+      );
+    }
+    function wpfSetTab(e) {
+      ((wpfActiveTab = e),
+        n("[data-wpf-tab]").forEach((t) =>
+          t.classList.toggle("active", t.dataset.wpfTab === e),
+        ),
+        n("[data-wpf-pane]").forEach((t) =>
+          t.classList.toggle("hidden", t.dataset.wpfPane !== e),
+        ),
+        wpfRefreshActive());
+    }
+    function wpfRefreshActive() {
+      if (!t("wpfPanel")) return;
+      "binding" === wpfActiveTab
+        ? wpfRunBinding()
+        : "resource" === wpfActiveTab
+          ? wpfRunResource()
+          : "layout" === wpfActiveTab
+            ? wpfRunLayout()
+            : "mvvm" === wpfActiveTab
+              ? wpfRunSnippet()
+              : wpfRunProject();
+    }
+    function wpfClearCurrent() {
+      const e = {
+        binding: ["wpfBindingInput"],
+        resource: ["wpfResourceInput"],
+        layout: ["wpfLayoutColumns", "wpfLayoutRows"],
+        mvvm: ["wpfSnippetProperties", "wpfSnippetCommands"],
+        project: ["wpfProjectInput"],
+      }[wpfActiveTab];
+      (e || []).forEach((e) => {
+        t(e).value = "";
+      });
+      wpfRefreshActive();
+    }
+    function wpfBindStoredValue(e, n, i) {
+      const o = t(e),
+        a = s.getItem(n);
+      (null !== a && "" !== a && (o.value = a),
+        o.addEventListener("input", () => {
+          (Ae(n, o.value), i && i());
+        }),
+        o.addEventListener("change", () => {
+          (Ae(n, o.value), i && i());
+        }));
+    }
+    (n("[data-wpf-tab]").forEach(
+      (e) => (e.onclick = () => wpfSetTab(e.dataset.wpfTab)),
+    ),
+      [
+        ["wpfBindingAnalyze", wpfRunBinding],
+        ["wpfResourceAnalyze", wpfRunResource],
+        ["wpfLayoutRun", wpfRunLayout],
+        ["wpfSnippetRun", wpfRunSnippet],
+        ["wpfProjectRun", wpfRunProject],
+      ].forEach(([e, n]) => (t(e).onclick = n)),
+      [
+        [
+          "wpfBindingCopy",
+          () => Ce(wpfPlainOutput || t("wpfBindingOutput").innerText),
+        ],
+        [
+          "wpfResourceCopy",
+          () => Ce(wpfPlainOutput || t("wpfResourceOutput").innerText),
+        ],
+        [
+          "wpfLayoutCopy",
+          () => Ce(wpfPlainOutput || t("wpfLayoutOutput").innerText),
+        ],
+        [
+          "wpfSnippetCopy",
+          () => Ce(wpfPlainOutput || t("wpfSnippetOutput").innerText),
+        ],
+        [
+          "wpfProjectCopy",
+          () => Ce(wpfPlainOutput || t("wpfProjectOutput").innerText),
+        ],
+      ].forEach(([e, n]) => (t(e).onclick = n)),
+      [
+        ["wpfBindingDownload", "wpf_binding_report.txt"],
+        ["wpfResourceDownload", "wpf_resource_report.txt"],
+        ["wpfLayoutDownload", "wpf_layout_report.txt"],
+        ["wpfSnippetDownload", "wpf_viewmodel_snippet.cs"],
+        ["wpfProjectDownload", "wpf_project_check.txt"],
+      ].forEach(([e, n]) => (t(e).onclick = () => He(n, wpfPlainOutput || ""))),
+      (t("wpfClear").onclick = wpfClearCurrent),
+      Ne("wpfBindingInput", STORAGE_KEYS.wpfBindingInput, () => {
+        "binding" === wpfActiveTab && wpfRunBinding();
+      }),
+      Ne("wpfResourceInput", STORAGE_KEYS.wpfResourceInput, () => {
+        "resource" === wpfActiveTab && wpfRunResource();
+      }),
+      Ne("wpfLayoutColumns", STORAGE_KEYS.wpfLayoutColumns, () => {
+        "layout" === wpfActiveTab && wpfRunLayout();
+      }),
+      Ne("wpfLayoutRows", STORAGE_KEYS.wpfLayoutRows, () => {
+        "layout" === wpfActiveTab && wpfRunLayout();
+      }),
+      Ne("wpfSnippetProperties", STORAGE_KEYS.wpfSnippetProperties, () => {
+        "mvvm" === wpfActiveTab && wpfRunSnippet();
+      }),
+      Ne("wpfSnippetCommands", STORAGE_KEYS.wpfSnippetCommands, () => {
+        "mvvm" === wpfActiveTab && wpfRunSnippet();
+      }),
+      Ne("wpfProjectInput", STORAGE_KEYS.wpfProjectInput, () => {
+        "project" === wpfActiveTab && wpfRunProject();
+      }),
+      [
+        ["wpfLayoutWidth", STORAGE_KEYS.wpfLayoutWidth, wpfRunLayout],
+        ["wpfLayoutHeight", STORAGE_KEYS.wpfLayoutHeight, wpfRunLayout],
+        ["wpfLayoutAuto", STORAGE_KEYS.wpfLayoutAuto, wpfRunLayout],
+        ["wpfLayoutDpi", STORAGE_KEYS.wpfLayoutDpi, wpfRunLayout],
+        ["wpfSnippetClass", STORAGE_KEYS.wpfSnippetClass, wpfRunSnippet],
+        ["wpfSnippetStyle", STORAGE_KEYS.wpfSnippetStyle, wpfRunSnippet],
+      ].forEach(([e, t, n]) => wpfBindStoredValue(e, t, n)));
     let textToolPlainOutput = "";
     function runTextTool() {
       const e = t("textToolInput").value,
@@ -7430,6 +8579,12 @@
       url: "textTool",
       jwt: "textTool",
       csv: "textTool",
+      wpf: "wpf",
+      xaml: "wpf",
+      binding: "wpf",
+      바인딩: "wpf",
+      mvvm: "wpf",
+      리소스: "wpf",
       game: "game",
       lan: "lanCenter",
       network: "lanCenter",

@@ -5,8 +5,9 @@
 ![Storage](https://img.shields.io/badge/Storage-Browser%20localStorage-6B7280?style=flat-square)
 ![Ollama](https://img.shields.io/badge/Ollama-Chat%20Ready-111827?style=flat-square)
 ![Games](https://img.shields.io/badge/Games-Arena%20%2B%20Party%20Pack-53E2A8?style=flat-square)
+![WPF](https://img.shields.io/badge/WPF-Toolbox-512BD4?style=flat-square)
 
-브라우저에서 바로 쓰는 개인 업무 대시보드입니다. 즐겨찾기, 할 일, 메모, 로그 분석, JSON/XML 보기, 문자/HEX 분석, 텍스트 유틸, Diff, 정규식 테스트, Ollama 챗봇, LAN 아레나와 포트리스풍 포격전, 웨이브 디펜스, 카트 랠리와 파티 게임 3종을 함께 제공합니다.
+브라우저에서 바로 쓰는 개인 업무 대시보드입니다. 즐겨찾기, 할 일, 메모, 로그 분석, JSON/XML 보기, 문자/HEX 분석, 텍스트 유틸, WPF 도구함, Diff, 정규식 테스트, Ollama 챗봇, LAN 아레나와 포트리스풍 포격전, 웨이브 디펜스, 카트 랠리와 파티 게임 3종을 함께 제공합니다.
 
 ## 화면 구성
 
@@ -26,7 +27,8 @@ flowchart LR
     E --> E5[정규식 테스트]
     E --> E6[텍스트 Diff]
     E --> E7[텍스트 유틸]
-    E --> E8[로그 워크벤치]
+    E --> E8[WPF 도구함]
+    E --> E9[로그 워크벤치]
     G --> G1[LAN 아레나]
     G --> G2[포트리스풍 포격전]
     G --> G3[웨이브 디펜스]
@@ -50,6 +52,7 @@ flowchart LR
 | 도구 패널  | 정규식 테스트   | 패턴과 원문을 넣고 매칭 결과를 바로 확인합니다.                                                                                                                                       |
 | 도구 패널  | 텍스트 비교     | 원본/비교 텍스트의 차이를 Diff 형태로 확인하고 결과를 복사/다운로드합니다.                                                                                                            |
 | 도구 패널  | 텍스트 유틸     | Base64, URL 인코딩/디코딩, JWT 디코드, CSV/TSV 표 보기를 지원합니다.                                                                                                                  |
+| 도구 패널  | WPF 도구함      | WPF 바인딩 오류 로그 분석, XAML ResourceDictionary 중복/누락 검사, Grid/DPI 계산, MVVM ViewModel 스니펫 생성, `.csproj`/App.xaml 프로젝트 점검을 지원합니다.                          |
 | 도구 패널  | 로그 워크벤치   | 로그 필터링, 패턴 집계, 타임라인 분석, 고유 줄 복사, 오류 해결 사전 적용을 제공합니다.                                                                                                |
 | 도구 패널  | 게임            | LAN 아레나, 포트리스풍 포격전, 웨이브 디펜스, 카트 랠리, 폭탄 그리드, 스네이크 배틀, 코인 러시, 싱글 RPG 서약의 연대기를 지원하며, 선택한 게임에 따라 실행 버튼이 해당 게임을 엽니다. |
 | UI 설정    | 개인화          | Light/Dark 테마, 글자 크기, 레이아웃, 섹션 표시/접기, 프리셋 저장, 설정 내보내기/가져오기를 지원합니다.                                                                               |
@@ -157,7 +160,7 @@ WASD/방향키로 이동하고 `J` 기본 공격, `Space`/`E` 상호작용, `K/2
 
 스토리는 20개 장, 80개 메인 퀘스트로 구성되어 있고 각 퀘스트는 진행 이유와 예상 보상을 함께 보여줍니다. 콘텐츠는 전투, 장비 성장, 지역 기록, 탐색, 후반 도전으로 묶어 볼 수 있으며 장비 파밍, 각인, 동료 임무, 지역 연대기, 외전, 수호 시험, 회상전, 균열 던전, 현상수배, 보물지도, 네임드 강적, 지역 장비록, 서약 원정 같은 장기 목표가 메인 진행과 병행됩니다.
 
-전투는 기본 공격, 서약 전술, 회피, 보스 예고 공격을 중심으로 하고, 성장은 장비/부적/각인/세트 효과/강화/숙련/프리셋을 사용합니다. `다음 행동`, `여정 현황`, `진단` 화면은 가까운 상호작용, 전투 준비, 장비 추천, 고유 장비 추적, 장기 루트 추천을 모아 보여주어 반복 사냥만 하지 않고 다음 목표를 고를 수 있게 돕습니다.
+전투는 기본 공격, 서약 전술, 회피, 보스 예고 공격을 중심으로 하고, 성장은 장비/부적/각인/세트 효과/강화/숙련/프리셋을 사용합니다. `다음 행동`, `여정 현황`, `RPG 목표 진단` 화면은 가까운 상호작용, 전투 준비, 장비 추천, 고유 장비 추적, 장기 루트 추천을 모아 보여주어 반복 사냥만 하지 않고 다음 목표를 고를 수 있게 돕습니다.
 
 EXE 또는 로컬 HTTP 서버로 실행하면 RPG 저장 데이터는 사용자 데이터 폴더의 `Good_ETC/saves/rpg_save.json`에 저장되고, 파일로 직접 연 경우에는 브라우저 `localStorage`에 저장됩니다. RPG 외 대시보드/게임 설정은 EXE 또는 로컬 HTTP 서버 실행 시 `Good_ETC/storage/local_storage.json`에 함께 저장됩니다.
 
@@ -302,18 +305,18 @@ EXE는 기본적으로 `0.0.0.0:7000`에 LAN 아레나, 포트리스 멀티, 웨
 
 `Ctrl + K`를 누른 뒤 아래처럼 입력할 수 있습니다.
 
-| 입력 예시                                                             | 동작                                   |
-| --------------------------------------------------------------------- | -------------------------------------- |
-| `https://example.com`                                                 | URL을 새 탭으로 엽니다.                |
-| `192.168.1.10:8080`                                                   | IP 주소를 `http://`로 열어 봅니다.     |
-| `#1234` 또는 `redmine 1234`                                           | Redmine 이슈 페이지로 이동합니다.      |
-| `google docker compose` 또는 `g docker compose`                       | Google 검색을 실행합니다.              |
-| `naver 오라클 XE` 또는 `n 오라클 XE`                                  | Naver 검색을 실행합니다.               |
-| `todo 보고서 작성`                                                    | 오늘 할 일에 항목을 추가합니다.        |
-| `memo 회의록`                                                         | 새 메모를 만듭니다.                    |
-| `uuid`, `timestamp`                                                   | 값을 생성해 클립보드에 복사합니다.     |
-| `base64 hello`, `b64d aGVsbG8=`, `urlencode a=b`, `urldecode a%3Db`   | 텍스트를 변환해 클립보드에 복사합니다. |
-| `json`, `log`, `diff`, `regex`, `date`, `hex`, `text`, `game`, `chat` | 해당 도구 패널을 바로 엽니다.          |
+| 입력 예시                                                                                               | 동작                                   |
+| ------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| `https://example.com`                                                                                   | URL을 새 탭으로 엽니다.                |
+| `192.168.1.10:8080`                                                                                     | IP 주소를 `http://`로 열어 봅니다.     |
+| `#1234` 또는 `redmine 1234`                                                                             | Redmine 이슈 페이지로 이동합니다.      |
+| `google docker compose` 또는 `g docker compose`                                                         | Google 검색을 실행합니다.              |
+| `naver 오라클 XE` 또는 `n 오라클 XE`                                                                    | Naver 검색을 실행합니다.               |
+| `todo 보고서 작성`                                                                                      | 오늘 할 일에 항목을 추가합니다.        |
+| `memo 회의록`                                                                                           | 새 메모를 만듭니다.                    |
+| `uuid`, `timestamp`                                                                                     | 값을 생성해 클립보드에 복사합니다.     |
+| `base64 hello`, `b64d aGVsbG8=`, `urlencode a=b`, `urldecode a%3Db`                                     | 텍스트를 변환해 클립보드에 복사합니다. |
+| `json`, `log`, `diff`, `regex`, `date`, `hex`, `text`, `wpf`, `xaml`, `binding`, `mvvm`, `game`, `chat` | 해당 도구 패널을 바로 엽니다.          |
 
 ## 단축키
 
@@ -331,14 +334,15 @@ EXE는 기본적으로 `0.0.0.0:7000`에 LAN 아레나, 포트리스 멀티, 웨
 
 대시보드의 즐겨찾기, TODO, 메모, UI 설정과 LAN/게임 접속 기본값은 실행 방식에 따라 아래 위치에 저장됩니다.
 
-| 항목      | 브라우저 직접 실행    | EXE/로컬 HTTP 서버 실행                                    |
-| --------- | --------------------- | ---------------------------------------------------------- |
-| 즐겨찾기  | 브라우저 localStorage | 사용자 데이터 폴더의 `Good_ETC/storage/local_storage.json` |
-| TODO      | 브라우저 localStorage | 사용자 데이터 폴더의 `Good_ETC/storage/local_storage.json` |
-| Memo      | 브라우저 localStorage | 사용자 데이터 폴더의 `Good_ETC/storage/local_storage.json` |
-| UI 설정   | 브라우저 localStorage | 사용자 데이터 폴더의 `Good_ETC/storage/local_storage.json` |
-| 게임 설정 | 브라우저 localStorage | 사용자 데이터 폴더의 `Good_ETC/storage/local_storage.json` |
-| RPG 저장  | 브라우저 localStorage | 사용자 데이터 폴더의 `Good_ETC/saves/rpg_save.json`        |
+| 항목          | 브라우저 직접 실행    | EXE/로컬 HTTP 서버 실행                                    |
+| ------------- | --------------------- | ---------------------------------------------------------- |
+| 즐겨찾기      | 브라우저 localStorage | 사용자 데이터 폴더의 `Good_ETC/storage/local_storage.json` |
+| TODO          | 브라우저 localStorage | 사용자 데이터 폴더의 `Good_ETC/storage/local_storage.json` |
+| Memo          | 브라우저 localStorage | 사용자 데이터 폴더의 `Good_ETC/storage/local_storage.json` |
+| UI 설정       | 브라우저 localStorage | 사용자 데이터 폴더의 `Good_ETC/storage/local_storage.json` |
+| 게임 설정     | 브라우저 localStorage | 사용자 데이터 폴더의 `Good_ETC/storage/local_storage.json` |
+| WPF 도구 입력 | 브라우저 localStorage | 사용자 데이터 폴더의 `Good_ETC/storage/local_storage.json` |
+| RPG 저장      | 브라우저 localStorage | 사용자 데이터 폴더의 `Good_ETC/saves/rpg_save.json`        |
 
 Windows EXE의 기본 사용자 데이터 폴더는 `%APPDATA%\Good_ETC`입니다. 예를 들어 현재 사용자 계정에서는 `C:\Users\<사용자>\AppData\Roaming\Good_ETC\storage\local_storage.json`와 `C:\Users\<사용자>\AppData\Roaming\Good_ETC\saves\rpg_save.json`에 저장됩니다. 기존 브라우저 저장값이 남아 있으면 EXE/로컬 서버 실행 시 파일 저장소로 함께 동기화됩니다.
 
@@ -409,6 +413,7 @@ npm run format
 - 메모 검색은 제목뿐 아니라 메모 내용까지 함께 찾습니다.
 - HEX 분석기의 필드 분리에서 `*`는 남은 바이트 전체를 의미합니다.
 - 텍스트 유틸은 Base64/URL 변환, JWT Header/Payload 확인, CSV/TSV 표 보기에 사용할 수 있습니다.
+- WPF 도구함은 Visual Studio 출력창의 `System.Windows.Data Error` 로그, ResourceDictionary/App.xaml, Grid Row/Column 정의, ViewModel 속성 목록, `.csproj` 내용을 붙여넣어 점검하는 용도에 적합합니다.
 - 로그 워크벤치는 `ERROR`, `WARN`, `INFO` 스타일 로그를 빠르게 분류하고, 키워드별 빈도와 시간 간격을 확인하는 용도에 적합합니다.
 - Ollama 챗봇은 브라우저에서 접근 가능한 API 주소가 필요합니다. 사내망/로컬망 주소를 사용할 경우 CORS와 네트워크 접근 권한을 확인하세요.
 
