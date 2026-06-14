@@ -80,6 +80,12 @@ docker compose up -d web-server
 http://localhost:8085/home.html
 ```
 
+Cloudflare Tunnel은 선택 기능입니다. `CLOUDFLARED_TOKEN`이 없어도 기본 Docker Compose 실행은 로컬 `http://localhost:8085/home.html`로 동작합니다. 외부 터널이 필요할 때만 `.env`에 토큰을 넣고 tunnel profile을 함께 실행합니다.
+
+```bash
+docker compose --profile tunnel up -d
+```
+
 MinIO와 Oracle XE까지 함께 쓰려면 전체 서비스를 실행합니다.
 
 ```bash
@@ -286,6 +292,7 @@ EXE는 기본적으로 `0.0.0.0:7000`에 LAN 아레나, 포트리스 멀티, 웨
 | ------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
 | `web-server`  | `8085:80`                | `home.html`과 정적 게임 클라이언트를 Nginx로 서빙합니다.                                                                                |
 | `game-server` | `7000:7000`              | LAN 아레나, 포트리스 멀티, 웨이브 디펜스 멀티, 파티 게임 멀티용 HTTP/WebSocket 서버를 실행합니다. `web-server` 실행 시 함께 시작됩니다. |
+| `cloudflared` | -                        | 선택형 `tunnel` profile 서비스입니다. `CLOUDFLARED_TOKEN`을 설정하고 `docker compose --profile tunnel up -d`로 실행할 때만 Cloudflare Tunnel을 엽니다. |
 | `minio`       | `9000:9000`, `9001:9001` | S3 호환 오브젝트 스토리지와 콘솔을 제공합니다.                                                                                          |
 | `oracle`      | `1522:1521`              | Oracle XE 21c 컨테이너입니다. 컨테이너 내부 접속 문자열은 `jdbc:oracle:thin:@//oracle:1521/XEPDB1` 입니다.                              |
 
@@ -300,6 +307,7 @@ EXE는 기본적으로 `0.0.0.0:7000`에 LAN 아레나, 포트리스 멀티, 웨
 | `ORACLE_PASSWORD`     | Oracle 관리자 비밀번호              |
 | `APP_USER`            | Oracle 애플리케이션 사용자          |
 | `APP_USER_PASSWORD`   | Oracle 애플리케이션 사용자 비밀번호 |
+| `CLOUDFLARED_TOKEN`   | 선택 값입니다. 비워 두면 로컬 Docker Compose만 사용하고, tunnel profile을 실행할 때 Cloudflare Tunnel 토큰을 넣습니다. |
 
 `.env`는 개인 환경 정보이므로 Git에 올리지 않습니다.
 
