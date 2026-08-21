@@ -10,7 +10,12 @@
   /><style>
     :root {
       --d:
-        linear-gradient(135deg, rgba(248, 250, 252, 0.98) 0%, rgba(237, 244, 255, 0.94) 48%, rgba(235, 248, 242, 0.92) 100%),
+        linear-gradient(
+          135deg,
+          rgba(248, 250, 252, 0.98) 0%,
+          rgba(237, 244, 255, 0.94) 48%,
+          rgba(235, 248, 242, 0.92) 100%
+        ),
         linear-gradient(180deg, #f8fafc 0%, #e7eef7 100%);
       --c: rgba(255, 255, 255, 0.72);
       --t: #172033;
@@ -18,8 +23,7 @@
       --a: #4caf50;
       --g: rgba(255, 255, 255, 0.52);
       --s:
-        0 22px 58px rgba(15, 23, 42, 0.13),
-        0 3px 12px rgba(15, 23, 42, 0.06);
+        0 22px 58px rgba(15, 23, 42, 0.13), 0 3px 12px rgba(15, 23, 42, 0.06);
       --b: rgba(148, 163, 184, 0.3);
       --h: #45a049;
       --panel-hi: rgba(255, 255, 255, 0.34);
@@ -38,16 +42,19 @@
     }
     [data-theme="dark"] {
       --d:
-        linear-gradient(135deg, rgba(9, 15, 28, 0.98) 0%, rgba(14, 24, 42, 0.96) 52%, rgba(13, 36, 34, 0.92) 100%),
+        linear-gradient(
+          135deg,
+          rgba(9, 15, 28, 0.98) 0%,
+          rgba(14, 24, 42, 0.96) 52%,
+          rgba(13, 36, 34, 0.92) 100%
+        ),
         linear-gradient(180deg, #070b13 0%, #101827 100%);
       --c: rgba(15, 23, 42, 0.72);
       --t: #eef4ff;
       --tm: #a8b3c7;
       --a: #81c784;
       --g: rgba(255, 255, 255, 0.08);
-      --s:
-        0 24px 70px rgba(0, 0, 0, 0.48),
-        0 3px 18px rgba(0, 0, 0, 0.22);
+      --s: 0 24px 70px rgba(0, 0, 0, 0.48), 0 3px 18px rgba(0, 0, 0, 0.22);
       --b: rgba(148, 163, 184, 0.18);
       --h: #6db16f;
       --panel-hi: rgba(255, 255, 255, 0.1);
@@ -97,7 +104,11 @@
         linear-gradient(90deg, var(--line-soft) 1px, transparent 1px),
         linear-gradient(180deg, var(--line-soft) 1px, transparent 1px);
       background-size: 72px 72px;
-      -webkit-mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.74), transparent 76%);
+      -webkit-mask-image: linear-gradient(
+        180deg,
+        rgba(0, 0, 0, 0.74),
+        transparent 76%
+      );
       mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.74), transparent 76%);
       opacity: 0.34;
     }
@@ -107,11 +118,19 @@
       inset: 0;
       z-index: 0;
       pointer-events: none;
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0.32), transparent 38%);
+      background: linear-gradient(
+        180deg,
+        rgba(255, 255, 255, 0.32),
+        transparent 38%
+      );
       opacity: 0.72;
     }
     [data-theme="dark"] body::after {
-      background: linear-gradient(180deg, rgba(74, 100, 148, 0.16), transparent 42%);
+      background: linear-gradient(
+        180deg,
+        rgba(74, 100, 148, 0.16),
+        transparent 42%
+      );
       opacity: 1;
     }
     #x1r,
@@ -232,8 +251,7 @@
     .c28 {
       width: min(720px, calc(100vw - 110px));
       background:
-        linear-gradient(180deg, var(--panel-hi), var(--panel-low)),
-        var(--c);
+        linear-gradient(180deg, var(--panel-hi), var(--panel-low)), var(--c);
       border: 1px solid var(--b);
       border-radius: 22px;
       box-shadow: var(--s);
@@ -296,8 +314,7 @@
     .c2j {
       width: min(420px, calc(100vw - 110px));
       background:
-        linear-gradient(180deg, var(--panel-hi), var(--panel-low)),
-        var(--c);
+        linear-gradient(180deg, var(--panel-hi), var(--panel-low)), var(--c);
       border: 1px solid var(--b);
       border-radius: 20px;
       box-shadow: var(--s);
@@ -1073,6 +1090,93 @@
       color: var(--a);
       font-weight: 800;
     }
+    #markdownPanel {
+      width: min(920px, calc(100vw - 110px));
+    }
+    .markdown-viewer-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .markdown-viewer-toolbar button.active {
+      background: linear-gradient(135deg, var(--a), var(--h));
+      color: #fff;
+      border-color: transparent;
+    }
+    .markdown-viewer-view.hidden {
+      display: none;
+    }
+    #markdownInput {
+      width: 100%;
+      min-height: min(56vh, 620px);
+      resize: vertical;
+      margin-bottom: 0;
+      font-family: Consolas, Monaco, monospace;
+      line-height: 1.55;
+    }
+    #markdownPreviewShell {
+      position: relative;
+      min-height: min(56vh, 620px);
+      border: 1px solid var(--b);
+      border-radius: 16px;
+      background: var(--input-bg);
+      overflow: auto;
+    }
+    #markdownPreview {
+      width: min(100%, 860px);
+      min-height: inherit;
+      margin: 0 auto;
+      padding: clamp(20px, 4vw, 44px);
+      line-height: 1.72;
+      word-break: break-word;
+    }
+    #markdownPreview:empty::before {
+      content: "Markdown을 입력하면 미리보기가 표시됩니다.";
+      color: var(--tm);
+    }
+    .markdown-fullscreen-exit {
+      display: none;
+      position: fixed;
+      top: 18px;
+      right: 18px;
+      z-index: 2;
+    }
+    #markdownPreviewShell:fullscreen,
+    #markdownPreviewShell.markdown-fullscreen-fallback {
+      position: fixed;
+      inset: 0;
+      z-index: 5000;
+      width: 100vw;
+      height: 100vh;
+      max-height: none;
+      border: 0;
+      border-radius: 0;
+      background: var(--d);
+    }
+    #markdownPreviewShell:fullscreen .markdown-fullscreen-exit,
+    #markdownPreviewShell.markdown-fullscreen-fallback
+      .markdown-fullscreen-exit {
+      display: inline-flex;
+    }
+    #markdownPreviewShell:fullscreen #markdownPreview,
+    #markdownPreviewShell.markdown-fullscreen-fallback #markdownPreview {
+      min-height: 100vh;
+      padding: clamp(28px, 6vw, 80px);
+      background: var(--c);
+    }
+    body.markdown-fullscreen-open {
+      overflow: hidden;
+    }
+    @media (max-width: 720px) {
+      #markdownPanel {
+        width: calc(100vw - 92px);
+      }
+      #markdownInput,
+      #markdownPreviewShell {
+        min-height: 58vh;
+      }
+    }
     .c2b {
       display: flex;
       gap: 10px;
@@ -1119,8 +1223,7 @@
       position: relative;
       overflow: hidden;
       background:
-        linear-gradient(180deg, var(--panel-hi), var(--panel-low)),
-        var(--c);
+        linear-gradient(180deg, var(--panel-hi), var(--panel-low)), var(--c);
       border-radius: 22px;
       box-shadow: var(--s);
       border: 1px solid var(--b);
@@ -1424,8 +1527,7 @@
       aspect-ratio: 1/1;
       border-radius: 18px;
       background:
-        linear-gradient(180deg, var(--panel-hi), transparent),
-        var(--g);
+        linear-gradient(180deg, var(--panel-hi), transparent), var(--g);
       border: 1px solid var(--b);
       box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
       transition:
@@ -1837,8 +1939,7 @@
       border: 1px solid var(--b);
       border-radius: 14px;
       background:
-        linear-gradient(180deg, var(--panel-hi), var(--panel-low)),
-        var(--c);
+        linear-gradient(180deg, var(--panel-hi), var(--panel-low)), var(--c);
       box-shadow: var(--s);
       backdrop-filter: blur(var(--u)) saturate(145%);
     }
@@ -2349,6 +2450,9 @@
       </div>
       <button class="c1y" id="jsonToggle" title="JSON 포맷터">
         <i class="fas fa-code"></i>
+      </button>
+      <button class="c1y" id="markdownToggle" title="Markdown 뷰어">
+        <i class="fab fa-markdown"></i>
       </button>
       <button class="c1y" id="dateToggle" title="날짜 변환기">
         <i class="fas fa-calendar-alt"></i>
@@ -3062,6 +3166,67 @@
       <div class="c1h" id="x1s"></div>
       <div class="c1x co" id="x26"></div>
     </div>
+    <div class="c28 cx" id="markdownPanel">
+      <div class="c1t">
+        <h3><i class="fab fa-markdown"></i> Markdown 뷰어</h3>
+        <div class="c1t-actions">
+          <button
+            class="ck cl feature-help-button"
+            type="button"
+            data-help-target="markdownHelp"
+            title="사용 방법"
+          >
+            <i class="fas fa-question"></i>
+          </button>
+        </div>
+      </div>
+      <div class="c1e feature-help" id="markdownHelp">
+        <div>
+          입력 화면에 Markdown 텍스트를 붙여넣고 미리보기를 누르면 읽기 좋은
+          문서로 표시됩니다.
+        </div>
+        <div>
+          마지막 입력은 이 기기에 자동 저장됩니다. 전체화면은 미리보기에서만
+          사용할 수 있으며 버튼 또는 Esc로 종료할 수 있습니다.
+        </div>
+        <div>
+          렌더링은 브라우저 안에서 처리되므로 Markdown 내용이 외부 서버로
+          전송되지 않습니다.
+        </div>
+      </div>
+      <div class="markdown-viewer-toolbar">
+        <button type="button" id="markdownEditMode" class="active">
+          <i class="fas fa-edit"></i> 입력
+        </button>
+        <button type="button" id="markdownPreviewMode" class="ck">
+          <i class="fas fa-eye"></i> 미리보기
+        </button>
+        <button type="button" id="markdownFullscreen" class="ck">
+          <i class="fas fa-expand"></i> 전체화면
+        </button>
+      </div>
+      <div class="markdown-viewer-view" id="markdownEditView">
+        <textarea
+          id="markdownInput"
+          class="c1c"
+          spellcheck="false"
+          placeholder="# 제목&#10;&#10;Markdown 텍스트를 붙여넣으세요."
+        ></textarea>
+      </div>
+      <div class="markdown-viewer-view hidden" id="markdownPreviewView">
+        <div id="markdownPreviewShell">
+          <button
+            type="button"
+            class="ck markdown-fullscreen-exit"
+            id="markdownFullscreenExit"
+            title="전체화면 종료"
+          >
+            <i class="fas fa-compress"></i>
+          </button>
+          <article class="markdown-body" id="markdownPreview"></article>
+        </div>
+      </div>
+    </div>
     <div class="c28" id="datePanel">
       <div class="c1t">
         <h3>날짜 변환</h3>
@@ -3754,6 +3919,7 @@
       memoNotes: "smart_memo_notes_v32",
       memoActive: "smart_memo_active_v32",
       ollamaChatMessages: "ollama_chat_messages_v1",
+      markdownViewerDraft: "markdown_viewer_draft_v1",
       lanName: "lan_socket_name_v1",
       lanLastRoom: "lan_socket_last_room_v1",
       favoriteLinks: "favorite_links_v1",
@@ -3876,9 +4042,11 @@
         function drawAmbient(time) {
           const width = app.screen.width || window.innerWidth,
             height = app.screen.height || window.innerHeight,
-            dark = document.documentElement.getAttribute("data-theme") === "dark";
+            dark =
+              document.documentElement.getAttribute("data-theme") === "dark";
           ribbons.forEach((ribbon, index) => {
-            const drift = Math.sin(time * ribbon.speed + ribbon.offset) * height * 0.055,
+            const drift =
+                Math.sin(time * ribbon.speed + ribbon.offset) * height * 0.055,
               baseY = height * (0.08 + index * 0.16) + drift,
               tilt = (index % 2 ? 1 : -1) * width * 0.1,
               band = Math.max(72, height * ribbon.band),
@@ -3899,10 +4067,12 @@
           () => drawAmbient(performance.now() / 1000),
           { passive: true },
         );
-        new MutationObserver(() => drawAmbient(performance.now() / 1000)).observe(
-          document.documentElement,
-          { attributes: true, attributeFilter: ["data-theme"] },
-        );
+        new MutationObserver(() =>
+          drawAmbient(performance.now() / 1000),
+        ).observe(document.documentElement, {
+          attributes: true,
+          attributeFilter: ["data-theme"],
+        });
       } catch (error) {
         holder.replaceChildren();
       }
@@ -4540,6 +4710,7 @@
       (n(".c28").forEach((t) =>
         t.classList.toggle("open", t.id === e + "Panel"),
       ),
+        "markdown" !== e && markdownExitFullscreen(),
         "chat" === e && ee(),
         "wpf" === e && wpfRefreshActive(),
         ["lanCenter", "lanDrop"].includes(e) && lanEnsureHub(),
@@ -4566,6 +4737,7 @@
       [
         "charCode",
         "json",
+        "markdown",
         "date",
         "regex",
         "diff",
@@ -4605,23 +4777,8 @@
         try {
           !(function (e, t) {
             (e.classList.add("markdown-body"),
-              (e.innerHTML = (function (e) {
-                const t =
-                  (!Ee &&
-                    window.markdownit &&
-                    (Ee = window.markdownit({
-                      html: !1,
-                      linkify: !0,
-                      breaks: !0,
-                    })),
-                  Ee);
-                return t && window.DOMPurify
-                  ? DOMPurify.sanitize(t.render(String(e || "")))
-                  : Me(e);
-              })(t)),
-              e.querySelectorAll("a").forEach((e) => {
-                ((e.target = "_blank"), (e.rel = "noopener noreferrer"));
-              }));
+              (e.innerHTML = renderMarkdownHtml(t)),
+              prepareMarkdownLinks(e));
           })(a, n);
         } catch (e) {
           a.textContent = n;
@@ -4927,6 +5084,236 @@
           })[e],
       );
     }
+    let Ee = null;
+    function markdownSafeUrl(e, n = !1) {
+      const i = String(e || "").trim();
+      if (!i) return "";
+      if (n && /^data:image\/(?:png|gif|jpeg|webp);base64,/i.test(i)) return i;
+      return /^(?:https?:|mailto:|#|\/|\.\/|\.\.\/)/i.test(i) ? i : "";
+    }
+    function markdownInline(e) {
+      const n = [];
+      let i = Me(e);
+      return (
+        (i = i.replace(/`([^`]+)`/g, (e, t) => {
+          const i = `§§MD_CODE_${n.length}§§`;
+          return (n.push(`<code>${t}</code>`), i);
+        })),
+        (i = i.replace(
+          /!\[([^\]]*)\]\(([^\s)]+)(?:\s+&quot;.*?&quot;)?\)/g,
+          (e, t, n) => {
+            const i = markdownSafeUrl(n, !0);
+            return i ? `<img src="${i}" alt="${t}" loading="lazy">` : e;
+          },
+        )),
+        (i = i.replace(
+          /\[([^\]]+)\]\(([^\s)]+)(?:\s+&quot;.*?&quot;)?\)/g,
+          (e, t, n) => {
+            const i = markdownSafeUrl(n);
+            return i ? `<a href="${i}">${t}</a>` : e;
+          },
+        )),
+        (i = i.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")),
+        (i = i.replace(/__([^_]+)__/g, "<strong>$1</strong>")),
+        (i = i.replace(/~~([^~]+)~~/g, "<del>$1</del>")),
+        (i = i.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>")),
+        (i = i.replace(/(^|[^_])_([^_\n]+)_/g, "$1<em>$2</em>")),
+        n.forEach((e, t) => (i = i.replace(`§§MD_CODE_${t}§§`, e))),
+        i
+      );
+    }
+    function markdownTableCells(e) {
+      return e
+        .trim()
+        .replace(/^\||\|$/g, "")
+        .split("|")
+        .map((e) => e.trim());
+    }
+    function markdownIsTableDivider(e) {
+      const n = markdownTableCells(e);
+      return n.length > 0 && n.every((e) => /^:?-{3,}:?$/.test(e));
+    }
+    function markdownIsBlockStart(e, t) {
+      const n = e[t] || "";
+      return (
+        !n.trim() ||
+        /^\s*```/.test(n) ||
+        /^\s{0,3}#{1,6}\s+/.test(n) ||
+        /^\s{0,3}(?:[-*_]\s*){3,}$/.test(n) ||
+        /^\s{0,3}>\s?/.test(n) ||
+        /^\s*[-+*]\s+/.test(n) ||
+        /^\s*\d+[.)]\s+/.test(n) ||
+        (t + 1 < e.length &&
+          n.includes("|") &&
+          markdownIsTableDivider(e[t + 1]))
+      );
+    }
+    function renderMarkdownOffline(e) {
+      const n = String(e || "")
+          .replace(/\r\n?/g, "\n")
+          .split("\n"),
+        i = [];
+      let o = 0;
+      for (; o < n.length; ) {
+        const e = n[o];
+        if (!e.trim()) {
+          o += 1;
+          continue;
+        }
+        const t = e.match(/^\s*```\s*([\w-]*)\s*$/);
+        if (t) {
+          const e = [],
+            a = Me(t[1]);
+          for (o += 1; o < n.length && !/^\s*```\s*$/.test(n[o]); o += 1)
+            e.push(n[o]);
+          o < n.length && (o += 1);
+          i.push(
+            `<pre><code${a ? ` class="language-${a}"` : ""}>${Me(e.join("\n"))}</code></pre>`,
+          );
+          continue;
+        }
+        const a = e.match(/^\s{0,3}(#{1,6})\s+(.+)$/);
+        if (a) {
+          const e = a[1].length;
+          (i.push(
+            `<h${e}>${markdownInline(a[2].replace(/\s+#+\s*$/, ""))}</h${e}>`,
+          ),
+            (o += 1));
+          continue;
+        }
+        if (/^\s{0,3}(?:[-*_]\s*){3,}$/.test(e)) {
+          (i.push("<hr>"), (o += 1));
+          continue;
+        }
+        if (
+          o + 1 < n.length &&
+          e.includes("|") &&
+          markdownIsTableDivider(n[o + 1])
+        ) {
+          const t = markdownTableCells(e);
+          o += 2;
+          const a = [];
+          for (; o < n.length && n[o].includes("|") && n[o].trim(); o += 1)
+            a.push(markdownTableCells(n[o]));
+          i.push(
+            `<table><thead><tr>${t.map((e) => `<th>${markdownInline(e)}</th>`).join("")}</tr></thead><tbody>${a.map((e) => `<tr>${t.map((t, n) => `<td>${markdownInline(e[n] || "")}</td>`).join("")}</tr>`).join("")}</tbody></table>`,
+          );
+          continue;
+        }
+        if (/^\s{0,3}>\s?/.test(e)) {
+          const e = [];
+          for (; o < n.length && /^\s{0,3}>\s?/.test(n[o]); o += 1)
+            e.push(n[o].replace(/^\s{0,3}>\s?/, ""));
+          i.push(
+            `<blockquote>${renderMarkdownOffline(e.join("\n"))}</blockquote>`,
+          );
+          continue;
+        }
+        const l = e.match(/^\s*([-+*]|\d+[.)])\s+(.+)$/);
+        if (l) {
+          const e = /^\d/.test(l[1]),
+            t = e ? "ol" : "ul",
+            a = [];
+          for (; o < n.length; o += 1) {
+            const t = n[o].match(/^\s*([-+*]|\d+[.)])\s+(.+)$/);
+            if (!t || /^\d/.test(t[1]) !== e) break;
+            const taskMatch = t[2].match(/^\[([ xX])\]\s*(.*)$/);
+            a.push(
+              taskMatch
+                ? `<li class="task-list-item"><input type="checkbox" disabled${" " === taskMatch[1] ? "" : " checked"}> ${markdownInline(taskMatch[2])}</li>`
+                : `<li>${markdownInline(t[2])}</li>`,
+            );
+          }
+          i.push(`<${t}>${a.join("")}</${t}>`);
+          continue;
+        }
+        const d = [e.trim()];
+        for (o += 1; o < n.length && !markdownIsBlockStart(n, o); o += 1)
+          d.push(n[o].trim());
+        i.push(`<p>${d.map(markdownInline).join("<br>")}</p>`);
+      }
+      return i.join("\n");
+    }
+    function renderMarkdownHtml(e) {
+      const n =
+        (!Ee &&
+          window.markdownit &&
+          (Ee = window.markdownit({ html: !1, linkify: !0, breaks: !0 })),
+        Ee);
+      return n && window.DOMPurify
+        ? DOMPurify.sanitize(n.render(String(e || "")))
+        : renderMarkdownOffline(e);
+    }
+    function prepareMarkdownLinks(e) {
+      e.querySelectorAll("a").forEach((e) => {
+        ((e.target = "_blank"), (e.rel = "noopener noreferrer"));
+      });
+    }
+    const markdownInput = t("markdownInput"),
+      markdownPreview = t("markdownPreview"),
+      markdownEditView = t("markdownEditView"),
+      markdownPreviewView = t("markdownPreviewView"),
+      markdownPreviewShell = t("markdownPreviewShell");
+    let markdownRenderTimer = 0;
+    function renderMarkdownViewer() {
+      ((markdownPreview.innerHTML = renderMarkdownHtml(markdownInput.value)),
+        prepareMarkdownLinks(markdownPreview));
+    }
+    function setMarkdownMode(e) {
+      const n = "preview" === e;
+      (n && renderMarkdownViewer(),
+        markdownEditView.classList.toggle("hidden", n),
+        markdownPreviewView.classList.toggle("hidden", !n),
+        t("markdownEditMode").classList.toggle("active", !n),
+        t("markdownPreviewMode").classList.toggle("active", n),
+        (t("markdownFullscreen").disabled = !n),
+        n || markdownInput.focus());
+    }
+    function markdownUseFallbackFullscreen() {
+      (markdownPreviewShell.classList.add("markdown-fullscreen-fallback"),
+        e.body.classList.add("markdown-fullscreen-open"));
+    }
+    async function markdownEnterFullscreen() {
+      (setMarkdownMode("preview"), renderMarkdownViewer());
+      try {
+        if (markdownPreviewShell.requestFullscreen) {
+          await markdownPreviewShell.requestFullscreen();
+          return;
+        }
+      } catch (e) {
+        // pywebview and restrictive browser contexts can reject the Fullscreen API.
+      }
+      markdownUseFallbackFullscreen();
+    }
+    function markdownExitFullscreen() {
+      if (e.fullscreenElement === markdownPreviewShell && e.exitFullscreen)
+        e.exitFullscreen().catch(() => {});
+      (markdownPreviewShell.classList.remove("markdown-fullscreen-fallback"),
+        e.body.classList.remove("markdown-fullscreen-open"));
+    }
+    ((markdownInput.value = s.getItem(STORAGE_KEYS.markdownViewerDraft) || ""),
+      (markdownInput.oninput = () => {
+        (s.setItem(STORAGE_KEYS.markdownViewerDraft, markdownInput.value),
+          clearTimeout(markdownRenderTimer),
+          (markdownRenderTimer = setTimeout(renderMarkdownViewer, 120)));
+      }),
+      (t("markdownEditMode").onclick = () => setMarkdownMode("edit")),
+      (t("markdownPreviewMode").onclick = () => setMarkdownMode("preview")),
+      (t("markdownFullscreen").onclick = markdownEnterFullscreen),
+      (t("markdownFullscreenExit").onclick = markdownExitFullscreen),
+      e.addEventListener("fullscreenchange", () => {
+        e.fullscreenElement !== markdownPreviewShell &&
+          markdownExitFullscreen();
+      }),
+      window.addEventListener("keydown", (e) => {
+        "Escape" === e.key &&
+          markdownPreviewShell.classList.contains(
+            "markdown-fullscreen-fallback",
+          ) &&
+          markdownExitFullscreen();
+      }),
+      renderMarkdownViewer(),
+      setMarkdownMode("edit"));
     ((ue.oninput = () => {
       const e = le.find((e) => e.id === de);
       e &&
@@ -4948,7 +5335,6 @@
         le.push({ id: "memo_default", title: "기본 메모", content: "" }),
       we());
     // Shared tool helpers and analysis tools.
-    let Ee = null;
     function Ie(e, n) {
       t(e).innerHTML = n
         .map(([e, t]) => `<span class="c1g">${Me(e)}: ${Me(t)}</span>`)
@@ -8875,6 +9261,9 @@
     const jt = {
       json: "json",
       xml: "json",
+      md: "markdown",
+      markdown: "markdown",
+      마크다운: "markdown",
       log: "log",
       로그: "log",
       diff: "diff",

@@ -37,6 +37,64 @@ function hasId(id) {
 
 new Function(script);
 
+const markdownRuntimeStart = script.indexOf(
+  "    let Ee = null;\n    function markdownSafeUrl",
+);
+const markdownRuntimeEnd = script.indexOf(
+  "    const markdownInput =",
+  markdownRuntimeStart,
+);
+assert(
+  markdownRuntimeStart >= 0 && markdownRuntimeEnd > markdownRuntimeStart,
+  "Markdown runtime block is missing.",
+);
+const markdownRuntimeSource = script.slice(
+  markdownRuntimeStart,
+  markdownRuntimeEnd,
+);
+const markdownEscapeHtml = (value) =>
+  String(value).replace(
+    /[&<>"']/g,
+    (character) =>
+      ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      })[character],
+  );
+const { renderMarkdownOffline } = new Function(
+  "Me",
+  "window",
+  "DOMPurify",
+  `${markdownRuntimeSource}\nreturn { renderMarkdownOffline };`,
+)(markdownEscapeHtml, {}, undefined);
+const markdownFixture = renderMarkdownOffline(`# 제목
+
+| 항목 | 상태 |
+| --- | --- |
+| 오프라인 | 완료 |
+
+- [x] 작업 완료
+
+<script>alert(1)</script>
+
+[위험](javascript:alert(1))`);
+assert(markdownFixture.includes("<h1>제목</h1>"), "Markdown heading failed.");
+assert(markdownFixture.includes("<table>"), "Markdown table failed.");
+assert(
+  markdownFixture.includes('type="checkbox" disabled checked'),
+  "Markdown task list failed.",
+);
+assert(
+  markdownFixture.includes("&lt;script&gt;alert(1)&lt;/script&gt;"),
+  "Markdown HTML escaping failed.",
+);
+assert(
+  !markdownFixture.includes('href="javascript:'),
+  "Unsafe Markdown URL allowed.",
+);
 [
   "clock",
   "xl",
@@ -48,6 +106,18 @@ new Function(script);
   "x2n",
   "charCodeToggle",
   "jsonToggle",
+  "markdownToggle",
+  "markdownPanel",
+  "markdownHelp",
+  "markdownEditMode",
+  "markdownPreviewMode",
+  "markdownFullscreen",
+  "markdownEditView",
+  "markdownInput",
+  "markdownPreviewView",
+  "markdownPreviewShell",
+  "markdownFullscreenExit",
+  "markdownPreview",
   "dateToggle",
   "regexToggle",
   "diffToggle",
@@ -232,6 +302,7 @@ new Function(script);
   "smart_memo_notes_v32",
   "smart_memo_active_v32",
   "ollama_chat_messages_v1",
+  "markdown_viewer_draft_v1",
   "lan_socket_name_v1",
   "lan_socket_last_room_v1",
   "favorite_links_v1",
@@ -272,7 +343,14 @@ new Function(script);
   ["data-section-visible", ["section-search", "section-todo", "section-memo"]],
   [
     "data-help-target",
-    ["todoHelp", "memoHelp", "textToolHelp", "wpfHelp", "gameHelp"],
+    [
+      "todoHelp",
+      "memoHelp",
+      "textToolHelp",
+      "wpfHelp",
+      "gameHelp",
+      "markdownHelp",
+    ],
   ],
   ["data-game-tab", ["arena", "fortress"]],
   ["data-game-pane", ["arena", "fortress"]],
@@ -304,6 +382,9 @@ new Function(script);
   "decodeBase64Text",
   "runTextTool",
   "textToolMode",
+  "renderMarkdownOffline",
+  "renderMarkdownHtml",
+  "markdownEnterFullscreen",
 ].forEach((marker) =>
   assert(script.includes(marker), `Missing event wiring marker: ${marker}`),
 );
