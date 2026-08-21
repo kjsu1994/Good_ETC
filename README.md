@@ -7,7 +7,7 @@
 ![Games](https://img.shields.io/badge/Games-Arena%20%2B%20Party%20Pack-53E2A8?style=flat-square)
 ![WPF](https://img.shields.io/badge/WPF-Toolbox-512BD4?style=flat-square)
 
-브라우저에서 바로 쓰는 개인 업무 대시보드입니다. 즐겨찾기, 할 일, 메모, 로그 분석, JSON/XML·Markdown 보기, 문자/HEX 분석, 텍스트 유틸, WPF 도구함, Diff, 정규식 테스트, Ollama 챗봇, LAN 아레나와 포트리스풍 포격전, 웨이브 디펜스, 카트 랠리와 파티 게임 3종을 함께 제공합니다.
+브라우저에서 바로 쓰는 개인 업무 대시보드입니다. 즐겨찾기, 할 일, 메모, 로그 분석, JSON/XML·Markdown 보기, API 요청 테스트, 문자/HEX 분석, 텍스트 유틸, WPF 도구함, Diff, 정규식 테스트, Ollama 챗봇, LAN 아레나와 포트리스풍 포격전, 웨이브 디펜스, 카트 랠리와 파티 게임 3종을 함께 제공합니다.
 
 ## 화면 구성
 
@@ -30,6 +30,7 @@ flowchart LR
     E --> E8[WPF 도구함]
     E --> E9[로그 워크벤치]
     E --> E10[Markdown 뷰어]
+    E --> E11[API 테스트]
     G --> G1[LAN 아레나]
     G --> G2[포트리스풍 포격전]
     G --> G3[웨이브 디펜스]
@@ -49,7 +50,8 @@ flowchart LR
 | 도구 패널  | 문자/HEX 분석기 | 문자 코드, HEX 바이트, Decimal, ASCII, Checksum, UInt16/UInt32 값을 확인합니다.                                                                                                       |
 | 도구 패널  | 필드 분리       | `Header:2, Length:1, Cmd:1, Payload:*, CRC:2` 같은 스펙으로 HEX 패킷 필드를 나눠 봅니다.                                                                                              |
 | 도구 패널  | JSON/XML 뷰어   | JSON/XML 파싱, 포맷팅, 경로 탐색, 키/값/태그 검색, 복사/다운로드를 지원합니다.                                                                                                        |
-| 도구 패널  | Markdown 뷰어   | Markdown을 붙여넣어 입력/미리보기 화면을 전환하고 미리보기 전용 전체화면으로 읽을 수 있습니다. 마지막 초안은 로컬에 자동 저장되며 오프라인에서도 렌더링됩니다.                        |
+| 도구 패널  | Markdown 뷰어   | Markdown 붙여넣기와 `.md` 파일 열기/드롭, 목차, 본문 검색, HTML 저장, 인쇄/PDF, 미리보기 전용 전체화면을 지원합니다. 마지막 초안은 로컬에 자동 저장되며 오프라인에서도 렌더링됩니다. |
+| LAN 도구   | API 테스트      | GET/POST/PUT/PATCH/DELETE/HEAD 요청, Query/Header/Auth/Body 편집, 응답 Header/Body 확인과 선택형 최근 기록을 지원합니다. 브라우저 직접 요청과 EXE 로컬 프록시를 선택할 수 있습니다.    |
 | 도구 패널  | 날짜 변환       | Unix Timestamp(ms) 또는 날짜 문자열을 로컬 시간과 ISO 형식으로 변환합니다.                                                                                                            |
 | 도구 패널  | 정규식 테스트   | 패턴과 원문을 넣고 매칭 결과를 바로 확인합니다.                                                                                                                                       |
 | 도구 패널  | 텍스트 비교     | 원본/비교 텍스트의 차이를 Diff 형태로 확인하고 결과를 복사/다운로드합니다.                                                                                                            |
@@ -288,6 +290,8 @@ pyluncher/dist/GoodETC_Launcher.exe
 
 EXE는 기본적으로 `0.0.0.0:7000`에 LAN 아레나, 포트리스 멀티, 웨이브 디펜스 멀티, 파티 게임 멀티용 게임 서버를 열고 콘솔창 없이 앱 창 하나만 표시합니다. 대시보드는 런처의 로컬 HTTP 주소 `http://127.0.0.1:<port>/home.html`에서 열리고, 게임 패널의 `호스트`/`입장하기` 버튼은 현재 선택된 게임의 내장 화면으로 접속합니다. 같은 LAN 사용자도 방화벽 허용 후 게임 주소로 접속할 수 있습니다.
 
+API 테스트의 `자동` 모드는 일반 브라우저에서 대상 API로 직접 요청하고, EXE에서는 런처에 포함된 `/api/http-request` 프록시를 사용합니다. 프록시는 같은 PC의 루프백 접속에서만 사용할 수 있고 요청 Body는 1MB, 응답 미리보기는 2MB, 제한 시간은 30초입니다. 브라우저 직접 모드는 대상 서버가 CORS를 허용해야 합니다.
+
 ## Docker 서비스
 
 | 서비스        | 포트                     | 용도                                                                                                                                    |
@@ -328,7 +332,7 @@ EXE는 기본적으로 `0.0.0.0:7000`에 LAN 아레나, 포트리스 멀티, 웨
 | `memo 회의록`                                                                                           | 새 메모를 만듭니다.                    |
 | `uuid`, `timestamp`                                                                                     | 값을 생성해 클립보드에 복사합니다.     |
 | `base64 hello`, `b64d aGVsbG8=`, `urlencode a=b`, `urldecode a%3Db`                                     | 텍스트를 변환해 클립보드에 복사합니다. |
-| `json`, `log`, `diff`, `regex`, `date`, `hex`, `text`, `wpf`, `xaml`, `binding`, `mvvm`, `game`, `chat` | 해당 도구 패널을 바로 엽니다.          |
+| `json`, `md`, `api`, `http`, `log`, `diff`, `regex`, `date`, `hex`, `text`, `wpf`, `xaml`, `binding`, `mvvm`, `game`, `chat` | 해당 도구 패널을 바로 엽니다.          |
 
 ## 단축키
 
@@ -354,6 +358,8 @@ EXE는 기본적으로 `0.0.0.0:7000`에 LAN 아레나, 포트리스 멀티, 웨
 | UI 설정       | 브라우저 localStorage | 사용자 데이터 폴더의 `Good_ETC/storage/local_storage.json` |
 | 게임 설정     | 브라우저 localStorage | 사용자 데이터 폴더의 `Good_ETC/storage/local_storage.json` |
 | WPF 도구 입력 | 브라우저 localStorage | 사용자 데이터 폴더의 `Good_ETC/storage/local_storage.json` |
+| Markdown 초안 | 브라우저 localStorage | 사용자 데이터 폴더의 `Good_ETC/storage/local_storage.json` |
+| API 요청 기록 | 브라우저 localStorage | 사용자 데이터 폴더의 `Good_ETC/storage/local_storage.json` |
 | RPG 저장      | 브라우저 localStorage | 사용자 데이터 폴더의 `Good_ETC/saves/rpg_save.json`        |
 
 Windows EXE의 기본 사용자 데이터 폴더는 `%APPDATA%\Good_ETC`입니다. 예를 들어 현재 사용자 계정에서는 `C:\Users\<사용자>\AppData\Roaming\Good_ETC\storage\local_storage.json`와 `C:\Users\<사용자>\AppData\Roaming\Good_ETC\saves\rpg_save.json`에 저장됩니다. 기존 브라우저 저장값이 남아 있으면 EXE/로컬 서버 실행 시 파일 저장소로 함께 동기화됩니다.
@@ -419,7 +425,9 @@ npm run format
 
 - 즐겨찾기 별칭을 등록하면 명령 팔레트에서 별칭만 입력해도 링크를 열 수 있습니다.
 - 각 기능의 `?` 버튼을 누르면 해당 기능의 입력 방식과 주의사항을 바로 확인할 수 있습니다.
-- Markdown 뷰어는 좌측 도구 메뉴에서 열거나 `Ctrl+K` 명령 팔레트에 `md`, `markdown`, `마크다운`을 입력해 열 수 있습니다. 입력 후 `미리보기`를 누르고 필요하면 `전체화면`으로 읽으세요.
+- Markdown 뷰어는 좌측 도구 메뉴에서 열거나 `Ctrl+K` 명령 팔레트에 `md`, `markdown`, `마크다운`을 입력해 열 수 있습니다. 붙여넣기 또는 `.md` 파일 열기/드롭 후 목차와 검색으로 이동하고, `HTML 저장`이나 `인쇄/PDF`, `전체화면`을 사용할 수 있습니다.
+- API 테스트는 좌측 LAN 도구 그룹에서 열거나 명령 팔레트에 `api`, `http`, `postman`을 입력해 열 수 있습니다. 요청 기록은 기본적으로 꺼져 있으며, 켜더라도 Authorization/Cookie/API Key와 Basic/Bearer 입력값은 저장하지 않습니다.
+- API 테스트에서 브라우저 직접 요청이 실패하면 대상 서버의 CORS 설정을 확인하세요. EXE의 자동 모드는 로컬 프록시를 사용하므로 Postman과 비슷하게 CORS 영향을 받지 않지만, 브라우저 보안 정책을 완전히 재현하는 용도는 아닙니다.
 - LAN 아레나, 포트리스 멀티, 웨이브 디펜스 멀티, 파티 게임 멀티는 호스트가 `python game/server.py --host 0.0.0.0 --port 7000`을 실행한 뒤 같은 망 사용자가 접속하는 방식입니다. 통합 입장 센터에서 게임 방을 만들면 방별 `room` 값으로 서로 다른 방이 분리됩니다.
 - 게임 접속이 안 되면 호스트 IP, 포트, Windows 방화벽 인바운드 규칙을 먼저 확인하세요.
 - TODO는 마감일과 우선순위를 저장하며, 지난 마감일과 오늘 마감 항목을 색으로 구분합니다.

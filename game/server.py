@@ -17,6 +17,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
+from urllib import error as urllib_error
+from urllib import request as urllib_request
 
 
 GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
@@ -34,6 +36,9 @@ TICK_RATE = 30
 ARENA_PICKUP_TARGET = 28
 RPG_SAVE_LIMIT = 2_000_000
 LOCAL_STORAGE_LIMIT = 8_000_000
+HTTP_PROXY_REQUEST_LIMIT = 1_000_000
+HTTP_PROXY_RESPONSE_LIMIT = 2_000_000
+HTTP_PROXY_TIMEOUT = 30
 ARENA_WEAPONS: dict[str, dict[str, Any]] = {
     "blaster": {
         "damage": 25,
@@ -3616,6 +3621,49 @@ class ArenaServer:
             await self.handle_local_storage_api(writer, method, body, parsed.query)
             return
 
+        if parsed.path == "/api/http-request":
+            peer_info = writer.get_extra_info("peername")
+            peer_host = str(peer_info[0]).lower() if peer_info else ""
+            if peer_host not in {"127.0.0.1", "::1", "::ffff:127.0.0.1"}:
+                await self.write_json_response(
+                    writer,
+                    403,
+                    {
+                        "ok": False,
+                        "proxy": True,
+                        "message": "API 프록시는 이 PC의 로컬 브라우저에서만 사용할 수 있습니다.",
+                    },
+                )
+                return
+            if method.upper() != "POST":
+                await self.write_json_response(
+                    writer,
+                    405,
+                    {
+                        "ok": False,
+                        "proxy": True,
+                        "message": "API 프록시는 POST 요청만 받습니다.",
+                    },
+                )
+                return
+            try:
+                length = int(headers.get("content-length", "0") or "0")
+            except ValueError:
+                length = 0
+            if length < 1 or length > HTTP_PROXY_REQUEST_LIMIT:
+                await self.write_json_response(
+                    writer,
+                    413,
+                    {
+                        "ok": False,
+                        "proxy": True,
+                        "message": "프록시 요청 데이터가 없거나 너무 큽니다.",
+                    },
+                )
+                return
+            body = await reader.readexactly(length)
+            await self.handle_http_request_api(writer, body)
+            return
         if parsed.path == "/api/rpg/save":
             body = b""
             if method.upper() in {"POST", "PUT"}:
@@ -3649,6 +3697,159 @@ class ArenaServer:
                 key, value = line.split(":", 1)
                 headers[key.strip().lower()] = value.strip()
         return (parts[0], parts[1], parts[2]), headers
+
+    async def handle_http_request_api(
+        self, writer: asyncio.StreamWriter, body: bytes
+    ) -> None:
+        try:
+            payload = json.loads(body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            await self.write_json_response(
+                writer,
+                400,
+                {"ok": False, "proxy": True, "message": "프록시 요청 JSON이 올바르지 않습니다."},
+            )
+            return
+        if not isinstance(payload, dict):
+            await self.write_json_response(
+                writer,
+                400,
+                {"ok": False, "proxy": True, "message": "프록시 요청은 객체여야 합니다."},
+            )
+            return
+        try:
+            result = await asyncio.to_thread(self.perform_http_request, payload)
+        except ValueError as exc:
+            await self.write_json_response(
+                writer, 400, {"ok": False, "proxy": True, "message": str(exc)}
+            )
+            return
+        except (urllib_error.URLError, TimeoutError, OSError) as exc:
+            reason = getattr(exc, "reason", exc)
+            await self.write_json_response(
+                writer,
+                502,
+                {
+                    "ok": False,
+                    "proxy": True,
+                    "message": f"대상 API 연결 실패: {reason}",
+                },
+            )
+            return
+        await self.write_json_response(writer, 200, result)
+
+    @staticmethod
+    def perform_http_request(payload: dict[str, Any]) -> dict[str, Any]:
+        target_url = str(payload.get("url") or "").strip()
+        parsed = urlparse(target_url)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            raise ValueError("대상 URL은 http:// 또는 https:// 형식이어야 합니다.")
+        if (
+            parsed.hostname.lower() in {"127.0.0.1", "localhost", "::1"}
+            and parsed.path == "/api/http-request"
+        ):
+            raise ValueError("API 프록시 Endpoint 자체를 다시 호출할 수 없습니다.")
+
+        method = str(payload.get("method") or "GET").upper()
+        if method not in {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"}:
+            raise ValueError("지원하지 않는 HTTP 메서드입니다.")
+        request_headers = payload.get("headers") or {}
+        if not isinstance(request_headers, dict) or len(request_headers) > 50:
+            raise ValueError("요청 Header 형식이 올바르지 않습니다.")
+        blocked_headers = {"host", "content-length", "connection", "transfer-encoding"}
+        clean_headers: dict[str, str] = {}
+        for raw_name, raw_value in request_headers.items():
+            name = str(raw_name).strip()
+            value = str(raw_value).strip()
+            if (
+                not name
+                or name.lower() in blocked_headers
+                or "\r" in name
+                or "\n" in name
+                or "\r" in value
+                or "\n" in value
+            ):
+                continue
+            clean_headers[name] = value
+        if not any(name.lower() == "user-agent" for name in clean_headers):
+            clean_headers["User-Agent"] = "GoodETC-API-Tester/1.0"
+
+        request_body = str(payload.get("body") or "")
+        request_data = (
+            None
+            if method in {"GET", "HEAD"}
+            else request_body.encode("utf-8")
+        )
+        if request_data and len(request_data) > HTTP_PROXY_REQUEST_LIMIT:
+            raise ValueError("대상 API로 보낼 Body는 1MB 이하여야 합니다.")
+        try:
+            timeout = min(
+                HTTP_PROXY_TIMEOUT,
+                max(1, int(payload.get("timeout") or HTTP_PROXY_TIMEOUT)),
+            )
+        except (TypeError, ValueError):
+            timeout = HTTP_PROXY_TIMEOUT
+
+        outgoing = urllib_request.Request(
+            target_url,
+            data=request_data,
+            headers=clean_headers,
+            method=method,
+        )
+        started = time.perf_counter()
+        try:
+            response = urllib_request.urlopen(outgoing, timeout=timeout)
+        except urllib_error.HTTPError as exc:
+            response = exc
+        with response:
+            response_body = response.read(HTTP_PROXY_RESPONSE_LIMIT + 1)
+            elapsed_ms = round((time.perf_counter() - started) * 1000)
+            response_size = len(response_body)
+            truncated = len(response_body) > HTTP_PROXY_RESPONSE_LIMIT
+            if truncated:
+                response_body = response_body[:HTTP_PROXY_RESPONSE_LIMIT]
+            response_headers: dict[str, str] = {}
+            for name, value in response.headers.items():
+                response_headers[name] = (
+                    f"{response_headers[name]}, {value}"
+                    if name in response_headers
+                    else value
+                )
+            content_type = response.headers.get("Content-Type", "")
+            textual = any(
+                marker in content_type.lower()
+                for marker in (
+                    "json",
+                    "text",
+                    "xml",
+                    "html",
+                    "javascript",
+                    "x-www-form-urlencoded",
+                )
+            )
+            if textual:
+                charset = response.headers.get_content_charset() or "utf-8"
+                try:
+                    response_text = response_body.decode(charset, "replace")
+                except LookupError:
+                    response_text = response_body.decode("utf-8", "replace")
+            else:
+                response_text = ""
+            status = int(getattr(response, "status", response.getcode()) or 0)
+            reason = str(getattr(response, "reason", "") or "")
+            return {
+                "ok": True,
+                "proxy": True,
+                "status": status,
+                "reason": reason,
+                "elapsedMs": elapsed_ms,
+                "size": response_size,
+                "url": response.geturl(),
+                "headers": response_headers,
+                "body": response_text,
+                "binary": not textual,
+                "truncated": truncated,
+            }
 
     async def serve_static(
         self, writer: asyncio.StreamWriter, method: str, request_path: str
